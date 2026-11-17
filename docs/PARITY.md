@@ -30,7 +30,7 @@ Source: AttendFlow `main` @ 405abd5 (inventory 2026-11-17). Phase column: P1 / P
 | Shared-name detection + split suggestions | isLikelySharedName, getSplitSuggestionsForZoomName | P2 | partial: shared-name detection parity covered; token parsing/suggestions remain separate |
 | Name-change events + pending-rename gating | engine | P1 (log) / P2 (gating UI) | partial: log only |
 | Profile auto-selection: meetingIds exact → topic keyword → default → first active | guessMeetingProfile | P1 | ✓ |
-| Profile fields: name, description, included subgroups (`*`), late, return, meetingIds, topic keywords, group sort order, active; default profile `default-all` (locked, factory reset 10 / 8) | MeetingProfileWorkspace | P2 | partial: model and selection |
+| Profile fields: name, description, included subgroups (`*`), late, return, meetingIds, topic keywords, group sort order, active; default profile `default-all` (locked, factory reset 10 / 8) | MeetingProfileWorkspace | P2 | ✓: table, filters/sort, editor, bulk actions, wildcard checks/help, import preview/commit, selected live profile + overrides |
 | isExpected via included subgroups; out-of-scope ⚠ | engine | P1 | ✓: wildcard profile scope covered in roster parity goldens |
 | Manual snapshots (capture current list) | ManualAttendanceTab | P2 | not implemented |
 | Raise-hand entries + captures (dedup raise/lower) | RaiseHandPanel | P2 (better: SDK gives raised flag at connect) | partial: entries; capture/dedup not complete |
@@ -73,14 +73,14 @@ Per-fixture results remain listed in
 | Feature | Phase |
 |---|---|
 | Home cards (records, configuration, settings), active meeting strip | P1 (minimal) / P2 |
-| Records list (topic, start, end, mode, # attended, status; date-prefix search; bulk delete/export; import with preview) | P1 (list) / P2 | partial: date-prefix search, bulk delete (active refusal), JSON export |
+| Records list (topic, start, end, mode, # attended, status; date-prefix search; bulk delete/export; import with preview) | P1 (list) / P2 | partial: date-prefix search, bulk delete (active refusal), JSON export; AttendFlow session/record import preview and read-only imported rows |
 | Record detail: overview cards, auto attendance (status / name matching / settings / name changes), entry/exit, raise hand, manual records; attendance table generic/roster columns, score pills, tag/group filters, sorts | P1 (attendance table) / P2 |
 | Per-record exports: JSON bundle v3, summary CSV (zh/en columns), manual-records CSV; export-all | P2 |
 | Roster CRUD, bulk edit/delete, roster.csv import (zh/en headers, UTF-8/GB18030, preview, cascade) / export | P2 | implemented: Rust preview/commit/export APIs, UTF-8/BOM/GB18030 decode, bilingual CSV columns, CRUD and bulk UI, filtered selection and cascade handling |
 | Name matching (aliases) CRUD, bulk, CSV import/export with validation rules | P2 | implemented: Rust preview/commit/export APIs and validation; roster autocomplete, filters and bulk UI |
-| Attendance profiles CRUD, bulk, JSON import/export, wildcard help | P2 | partial: single-item CRUD UI; import/export and factory reset not implemented |
-| Settings: export language, UI sizes, filter defaults, example data (zh/en), full backup v3 export/restore, clear data | P2 | partial: backup export, config restore preview, clear local data; language/scale/filter persistence and example data remain |
-| Import AttendFlow full backup v3 + session bundles (migration path) | P2 |
+| Attendance profiles CRUD, bulk, JSON import/export, wildcard help | P2 | ✓: Rust validation, locked default/factory reset, bulk editing/deletion, JSON preview/commit, selected export, bilingual editor/help |
+| Settings: export language, UI sizes, filter defaults, example data (zh/en), full backup v3 export/restore, clear data | P2 | partial: backup export, config restore preview, clear local data, conflict-atomic AttendFlow example data seed; language/scale/filter persistence remain |
+| Import AttendFlow full backup v3 + session bundles (migration path) | P2 | partial: profile/record import paths; full backup import remains separate |
 | Bilingual UI zh-CN / en (inline `t(zh, en)`), export language separate | P1 (framework) / P2 |
 
 ## Not carried over (by design)
