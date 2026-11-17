@@ -482,6 +482,33 @@ pub fn build_record(
             ParticipantLocation::Meeting
         };
         let role = e["role"].as_str().unwrap_or("attendee").to_string();
+        if ty == "update" {
+            if let Some(id) = uuid_map.get(&uuid).cloned() {
+                if let Some(p) = participants
+                    .iter_mut()
+                    .find(|p| p.session_participant_id == id)
+                {
+                    if p.current_screen_name != name {
+                        name_changes.push(NameChange {
+                            id: format!("rename-{}", name_changes.len() + 1),
+                            timestamp: ts.clone(),
+                            session_participant_id: id,
+                            participant_uuid: uuid,
+                            previous_screen_name: p.current_screen_name.clone(),
+                            next_screen_name: name.clone(),
+                        });
+                        p.current_screen_name = name.clone();
+                        if !p.screen_names.contains(&name) {
+                            p.screen_names.push(name.clone());
+                        }
+                    }
+                    p.current_location = loc;
+                    p.role = role;
+                    p.last_seen_at = ts;
+                }
+            }
+            continue;
+        }
         let participant_id = if let Some(id) = uuid_map.get(&uuid) {
             id.clone()
         } else {
@@ -690,6 +717,83 @@ pub fn build_record(
         summary,
         raise_hand_entries: hands,
         raise_hand_captures: state.raise_hand_captures,
+    })
+}
+
+/// Derive attendance from a fully ingested AttendFlow-shaped session record.
+/// The reference time is explicit so historical and live calculations are
+/// deterministic and can be compared against fixture goldens.
+pub fn derive(
+    session: &SessionRecord,
+    config: &EngineConfig,
+    decisions: &[ReconciliationDecision],
+    reference_time: &str,
+    options: &EngineOptions,
+) -> Result<Derived, EngineError> {
+    let mut input = Vec::<Value>::new();
+    for event in &session.movement_events {
+        let kind = match event.kind {
+            MovementType::JoinedBefore => "joinedBefore",
+            MovementType::Join => "join",
+            MovementType::Leave => "leave",
+            MovementType::WaitingRoomJoinFromOutside => "waitingRoomJoinFromOutside",
+            MovementType::WaitingRoomJoinFromMeeting => "waitingRoomJoinFromMeeting",
+            MovementType::WaitingRoomJoinedBefore => "waitingRoomJoinedBefore",
+            MovementType::WaitingRoomLeave => "waitingRoomLeave",
+        };
+        input.push(json!({"eventType":kind,"timestamp":event.timestamp,
+            "participantUUID":event.participant.participant_uuid,
+            "screenName":event.participant.screen_name,
+            "role":event.participant.role,
+            "location":match event.participant.location { ParticipantLocation::Meeting => "meeting", ParticipantLocation::WaitingRoom => "waiting-room" }}));
+    }
+    for change in &session.name_change_events {
+        input.push(json!({"eventType":"update","timestamp":change.timestamp,
+            "participantUUID":change.participant_uuid,"screenName":change.next_screen_name,
+            "role":change.role,"location":match change.location { ParticipantLocation::Meeting => "meeting", ParticipantLocation::WaitingRoom => "waiting-room" }}));
+    }
+    for observation in &session.roster_observations {
+        input.push(json!({"eventType":"rosterSnapshot","timestamp":observation["timestamp"],"participants":observation["participants"]}));
+    }
+    input.sort_by_key(|event| timestamp_ms(&event["timestamp"]).unwrap_or(0));
+    let mut state = EngineState::default();
+    state.mode = session.mode.clone();
+    state.selected_profile_id = session.selected_profile_id.clone();
+    state.decisions = decisions.to_vec();
+    state.raise_hand_captures = session.raise_hand_captures.clone();
+    state.manual_snapshots = session.manual_snapshots.clone();
+    let mut cfg = config.clone();
+    if let Some(profile) = cfg
+        .profiles
+        .iter_mut()
+        .find(|p| Some(p.id.as_str()) == session.selected_profile_id.as_deref())
+    {
+        profile.late_after_minutes = session.late_threshold_minutes;
+        profile.return_window_minutes = session.return_window_minutes;
+        profile.included_subgroups = session.selected_included_subgroups.clone();
+        if let Some(sort) = &session.selected_group_sort_order {
+            profile.group_sort_order = sort.clone();
+        }
+    }
+    let record = build_record(
+        MeetingMeta {
+            meeting_id: session
+                .meeting_id
+                .clone()
+                .unwrap_or_else(|| session.session_id.clone()),
+            meeting_topic: session.meeting_topic.clone().unwrap_or_default(),
+            started_at: session.started_at.clone(),
+            ended_at: session.ended_at.clone(),
+        },
+        &input,
+        cfg,
+        state,
+        *options,
+        reference_time,
+    )?;
+    Ok(Derived {
+        rows: record.rows,
+        summary: record.summary,
     })
 }
 
