@@ -3,6 +3,29 @@ use attend_engine::{
 };
 use serde_json::{json, Value};
 
+fn derive_companion(events: &[Value], options: EngineOptions) -> attend_engine::Record {
+    let normalized = adapt_bridge_events(events).unwrap();
+    let first = normalized.first().unwrap()["timestamp"].as_str().unwrap();
+    let now = normalized.last().unwrap()["timestamp"].as_str().unwrap();
+    build_record(
+        MeetingMeta {
+            meeting_id: events[0]["instanceId"]
+                .as_str()
+                .unwrap_or("instance")
+                .into(),
+            meeting_topic: "Bridge scenario".into(),
+            started_at: first.into(),
+            ended_at: None,
+        },
+        &normalized,
+        EngineConfig::default(),
+        EngineState::default(),
+        options,
+        now,
+    )
+    .unwrap()
+}
+
 #[test]
 fn companion_stream_stitches_admission_rename_hand_resume_and_delayed_leave() {
     let instance = "pz-123-1794893640000";
@@ -104,4 +127,111 @@ fn default_waiting_room_fixture_keeps_waiting_time_out_of_presence() {
     assert_eq!(row.total_presence_minutes, 0);
     assert!(row.first_join_at.is_none());
     assert!(row.first_waiting_room_at.is_some());
+}
+
+// AttendFlow fixture catalog: duplicate-display-names, leave-then-rejoin-same-name.
+#[test]
+fn companion_scenarios_preserve_duplicate_and_rejoin_identity() {
+    let instance = "scenario-identity";
+    let base = 1_794_893_640_000_i64;
+    let duplicate = derive_companion(
+        &[
+            json!({"kind":"users","action":"add","instanceId":instance,"at":base,"users":[{"userId":1,"name":"Sam Lee"},{"userId":2,"name":"Sam Lee"}]}),
+        ],
+        EngineOptions::default(),
+    );
+    assert_eq!(duplicate.participants.len(), 2);
+    assert!(duplicate.participants.iter().all(|p| p.has_ambiguous_name));
+
+    let rejoin = derive_companion(
+        &[
+            json!({"kind":"users","action":"add","instanceId":instance,"at":base,"users":[{"userId":7,"name":"Riley Chen"}]}),
+            json!({"kind":"users","action":"left","instanceId":instance,"at":base+60_000,"users":[{"userId":7,"name":"Riley Chen"}]}),
+            json!({"kind":"users","action":"add","instanceId":instance,"at":base+61_000,"users":[{"userId":8,"name":"Riley Chen"}]}),
+        ],
+        EngineOptions::default(),
+    );
+    assert_eq!(rejoin.participants.len(), 1);
+    assert_eq!(rejoin.participants[0].participant_uuids.len(), 2);
+    assert_eq!(rejoin.rows.len(), 1);
+}
+
+// AttendFlow fixture catalog: rename-while-present, meeting-end-with-active-participants.
+#[test]
+fn companion_updates_rename_without_fake_movement_and_end_the_instance() {
+    let instance = "scenario-update-end";
+    let base = 1_794_893_640_000_i64;
+    let renamed = derive_companion(
+        &[
+            json!({"kind":"users","action":"add","instanceId":instance,"at":base,"users":[{"userId":1,"name":"Taylor"}]}),
+            json!({"kind":"users","action":"update","instanceId":instance,"at":base+30_000,"users":[{"userId":1,"name":"Taylor New"}]}),
+        ],
+        EngineOptions::default(),
+    );
+    assert_eq!(renamed.movement_events.len(), 1);
+    assert_eq!(renamed.name_change_events.len(), 1);
+    assert_eq!(renamed.participants[0].current_screen_name, "Taylor New");
+
+    let ended = derive_companion(
+        &[
+            json!({"kind":"users","action":"add","instanceId":instance,"at":base,"users":[{"userId":1,"name":"Taylor"}]}),
+            json!({"kind":"instance_ended","instanceId":instance,"at":base+60_000}),
+            json!({"kind":"users","action":"add","instanceId":instance,"at":base+120_000,"users":[{"userId":2,"name":"After End"}]}),
+        ],
+        EngineOptions::default(),
+    );
+    assert_eq!(ended.participants.len(), 1);
+    assert_eq!(ended.rows.len(), 1);
+}
+
+// AttendFlow fixture catalog: waiting-room-leave-without-admit, waiting-room-multiple-admit-burst.
+#[test]
+fn companion_waiting_room_admission_excludes_waiting_time_and_stitches_ids() {
+    let instance = "scenario-waiting";
+    let base = 1_794_893_640_000_i64;
+    let unadmitted = derive_companion(
+        &[
+            json!({"kind":"users","action":"add","instanceId":instance,"at":base,"users":[{"userId":1,"name":"Waiting Person","waitingRoom":true}]}),
+            json!({"kind":"users","action":"left","instanceId":instance,"at":base+60_000,"users":[{"userId":1,"name":"Waiting Person","waitingRoom":true}]}),
+        ],
+        EngineOptions::default(),
+    );
+    assert_eq!(unadmitted.participants.len(), 1);
+    assert!(unadmitted.rows[0].first_join_at.is_none());
+    assert_eq!(unadmitted.rows[0].total_presence_minutes, 0);
+
+    let admitted = derive_companion(
+        &[
+            json!({"kind":"users","action":"add","instanceId":instance,"at":base,"users":[{"userId":1,"name":"Riley Chen","waitingRoom":true}]}),
+            json!({"kind":"users","action":"left","instanceId":instance,"at":base+60_000,"users":[{"userId":1,"name":"Riley Chen","waitingRoom":true}]}),
+            json!({"kind":"users","action":"add","instanceId":instance,"at":base+61_000,"users":[{"userId":2,"name":"Riley Chen"}]}),
+        ],
+        EngineOptions::default(),
+    );
+    assert_eq!(admitted.participants.len(), 1);
+    assert_eq!(admitted.participants[0].participant_uuids.len(), 2);
+    assert_eq!(
+        admitted.rows[0].current_location,
+        Some(attend_engine::ParticipantLocation::Meeting)
+    );
+}
+
+// AttendFlow fixture catalog: burst-mixed-join-leave, many-participants, manual-snapshot, raise-hand.
+#[test]
+fn companion_burst_sync_snapshot_and_hand_events_keep_roster_state() {
+    let instance = "scenario-burst";
+    let base = 1_794_893_640_000_i64;
+    let record = derive_companion(
+        &[
+            json!({"kind":"users","action":"add","instanceId":instance,"at":base,"users":[{"userId":1,"name":"A"},{"userId":2,"name":"B"},{"userId":3,"name":"C"}]}),
+            json!({"kind":"users","action":"left","instanceId":instance,"at":base+60_000,"users":[{"userId":2,"name":"B"}]}),
+            json!({"kind":"users","action":"sync_all","instanceId":instance,"at":base+90_000,"users":[{"userId":1,"name":"A"},{"userId":3,"name":"C"},{"userId":4,"name":"D"}]}),
+            json!({"kind":"hand","instanceId":instance,"at":base+95_000,"userId":4,"raised":true}),
+        ],
+        EngineOptions::default(),
+    );
+    assert_eq!(record.participants.len(), 4);
+    assert_eq!(record.latest_roster.len(), 3);
+    assert_eq!(record.raise_hand_entries.len(), 1);
+    assert_eq!(record.raise_hand_entries[0].action, "raise");
 }

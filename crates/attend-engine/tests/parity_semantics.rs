@@ -44,7 +44,7 @@ fn field_differences(expected: &Value, actual: &Value) -> Vec<String> {
 }
 
 #[test]
-#[ignore = "AttendFlow parity in progress (33/56); see tests/parity/PARITY-RESULTS.md"]
+#[ignore = "Informational Zoom-Apps ingestion metric; derivation is gated from SessionRecord directly"]
 fn every_recording_fixture_matches_attendflow_semantics() {
     let fixture_root = Path::new("tests/parity/fixtures");
     let golden_root = Path::new("tests/parity/goldens");

@@ -175,6 +175,7 @@ pub enum AttendanceTag {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ZoomParticipant {
+    #[serde(rename = "participantUUID")]
     pub participant_uuid: String,
     pub screen_name: String,
     #[serde(default)]
@@ -222,9 +223,9 @@ pub struct AttendanceRow {
     pub entity_id: String,
     #[serde(default)]
     pub session_participant_id: Option<String>,
-    #[serde(default)]
+    #[serde(default, rename = "participantUUID")]
     pub participant_uuid: Option<String>,
-    #[serde(default)]
+    #[serde(default, rename = "participantUUIDs")]
     pub participant_uuids: Vec<String>,
     pub zoom_name: String,
     #[serde(default)]
@@ -257,6 +258,7 @@ pub struct AttendanceRow {
     #[serde(default)]
     pub waiting_room_minutes: u64,
     pub absence_count: u32,
+    #[serde(default)]
     pub returned_after_long_absence: bool,
     #[serde(default)]
     pub tags: Vec<AttendanceTag>,
@@ -302,7 +304,9 @@ pub struct AttendanceScore {
 #[serde(rename_all = "camelCase")]
 pub struct SessionParticipant {
     pub session_participant_id: String,
+    #[serde(rename = "currentParticipantUUID")]
     pub current_participant_uuid: String,
+    #[serde(rename = "participantUUIDs")]
     pub participant_uuids: Vec<String>,
     pub current_screen_name: String,
     pub screen_names: Vec<String>,
@@ -319,6 +323,7 @@ pub struct NameChange {
     pub id: String,
     pub timestamp: String,
     pub session_participant_id: String,
+    #[serde(rename = "participantUUID")]
     pub participant_uuid: String,
     pub previous_screen_name: String,
     pub next_screen_name: String,
@@ -328,6 +333,7 @@ pub struct NameChange {
 #[serde(rename_all = "camelCase")]
 pub struct RaiseHandEntry {
     pub id: String,
+    #[serde(rename = "participantUUID")]
     pub participant_uuid: String,
     pub screen_name: String,
     pub timestamp: String,
@@ -340,6 +346,7 @@ pub struct RaiseHandEntry {
 pub struct RaiseHandCapture {
     pub id: String,
     pub timestamp: String,
+    #[serde(rename = "participantUUIDs")]
     pub participant_uuids: Vec<String>,
     pub screen_names: Vec<String>,
     pub total_count: usize,
@@ -364,4 +371,100 @@ pub struct Record {
     pub summary: AttendanceSummary,
     pub raise_hand_entries: Vec<RaiseHandEntry>,
     pub raise_hand_captures: Vec<RaiseHandCapture>,
+}
+
+/// Persisted AttendFlow-shaped input to the derivation phase. Ingestion owns this
+/// record; derivation receives it unchanged so the desktop app never replays SDK
+/// batching semantics.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionRecord {
+    #[serde(default)]
+    pub id: Option<u64>,
+    #[serde(default)]
+    pub session_id: String,
+    #[serde(default)]
+    pub origin_session_key: String,
+    #[serde(default)]
+    pub session_revision: u64,
+    #[serde(default)]
+    pub record_source: String,
+    pub started_at: String,
+    #[serde(default)]
+    pub ended_at: Option<String>,
+    #[serde(default)]
+    pub is_active: bool,
+    #[serde(default)]
+    pub needs_export: bool,
+    #[serde(default)]
+    pub mode: SessionMode,
+    #[serde(default)]
+    pub meeting_uuid: Option<String>,
+    #[serde(default)]
+    pub meeting_id: Option<String>,
+    #[serde(default)]
+    pub meeting_topic: Option<String>,
+    #[serde(default)]
+    pub privilege_acquired_at: String,
+    #[serde(default)]
+    pub guessed_profile_id: Option<String>,
+    #[serde(default)]
+    pub selected_profile_id: Option<String>,
+    #[serde(default)]
+    pub selected_included_subgroups: Vec<String>,
+    #[serde(default)]
+    pub selected_group_sort_order: Option<Vec<String>>,
+    #[serde(default)]
+    pub late_threshold_minutes: u32,
+    #[serde(default)]
+    pub return_window_minutes: u32,
+    #[serde(default)]
+    pub session_participants: Vec<SessionParticipant>,
+    #[serde(default)]
+    pub movement_events: Vec<MovementEvent>,
+    #[serde(default)]
+    pub name_change_events: Vec<SessionNameChangeEvent>,
+    #[serde(default)]
+    pub latest_roster: Vec<ZoomParticipant>,
+    #[serde(default)]
+    pub roster_observations: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub manual_snapshots: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub reconciliation_decisions: Vec<ReconciliationDecision>,
+    #[serde(default)]
+    pub raise_hand_entries: Vec<RaiseHandEntry>,
+    #[serde(default)]
+    pub raise_hand_captures: Vec<RaiseHandCapture>,
+    #[serde(default)]
+    pub derived_rows: Vec<AttendanceRow>,
+    #[serde(default)]
+    pub exported_at: Option<String>,
+    #[serde(default)]
+    pub last_submitted_at: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionNameChangeEvent {
+    pub id: String,
+    pub timestamp: String,
+    pub session_participant_id: String,
+    #[serde(rename = "participantUUID")]
+    pub participant_uuid: String,
+    pub previous_screen_name: String,
+    pub next_screen_name: String,
+    #[serde(default)]
+    pub role: String,
+    #[serde(default)]
+    pub location: ParticipantLocation,
+    #[serde(default = "rename_source")]
+    pub source: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct Derived {
+    pub rows: Vec<AttendanceRow>,
+    pub summary: AttendanceSummary,
 }
