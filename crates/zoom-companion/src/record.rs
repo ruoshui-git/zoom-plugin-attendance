@@ -170,11 +170,24 @@ impl RecordProvider for EngineRecordProvider {
                 normalized.push(json!({"eventType":"instance_ended","timestamp":end}));
             }
         }
-        let config_value = json!({
+        let mut config_value = json!({
             "roster": config.get("roster").cloned().filter(|v| v.is_array()).unwrap_or_else(|| json!([])),
             "aliases": config.get("aliases").cloned().filter(|v| v.is_array()).unwrap_or_else(|| json!([])),
             "profiles": config.get("profiles").cloned().filter(|v| v.is_array()).unwrap_or_else(|| json!([])),
         });
+        if let Some(profiles) = config_value["profiles"].as_array_mut() {
+            let auto=profiles.iter().filter(|p|p["active"].as_bool().unwrap_or(true)).find(|p|p["meetingIds"].as_array().is_some_and(|ids|ids.iter().any(|id|id.as_str()==Some(meta.meeting_id.as_str()))))
+                .or_else(||profiles.iter().filter(|p|p["active"].as_bool().unwrap_or(true)).find(|p|p["topicKeywords"].as_array().is_some_and(|ks|ks.iter().filter_map(Value::as_str).any(|kw|!kw.is_empty()&&meta.meeting_topic.to_lowercase().contains(&kw.to_lowercase())))))
+                .or_else(||profiles.iter().find(|p|p["isDefault"]==true&&p["active"].as_bool().unwrap_or(true)))
+                .or_else(||profiles.iter().find(|p|p["active"].as_bool().unwrap_or(true)));
+            let selected=state["selectedProfileId"].as_str().or_else(||auto.and_then(|p|p["id"].as_str())).map(str::to_owned);
+            if let Some(selected) = selected {
+                if let Some(profile) = profiles.iter_mut().find(|p| p["id"].as_str() == Some(selected.as_str())) {
+                    if let Some(v) = state["lateAfterMinutesOverride"].as_i64() { profile["lateAfterMinutes"] = json!(v.max(0)); }
+                    if let Some(v) = state["returnWindowMinutesOverride"].as_i64() { profile["returnWindowMinutes"] = json!(v.max(1)); }
+                }
+            }
+        }
         let engine_config: EngineConfig = serde_json::from_value(config_value)
             .map_err(|error| format!("invalid attendance config: {error}"))?;
         let engine_state: EngineState = serde_json::from_value(state.clone())

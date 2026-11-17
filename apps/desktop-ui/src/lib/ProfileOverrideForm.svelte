@@ -1,0 +1,11 @@
+<script lang="ts">
+ export let initialLate:number|null=null; export let initialReturn:number|null=null; export let language='en'; export let onApply:(values:{lateAfterMinutesOverride:number|null;returnWindowMinutesOverride:number|null})=>void=()=>{};
+ const t=(zh:string,en:string)=>language==='zh-CN'?zh:en;
+ let lateText='', returnText='', error='';
+ $: if (lateText===''&&initialLate!==null) lateText=String(initialLate);
+ $: if (returnText===''&&initialReturn!==null) returnText=String(initialReturn);
+ function reset(){lateText=initialLate===null?'':String(initialLate);returnText=initialReturn===null?'':String(initialReturn);error=''}
+ function apply(){let late:number|null=null;if(String(lateText).trim()){const time=String(lateText).match(/^(-)?(\d{1,3}):([0-5]\d)$/);if(time){late=(Number(time[2])*60+Number(time[3]))*(time[1]?-1:1)}else if(!/^-?\d+$/.test(String(lateText))){error=t('迟到时间格式应为 HH:mm 或分钟','Use HH:mm or minutes for the late override');return}else late=Number(lateText);if(late < -60||late>120){error=t('迟到阈值范围为 −60 至 120 分钟','Late override must be between −60 and 120 minutes');return}}let ret:number|null=null;if(String(returnText).trim()){if(!/^\d+$/.test(String(returnText))||Number(returnText)<1||Number(returnText)>60){error=t('返回窗口范围为 1 至 60 分钟','Return window must be 1 to 60 minutes');return}ret=Number(returnText)}error='';onApply({lateAfterMinutesOverride:late,returnWindowMinutesOverride:ret})}
+</script>
+<div class="override-form"><label>{t('迟到覆盖（HH:mm 或分钟，−60 至 120）','Late override (HH:mm or minutes, −60 to 120)')}<input bind:value={lateText} placeholder="10 or 00:10"/></label><label>{t('返回窗口覆盖（1 至 60 分钟）','Return override (1 to 60 minutes)')}<input type="number" min="1" max="60" bind:value={returnText}/></label><button class="primary" onclick={apply}>{t('应用','Apply')}</button><button onclick={reset}>{t('重置','Reset')}</button>{#if error}<span class="error">{error}</span>{/if}</div>
+<style>.override-form{display:flex;align-items:end;gap:10px;flex-wrap:wrap}.override-form label{display:grid;gap:4px;font-size:11px;color:#687080}.override-form input{padding:7px;border:1px solid #dce0e7;border-radius:6px}.error{color:#b42318;font-size:12px}</style>

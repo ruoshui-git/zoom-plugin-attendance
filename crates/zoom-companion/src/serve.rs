@@ -671,6 +671,12 @@ pub fn run(
             record_updates: Arc::new(Mutex::new(std::collections::HashMap::new())),
             log_dir,
         };
+        let (profile_revision, profiles) = app.store.get_doc("profiles")?;
+        if !profiles.as_array().is_some_and(|rows| rows.iter().any(|p| p["id"] == "default-all")) {
+            let mut rows=profiles.as_array().cloned().unwrap_or_default();
+            rows.push(json!({"id":"default-all","name":"All participants","description":"Factory default profile","includedSubgroups":[],"lateAfterMinutes":10,"returnWindowMinutes":8,"meetingIds":[],"topicKeywords":[],"groupSortOrder":[],"active":true,"isDefault":true}));
+            let _=app.store.put_doc("profiles",profile_revision,&json!(rows),now())?;
+        }
         import_logs(&app, &app.log_dir);
         // A resume point is only valid for a meeting whose end was never recorded and
         // that was seen within the resume window; that one stays open for resumption.
@@ -722,8 +728,13 @@ pub fn run(
                 post(api_config_import_commit),
             )
             .route("/api/config/:key/export", get(api_config_export))
+            .route("/api/profiles/import/preview", post(api_profiles_import_preview))
+            .route("/api/profiles/import/commit", post(api_profiles_import_commit))
+            .route("/api/config/example-data", post(api_example_data_commit))
             .route("/api/meetings", get(api_meetings))
             .route("/api/records/export", get(api_export_records))
+            .route("/api/records/import/preview", post(api_records_import_preview))
+            .route("/api/records/import/commit", post(api_records_import_commit))
             .route("/api/records/delete", post(api_delete_records))
             .route(
                 "/api/meetings/:id",
@@ -1404,6 +1415,14 @@ async fn api_get_config(
     if !["roster", "aliases", "profiles", "settings"].contains(&key.as_str()) {
         return StatusCode::NOT_FOUND.into_response();
     }
+    if key=="profiles" {
+        if let Ok((revision,value))=a.store.get_doc("profiles") {
+            if !value.as_array().is_some_and(|rows|rows.iter().any(|p|p["id"]=="default-all")) {
+                let mut rows=value.as_array().cloned().unwrap_or_default();rows.push(json!({"id":"default-all","name":"All participants","description":"Factory default profile","includedSubgroups":[],"lateAfterMinutes":10,"returnWindowMinutes":8,"meetingIds":[],"topicKeywords":[],"groupSortOrder":[],"active":true,"isDefault":true}));
+                if let Ok(Ok(next))=a.store.put_doc("profiles",revision,&json!(rows),now()) { return Json(json!({"revision":next,"value":rows})).into_response(); }
+            }
+        }
+    }
     match a.store.get_doc(&key) {
         Ok((revision, value)) => Json(json!({"revision":revision,"value":value})).into_response(),
         Err(e) => api_error(e),
@@ -1550,24 +1569,83 @@ fn validate_config(a: &App, key: &str, value: &Value) -> Option<String> {
         }
     } else if key == "profiles" {
         let current = a.store.get_doc("profiles").ok()?.1;
-        if current
-            .as_array()
-            .into_iter()
-            .flatten()
-            .any(|p| p["id"] == "default-all")
-            && !rows.iter().any(|p| p["id"] == "default-all")
-        {
+        let factory = current.as_array().into_iter().flatten().find(|p| p["id"] == "default-all");
+        if !rows.iter().any(|p|p["id"]=="default-all") { return Some("default-all profile is required".into()); }
+        if factory.is_some() && !rows.iter().any(|p| p["id"] == "default-all") {
             return Some("default-all profile is locked".into());
         }
+        let mut ids = std::collections::HashSet::new();
         for p in rows {
-            if p["id"].as_str().unwrap_or("").is_empty()
-                || p["name"].as_str().unwrap_or("").trim().is_empty()
-            {
-                return Some("profile id and name are required".into());
+            let id = p["id"].as_str().unwrap_or("");
+            let name = p["name"].as_str().unwrap_or("").trim();
+            if id.is_empty() || name.is_empty() { return Some("profile id and name are required".into()); }
+            if !ids.insert(id) { return Some(format!("duplicate profile id: {id}")); }
+            if id == "default-all" {
+                if let Some(old) = factory {
+                    if old["name"] != p["name"] { return Some("default-all name is locked".into()); }
+                }
+                if p["name"].as_str().is_some_and(|n| n.trim().is_empty()) { return Some("default-all name is locked".into()); }
+            }
+            for field in ["lateAfterMinutes", "returnWindowMinutes"] {
+                if !p[field].as_u64().is_some_and(|n| n > 0) { return Some(format!("{field} must be a positive integer")); }
+            }
+            for field in ["includedSubgroups", "meetingIds", "topicKeywords", "groupSortOrder"] {
+                if !p[field].as_array().is_some_and(|a| a.iter().all(Value::is_string)) { return Some(format!("{field} must be an array of strings")); }
+            }
+            for field in ["includedSubgroups", "groupSortOrder"] {
+                for pattern in p[field].as_array().into_iter().flatten().filter_map(Value::as_str) {
+                    if pattern.contains('?') || pattern.contains('[') || pattern.contains(']') || pattern.contains('{') || pattern.contains('}') || pattern.contains("**") {
+                        return Some(format!("invalid wildcard pattern: {pattern}"));
+                    }
+                }
             }
         }
     }
     None
+}
+
+async fn api_profiles_import_preview(State(a): State<App>, headers: HeaderMap, Json(body): Json<Value>) -> Response {
+    if let Some(r)=api_origin(&a,&headers){return r}
+    let Some(incoming)=body["profiles"].as_array().or_else(||body.as_array()) else { return StatusCode::BAD_REQUEST.into_response() };
+    let (revision,current)=match a.store.get_doc("profiles"){Ok(v)=>v,Err(e)=>return api_error(e)};
+    let mut merged=current.as_array().cloned().unwrap_or_default();
+    let mut changes=Vec::new();
+    for (idx,raw) in incoming.iter().enumerate(){
+        if raw["id"].as_str().unwrap_or("").is_empty() || raw["name"].as_str().unwrap_or("").trim().is_empty(){changes.push(json!({"row":idx+1,"action":"reject","reason":"id and name required"}));continue}
+        let mut p=raw.clone(); if let Some(o)=p.as_object_mut(){o.remove("specialParticipants");o.remove("blacklist");for (key,default) in [("description",json!("")),("includedSubgroups",json!([])),("lateAfterMinutes",json!(10)),("returnWindowMinutes",json!(8)),("meetingIds",json!([])),("topicKeywords",json!([])),("groupSortOrder",json!([])),("active",json!(true))]{o.entry(key).or_insert(default);}}
+        let id=p["id"].as_str().unwrap(); let pos=merged.iter().position(|x|x["id"]==id);
+        match pos {Some(i)=>{if id=="default-all" && merged[i]["name"]!=p["name"]{changes.push(json!({"row":idx+1,"id":id,"action":"reject","reason":"default-all name is locked"}));}else{changes.push(json!({"row":idx+1,"id":id,"action":"update"}));merged[i]=p;}},None=>{changes.push(json!({"row":idx+1,"id":id,"action":"add"}));merged.push(p)}}
+    }
+    if let Some(msg)=validate_config(&a,"profiles",&json!(merged)){return (StatusCode::UNPROCESSABLE_ENTITY,Json(json!({"message":msg}))).into_response()}
+    Json(json!({"revision":revision,"value":merged,"changes":changes})).into_response()
+}
+async fn api_profiles_import_commit(State(a): State<App>, headers: HeaderMap, Json(body): Json<Value>) -> Response {
+    if let Some(r)=api_origin(&a,&headers){return r}
+    let (Some(rev),Some(value))=(body["revision"].as_u64(),body.get("value")) else{return StatusCode::BAD_REQUEST.into_response()};
+    if let Some(msg)=validate_config(&a,"profiles",value){return (StatusCode::UNPROCESSABLE_ENTITY,Json(json!({"message":msg}))).into_response()}
+    match a.store.put_doc("profiles",rev,value,now()){Ok(Ok(revision))=>Json(json!({"revision":revision,"value":value})).into_response(),Ok(Err(actual))=>Json(json!({"error":"stale_revision","revision":actual})).into_response_with_status(StatusCode::CONFLICT),Err(e)=>api_error(e)}
+}
+async fn api_example_data_commit(State(a):State<App>,headers:HeaderMap,Json(body):Json<Value>)->Response{
+    if let Some(r)=api_origin(&a,&headers){return r}
+    let (rr,old_roster)=match a.store.get_doc("roster"){Ok(v)=>v,Err(e)=>return api_error(e)};
+    let (ar,old_aliases)=match a.store.get_doc("aliases"){Ok(v)=>v,Err(e)=>return api_error(e)};
+    let (pr,old_profiles)=match a.store.get_doc("profiles"){Ok(v)=>v,Err(e)=>return api_error(e)};
+    let (Some(new_roster),Some(new_aliases),Some(new_profiles))=(body["roster"].as_array(),body["aliases"].as_array(),body["profiles"].as_array()) else{return StatusCode::BAD_REQUEST.into_response()};
+    let roster_names:std::collections::HashSet<String>=old_roster.as_array().into_iter().flatten().filter_map(|p|p["canonicalName"].as_str()).map(norm_config_name).collect();
+    if let Some(p)=new_roster.iter().find(|p|roster_names.contains(&norm_config_name(p["canonicalName"].as_str().unwrap_or("")))){return (StatusCode::CONFLICT,Json(json!({"message":format!("Example roster person {} conflicts with existing roster data",p["canonicalName"])}))).into_response()}
+    let alias_names:std::collections::HashSet<String>=old_aliases.as_array().into_iter().flatten().filter_map(|p|p["zoomName"].as_str()).map(norm_config_name).collect();
+    if let Some(p)=new_aliases.iter().find(|p|alias_names.contains(&norm_config_name(p["zoomName"].as_str().unwrap_or("")))){return (StatusCode::CONFLICT,Json(json!({"message":format!("Example alias {} conflicts with existing name matching",p["zoomName"])}))).into_response()}
+    let new_canonical:std::collections::HashSet<String>=new_roster.iter().filter_map(|p|p["canonicalName"].as_str()).map(norm_config_name).collect();
+    let old_canonical:std::collections::HashSet<String>=roster_names.clone();
+    if let Some(p)=new_roster.iter().find(|p|alias_names.contains(&norm_config_name(p["canonicalName"].as_str().unwrap_or("")))){return (StatusCode::CONFLICT,Json(json!({"message":format!("Example roster person {} conflicts with existing name matching",p["canonicalName"])}))).into_response()}
+    if let Some(p)=new_aliases.iter().find(|p|old_canonical.contains(&norm_config_name(p["zoomName"].as_str().unwrap_or("")))||new_canonical.contains(&norm_config_name(p["zoomName"].as_str().unwrap_or("")))){return (StatusCode::CONFLICT,Json(json!({"message":format!("Example alias {} conflicts with a canonical name",p["zoomName"])}))).into_response()}
+    let profile_ids:std::collections::HashSet<String>=old_profiles.as_array().into_iter().flatten().filter_map(|p|p["id"].as_str().map(str::to_owned)).collect();
+    if let Some(p)=new_profiles.iter().find(|p|profile_ids.contains(p["id"].as_str().unwrap_or(""))){return (StatusCode::CONFLICT,Json(json!({"message":format!("Example profile id {} already exists",p["id"])}))).into_response()}
+    let mut aliases=old_aliases.as_array().cloned().unwrap_or_default();aliases.extend(new_aliases.iter().cloned());
+    let mut roster=old_roster.as_array().cloned().unwrap_or_default();roster.extend(new_roster.iter().cloned());
+    let mut profiles=old_profiles.as_array().cloned().unwrap_or_default();for profile in new_profiles{let mut p=profile.clone();if let Some(o)=p.as_object_mut(){o.remove("specialParticipants");o.remove("blacklist");}profiles.push(p)}
+    let docs=vec![("roster".into(),rr,json!(roster)),("aliases".into(),ar,json!(aliases)),("profiles".into(),pr,json!(profiles))];
+    match a.store.put_docs_atomic(&docs,now()){Ok(Ok(_))=>Json(json!({"added":{"roster":new_roster.len(),"aliases":new_aliases.len(),"profiles":new_profiles.len()}})).into_response(),Ok(Err((key,_)))=>(StatusCode::CONFLICT,Json(json!({"message":format!("{key} changed during example import; retry") }))).into_response(),Err(e)=>api_error(e)}
 }
 
 // Configuration CSV workflows are kept in the companion so preview and commit
@@ -2182,6 +2260,7 @@ async fn api_record(
     let Ok(Some(meeting)) = a.store.meeting(&id) else {
         return StatusCode::NOT_FOUND.into_response();
     };
+    if meeting["source"] == "imported" { return Json(meeting["importedRecord"].clone()).into_response(); }
     let events = match a.store.events(&id) {
         Ok(e) => e,
         Err(e) => return api_error(e),
@@ -2211,6 +2290,38 @@ async fn api_record(
                 .into_response()
         }
     }
+}
+fn normalize_imported_record(item:&Value,index:usize)->Result<Value,String>{
+    let session=item.get("session").unwrap_or(item);
+    let is_session=item.get("session").is_some() || session.get("derivedRows").is_some();
+    let source_meeting=if is_session { session } else { item.get("meeting").unwrap_or(item) };
+    let id=source_meeting["instanceId"].as_str().or_else(||source_meeting["sessionId"].as_str()).or_else(||session["sessionId"].as_str()).unwrap_or("");
+    let number=source_meeting["meetingNumber"].as_str().or_else(||source_meeting["meetingId"].as_str()).or_else(||session["metadata"]["meetingId"].as_str()).unwrap_or("");
+    let topic=source_meeting["topic"].as_str().or_else(||source_meeting["meetingTopic"].as_str()).or_else(||session["metadata"]["meetingTopic"].as_str()).unwrap_or("Imported meeting");
+    let started=source_meeting["startedAt"].as_u64().or_else(||source_meeting["startedAt"].as_str().and_then(|s|s.parse().ok())).unwrap_or_else(now);
+    let mut record=if is_session {json!({"rows":session["derivedRows"],"summary":session["summary"],"mode":"roster"})} else {item["record"].clone()};
+    if record.is_null(){return Err("record rows are missing".into())}
+    if record["rows"].is_null(){if let Some(rows)=session["derivedRows"].as_array(){record["rows"]=json!(rows)}else{return Err("derived rows are missing".into())}}
+    let instance_id=if id.is_empty(){format!("imported-{}-{index}",now())}else{format!("imported-{id}")};
+    Ok(json!({"meeting":{"instanceId":instance_id,"meetingNumber":number,"topic":topic,"meetingType":0,"status":0,"statusName":"Imported","startedAt":started,"endedAt":source_meeting["endedAt"].as_u64().or(Some(started)),"endReason":"imported","isHost":false,"source":"imported","importedRecord":record},"record":record,"source":"imported"}))
+}
+async fn api_records_import_preview(State(a):State<App>,headers:HeaderMap,Json(body):Json<Value>)->Response{
+    if let Some(r)=api_origin(&a,&headers){return r}
+    let items=if let Some(v)=body.as_array(){v.clone()}else if let Some(v)=body["records"].as_array(){v.clone()}else if let Some(v)=body["sessions"].as_array(){v.clone()}else if body["version"].as_u64()==Some(3)&&body["session"].is_object(){vec![body.clone()]}else{return StatusCode::BAD_REQUEST.into_response()};
+    let active=a.tracker.lock().unwrap().meeting.as_ref().map(|m|m.meeting_number.clone());
+    let mut plans=Vec::new();
+    for (i,item) in items.iter().enumerate(){match normalize_imported_record(item,i){Ok(v)=>{let number=v["meeting"]["meetingNumber"].as_str().unwrap_or("");let instance=v["meeting"]["instanceId"].as_str().unwrap_or("");let reject=active.as_deref()==Some(number);let update=a.store.meeting(instance).ok().flatten().is_some();plans.push(json!({"action":if reject{"reject"}else if update{"update"}else{"add"},"reason":if reject{"would overwrite live meeting"}else{""},"value":v}));},Err(e)=>plans.push(json!({"action":"reject","reason":e}))}}
+    Json(json!({"plans":plans})).into_response()
+}
+async fn api_records_import_commit(State(a):State<App>,headers:HeaderMap,Json(body):Json<Value>)->Response{
+    if let Some(r)=api_origin(&a,&headers){return r}
+    let Some(plans)=body["plans"].as_array() else{return StatusCode::BAD_REQUEST.into_response()};
+    if plans.iter().any(|p|p["action"]=="reject"){return (StatusCode::UNPROCESSABLE_ENTITY,Json(json!({"message":"Import preview contains rejected records"}))).into_response()}
+    let active=a.tracker.lock().unwrap().meeting.as_ref().map(|m|m.meeting_number.clone());
+    if plans.iter().any(|p|active.as_deref()==p["value"]["meeting"]["meetingNumber"].as_str()){return (StatusCode::CONFLICT,Json(json!({"message":"Cannot import over the live meeting"}))).into_response()}
+    let mut imported=0;
+    for p in plans {let m=&p["value"]["meeting"];if let Err(e)=a.store.upsert_meeting(m,Some((m["endedAt"].as_u64().unwrap_or_else(now),"imported".into())),0){return api_error(e)} imported+=1;}
+    Json(json!({"imported":imported})).into_response()
 }
 fn stored_event(id: &str, e: &attend_store::EventRow) -> Value {
     let mut v = json!({"seq":e.seq,"at":e.at,"instanceId":id,"kind":e.kind});
@@ -2315,10 +2426,10 @@ async fn api_export_records(State(a): State<App>, headers: HeaderMap) -> Respons
             .get_state(&m.instance_id)
             .map(|x| x.1)
             .unwrap_or(json!({"mode":"generic"}));
-        let record = a
+        let record = if meeting["source"]=="imported" { meeting["importedRecord"].clone() } else { a
             .provider
             .try_build_record(&meeting, &events, &config, &state, now())
-            .unwrap_or_else(|error| json!({"error":"engine_failed","message":error}));
+            .unwrap_or_else(|error| json!({"error":"engine_failed","message":error})) };
         records.push(json!({"meeting":meeting,"events":events,"record":record,"state":state}));
     }
     Json(json!({"version":3,"exportedAt":now(),"records":records})).into_response()
@@ -2856,4 +2967,69 @@ async fn backup_import_revision_conflict_and_state_notification() {
         .unwrap();
     assert_eq!(update["type"], "record_updated");
     assert_eq!(update["instanceId"], "m1");
+}
+
+#[test]
+fn imported_attendflow_session_keeps_derived_rows_and_marks_read_only_source() {
+    let bundle=json!({"version":3,"session":{"sessionId":"af-1","metadata":{"meetingId":"123456","meetingTopic":"Example","startedAt":1700000000000_u64},"derivedRows":[{"zoomName":"Ada","currentStatus":"present"}]}});
+    let imported=normalize_imported_record(&bundle,0).unwrap();
+    assert_eq!(imported["source"],"imported");
+    assert_eq!(imported["meeting"]["source"],"imported");
+    assert_eq!(imported["record"]["rows"][0]["zoomName"],"Ada");
+}
+
+#[test]
+fn profile_validation_rejects_bad_wildcards_thresholds_and_default_removal() {
+    let store=Arc::new(Store::open(std::env::temp_dir().join(format!("zc-profile-validation-{}.db",now()))).unwrap());
+    let factory=json!([{"id":"default-all","name":"All participants","includedSubgroups":[],"lateAfterMinutes":10,"returnWindowMinutes":8,"meetingIds":[],"topicKeywords":[],"groupSortOrder":[],"active":true}]);
+    store.put_doc("profiles",0,&factory,now()).unwrap().unwrap();
+    let app=App{tx:broadcast::channel(2).0,tracker:Arc::new(Mutex::new(Tracker::default())),session:Arc::new(Mutex::new(None)),shutdown:Arc::new(AtomicBool::new(false)),port:47812,allowed:vec![],ui:None,log_dir:std::env::temp_dir(),store,provider:Arc::new(StubRecordProvider),record_updates:Arc::new(Mutex::new(Default::default()))};
+    assert!(validate_config(&app,"profiles",&json!([])).unwrap().contains("required"));
+    let mut renamed=factory.clone();renamed[0]["name"]=json!("Renamed");
+    assert!(validate_config(&app,"profiles",&renamed).unwrap().contains("name is locked"));
+    let mut wildcard=factory.clone();wildcard[0]["includedSubgroups"]=json!(["team-**"]);
+    assert!(validate_config(&app,"profiles",&wildcard).unwrap().contains("wildcard"));
+    let mut threshold=factory;threshold[0]["lateAfterMinutes"]=json!(0);
+    assert!(validate_config(&app,"profiles",&threshold).unwrap().contains("positive integer"));
+}
+
+#[tokio::test]
+async fn example_data_conflict_aborts_all_three_config_documents() {
+    let store=Arc::new(Store::open(std::env::temp_dir().join(format!("zc-example-conflict-{}.db",now()))).unwrap());
+    let original=json!([{"personId":1,"canonicalName":"Existing"}]);store.put_doc("roster",0,&original,now()).unwrap().unwrap();
+    let app=App{tx:broadcast::channel(2).0,tracker:Arc::new(Mutex::new(Tracker::default())),session:Arc::new(Mutex::new(None)),shutdown:Arc::new(AtomicBool::new(false)),port:47812,allowed:vec![],ui:None,log_dir:std::env::temp_dir(),store:store.clone(),provider:Arc::new(StubRecordProvider),record_updates:Arc::new(Mutex::new(Default::default()))};
+    let body=json!({"roster":[{"personId":2,"canonicalName":"Existing"}],"aliases":[{"zoomName":"Alias","personId":2}],"profiles":[{"id":"example-one","name":"Example"}]});
+    let response=api_example_data_commit(State(app),HeaderMap::new(),Json(body)).await;
+    assert_eq!(response.status(),StatusCode::CONFLICT);
+    assert_eq!(store.get_doc("roster").unwrap().1,original);
+    assert_eq!(store.get_doc("aliases").unwrap().1,json!([]));
+    assert_eq!(store.get_doc("profiles").unwrap().1,json!([]));
+}
+
+#[tokio::test]
+async fn profile_json_import_preview_and_commit_upsert_by_id() {
+    use http_body_util::BodyExt; use tower::ServiceExt;
+    let store=Arc::new(Store::open(std::env::temp_dir().join(format!("zc-profile-import-{}.db",now()))).unwrap());
+    let factory=json!([{"id":"default-all","name":"All participants","includedSubgroups":[],"lateAfterMinutes":10,"returnWindowMinutes":8,"meetingIds":[],"topicKeywords":[],"groupSortOrder":[],"active":true}]);store.put_doc("profiles",0,&factory,now()).unwrap().unwrap();
+    let app=App{tx:broadcast::channel(2).0,tracker:Arc::new(Mutex::new(Tracker::default())),session:Arc::new(Mutex::new(None)),shutdown:Arc::new(AtomicBool::new(false)),port:47812,allowed:vec![],ui:None,log_dir:std::env::temp_dir(),store:store.clone(),provider:Arc::new(StubRecordProvider),record_updates:Arc::new(Mutex::new(Default::default()))};
+    let api=Router::new().route("/api/profiles/import/preview",post(api_profiles_import_preview)).route("/api/profiles/import/commit",post(api_profiles_import_commit)).with_state(app);
+    let incoming=json!({"profiles":[{"id":"p1","name":"Profile one","description":"x","includedSubgroups":["Team-*"],"lateAfterMinutes":5,"returnWindowMinutes":6,"meetingIds":[],"topicKeywords":[],"groupSortOrder":[],"active":true,"blacklist":["ignored"]}]});
+    let req=axum::http::Request::builder().method("POST").uri("/api/profiles/import/preview").header("content-type","application/json").body(axum::body::Body::from(incoming.to_string())).unwrap();
+    let response=api.clone().oneshot(req).await.unwrap();assert_eq!(response.status(),StatusCode::OK);let plan:Value=serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(plan["changes"][0]["action"],"add");assert!(plan["value"][1]["blacklist"].is_null());
+    let req=axum::http::Request::builder().method("POST").uri("/api/profiles/import/commit").header("content-type","application/json").body(axum::body::Body::from(plan.to_string())).unwrap();
+    assert_eq!(api.oneshot(req).await.unwrap().status(),StatusCode::OK);assert_eq!(store.get_doc("profiles").unwrap().1.as_array().unwrap().len(),2);
+}
+
+#[tokio::test]
+async fn attendflow_record_import_preview_then_commit_stores_derived_rows() {
+    use http_body_util::BodyExt; use tower::ServiceExt;
+    let store=Arc::new(Store::open(std::env::temp_dir().join(format!("zc-record-import-{}.db",now()))).unwrap());
+    let app=App{tx:broadcast::channel(2).0,tracker:Arc::new(Mutex::new(Tracker::default())),session:Arc::new(Mutex::new(None)),shutdown:Arc::new(AtomicBool::new(false)),port:47812,allowed:vec![],ui:None,log_dir:std::env::temp_dir(),store:store.clone(),provider:Arc::new(StubRecordProvider),record_updates:Arc::new(Mutex::new(Default::default()))};
+    let api=Router::new().route("/api/records/import/preview",post(api_records_import_preview)).route("/api/records/import/commit",post(api_records_import_commit)).route("/api/meetings/:id/record",get(api_record)).with_state(app);
+    let input=json!({"version":3,"session":{"sessionId":"af-session","metadata":{"meetingId":"4321","meetingTopic":"Imported session","startedAt":1700000000000_u64},"derivedRows":[{"zoomName":"Ada","currentStatus":"present"}]}});
+    let req=axum::http::Request::builder().method("POST").uri("/api/records/import/preview").header("content-type","application/json").body(axum::body::Body::from(input.to_string())).unwrap();
+    let response=api.clone().oneshot(req).await.unwrap();let plan:Value=serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap();assert_eq!(plan["plans"][0]["action"],"add");
+    let req=axum::http::Request::builder().method("POST").uri("/api/records/import/commit").header("content-type","application/json").body(axum::body::Body::from(plan.to_string())).unwrap();assert_eq!(api.clone().oneshot(req).await.unwrap().status(),StatusCode::OK);
+    let id=plan["plans"][0]["value"]["meeting"]["instanceId"].as_str().unwrap();assert!(store.meeting(id).unwrap().is_some());let req=axum::http::Request::builder().uri(format!("/api/meetings/{id}/record")).body(axum::body::Body::empty()).unwrap();let response=api.oneshot(req).await.unwrap();assert_eq!(response.status(),StatusCode::OK);let record:Value=serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap();assert_eq!(record["rows"][0]["zoomName"],"Ada");
 }

@@ -31,10 +31,15 @@ reconnect/meeting-change handling) and close the unverified items listed there.
   waiter shown as "Waiting room only" with waiting minutes and excluded from totals.
 - **Not yet live-verified:** the app as a non-host (engine path covered by the
   non-host scenario test; needs a meeting the owner does not host).
-- **P2 remaining:** profiles full workflow, example data, record import preview,
-  record-detail tabs (name matching/decisions UI, entry/exit, manual snapshots, raise
-  hand, per-record CSV exports), UI size, exact AttendFlow validation-message parity,
-  native save dialog verification.
+- **P2 progress:** Attendance profiles now have the full desktop editor, Rust-side
+  validation, default factory reset, bulk actions, JSON preview/commit/export, and live
+  profile selection with staged threshold overrides. Example roster/aliases/four
+  profiles seed atomically after conflict checks. AttendFlow session bundles and our
+  record exports import through preview/commit as read-only `imported` records.
+- **P2 remaining:** record-detail tabs (name matching/decisions UI, entry/exit, manual
+  snapshots, raise hand, per-record CSV exports), UI size, exact AttendFlow
+  validation-message parity, native save dialog verification, and deeper live
+  verification of profile overrides against recorded sessions.
 
 ## 1. What was installed
 
