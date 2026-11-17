@@ -22,4 +22,11 @@ serde_json.workspace = true
 chrono = { version = "0.4", features = ["clock"] }
 toml.workspace = true
 windows-sys.workspace = true
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal", "sync", "time"] }
+axum = { version = "0.7", features = ["ws"] }
+futures-util = "0.3"
+mime_guess = "2"
 clap = { version = "4", features = ["derive"] }
+
+[dev-dependencies]
+tokio-tungstenite = "0.24"

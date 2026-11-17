@@ -23,6 +23,7 @@ zoom-companion (Rust CLI, later UI)
 .\scripts\build.ps1                   # cargo build --workspace
 .\scripts\test.ps1                    # unit tests + interop selftest
 .\scripts\run.ps1 doctor              # environment / SDK / DLL / Zoom / auth checks
+.\scripts\run.ps1 serve               # loopback HTTP + WebSocket companion bridge
 pwsh -NoProfile -File .\scripts\verify.ps1 [-BuildDemo] [-Connect]   # full checklist
 ```
 
@@ -38,7 +39,7 @@ First-time auth (interactive, once per machine/user):
 
 | Path | Purpose |
 |---|---|
-| `crates/zoom-companion` | CLI app (`doctor`, `selftest`, `config`, `auth`, `connect`, `participants`) |
+| `crates/zoom-companion` | CLI app (`doctor`, `selftest`, `config`, `auth`, `connect`, `participants`, `serve`) |
 | `crates/zoom-bridge` | FFI crate: `native/zc_bridge.h` C ABI, C++ adapter, safe Rust session API |
 | `crates/zoom-auth` | PKCE, loopback listener, token endpoint, DPAPI store |
 | `scripts/` | Reproducible PowerShell scripts |

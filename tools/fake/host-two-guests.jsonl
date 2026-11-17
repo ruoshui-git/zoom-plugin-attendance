@@ -1,0 +1,12 @@
+{"event":"auth_result","code":0,"thread_id":1}
+{"event":"ipc_status","code":2,"message":"connected","thread_id":1}
+{"event":"meeting_status","code":3,"thread_id":1}
+{"event":"user_status","action":1,"error_code":1,"instance":1,"users":[{"user_id":100,"name":"Host","flags":5,"audio_type":1},{"user_id":200,"name":"Guest A","flags":4,"audio_type":1},{"user_id":300,"name":"Guest B","flags":0,"audio_type":1}],"thread_id":1}
+{"event":"user_status","action":2,"error_code":1,"instance":1,"users":[{"user_id":400,"name":"Waiting Guest","flags":256,"audio_type":0}],"thread_id":1}
+{"event":"user_status","action":3,"error_code":1,"instance":1,"users":[{"user_id":400,"name":"Waiting Guest","flags":256,"audio_type":0}],"thread_id":1}
+{"event":"user_status","action":2,"error_code":1,"instance":1,"users":[{"user_id":401,"name":"Waiting Guest","flags":0,"audio_type":1}],"thread_id":1}
+{"event":"user_status","action":4,"error_code":1,"instance":1,"users":[{"user_id":300,"name":"Guest B renamed","flags":0,"audio_type":1}],"thread_id":1}
+{"event":"other","name":"OnUserRaisedHand","code":0,"value":200,"instance":1,"thread_id":1}
+{"event":"other","name":"OnUserLowerHand","code":0,"value":200,"instance":1,"thread_id":1}
+{"event":"user_status","action":3,"error_code":1,"instance":1,"users":[{"user_id":200,"name":"Guest A","flags":4,"audio_type":1}],"thread_id":1}
+{"event":"meeting_status","code":7,"thread_id":1}

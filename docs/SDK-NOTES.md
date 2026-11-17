@@ -113,6 +113,10 @@ Bridge already exposes: `Session::participants`, `myself`, `meeting_info`,
 - Waiting room: `AdmitToMeeting`, `AdmitAllUserToMeeting`,
   `EnableWaitingRoomFeature`, `IsWaitingRoomFeatureOn` (lab: `admit <id>`,
   `admitall`, `wr [on|off]`).
+- `IWaitingRoomToolkit::PutIntoWaitingRoom(userId, callback)` and
+  `ExpelUser(userId, callback)` are async methods. The companion bridge exposes
+  both through the same submission status + `AsyncResult` callback pattern as
+  `AdmitToMeeting`. Neither operation has been verified against a live meeting.
 - Toolkit methods are exposed without a documented role gate in these headers;
   host-only mutations are not yet verified live (see In-meeting observations).
 

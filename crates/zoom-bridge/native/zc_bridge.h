@@ -145,6 +145,8 @@ int32_t zc_revoke_cohost(int32_t instance, uint32_t user_id);
 int32_t zc_get_unread_chat_count(int32_t instance);
 /* IWaitingRoomToolkit (async results -> ZC_EVENT_ASYNC_RESULT; state value = 0/1). */
 int32_t zc_admit_user(int32_t instance, uint32_t user_id);
+int32_t zc_put_into_waiting_room(int32_t instance, uint32_t user_id);
+int32_t zc_expel_user(int32_t instance, uint32_t user_id);
 int32_t zc_admit_all(int32_t instance);
 int32_t zc_enable_waiting_room(int32_t instance, int32_t enable);
 int32_t zc_is_waiting_room_on(int32_t instance);

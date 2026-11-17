@@ -9,6 +9,7 @@
 //!   participants        (in a meeting) GetParticipantsList / GetMySelf / meeting info
 
 mod config;
+mod serve;
 
 use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
@@ -68,6 +69,13 @@ enum Cmd {
         #[arg(long)] log: Option<std::path::PathBuf>,
         #[arg(long)] script: Option<std::path::PathBuf>,
         #[arg(long)] exec: Option<String>,
+    },
+    /// Run the local companion HTTP and WebSocket server.
+    Serve {
+        #[arg(long, default_value_t = 47812)] port: u16,
+        #[arg(long)] ui: Option<std::path::PathBuf>,
+        #[arg(long)] open: bool,
+        #[arg(long = "allow-origin")] allow_origin: Vec<String>,
     },
 }
 
@@ -130,6 +138,7 @@ fn run(cli: Cli) -> Result<()> {
         Cmd::Connect { seconds } => connect(seconds),
         Cmd::Participants { wait, watch } => participants(wait, watch),
         Cmd::Lab { log, script, exec } => lab(log, script, exec),
+        Cmd::Serve { port, ui, open, allow_origin } => serve::run(port, ui, open, allow_origin),
     }
 }
 

@@ -102,6 +102,25 @@ pwsh -NoProfile -File .\scripts\verify.ps1 -Connect -BuildDemo
 .\scripts\package.ps1                          # dist\zoom-companion\ (exe + bin)
 ```
 
+## 9. Local companion server
+
+`serve` owns one long-lived Plugin SDK session and exposes the protocol in
+[BRIDGE-PROTOCOL.md](BRIDGE-PROTOCOL.md). It binds only to loopback:
+
+```powershell
+$env:ZOOM_PLUGIN_SDK_DIR = 'C:\path\to\zoom-plugin-sdk-windows-7.2.0.3001\x64'
+.\scripts\build.ps1
+.\scripts\run.ps1 serve
+.\scripts\run.ps1 serve --port 47812 --ui C:\path\to\attendflow\dist --open
+.\scripts\run.ps1 serve --allow-origin http://localhost:5173
+```
+
+Default HTTP/WebSocket endpoint is `127.0.0.1:47812` and `/bridge`. With
+no `--ui`, the root serves a live status page. `Ctrl+C` flushes the meeting
+JSONL and shuts down the SDK session. Per-instance logs and `current.json`
+are written to `%LOCALAPPDATA%\zoom-companion\meetings\`; a matching meeting
+can resume for 15 minutes after a process restart.
+
 ### In-meeting experiment console
 
 Use `lab` only in an owner-controlled test meeting. It authenticates/attaches to

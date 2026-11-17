@@ -457,6 +457,20 @@ extern "C" int32_t zc_admit_user(int32_t instance, uint32_t id) {
     return wt && wt->AdmitToMeeting(id, [](const BaseResult &r) { try { Async("AdmitToMeeting", r); } catch (...) {} }) ? ZC_OK : ZC_ERR_SDK_REJECTED;
     ZC_GUARD_END
 }
+extern "C" int32_t zc_put_into_waiting_room(int32_t instance, uint32_t id) {
+    ZC_GUARD_BEGIN
+    if (!g_inited) return ZC_ERR_WRONG_STATE;
+    auto *wt = meeting::GetWaitingRoomToolkit(Inst(instance));
+    return wt && wt->PutIntoWaitingRoom(id, [](const BaseResult &r) { try { Async("PutIntoWaitingRoom", r); } catch (...) {} }) ? ZC_OK : ZC_ERR_SDK_REJECTED;
+    ZC_GUARD_END
+}
+extern "C" int32_t zc_expel_user(int32_t instance, uint32_t id) {
+    ZC_GUARD_BEGIN
+    if (!g_inited) return ZC_ERR_WRONG_STATE;
+    auto *wt = meeting::GetWaitingRoomToolkit(Inst(instance));
+    return wt && wt->ExpelUser(id, [](const BaseResult &r) { try { Async("ExpelUser", r); } catch (...) {} }) ? ZC_OK : ZC_ERR_SDK_REJECTED;
+    ZC_GUARD_END
+}
 extern "C" int32_t zc_admit_all(int32_t instance) {
     ZC_GUARD_BEGIN
     if (!g_inited) return ZC_ERR_WRONG_STATE;
