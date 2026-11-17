@@ -1,6 +1,6 @@
 # New desktop attendance app — architecture and plan
 
-Status: draft 2026-11-17. Working name **AttendFlow Desktop** (codename `zoom-companion`).
+Status: P1 foundation implementation 2026-11-17. Working name **AttendFlow Desktop** (codename `zoom-companion`).
 Owner decisions: AttendFlow stays a Zoom App and must keep working with only the Apps
 SDK; this app is built separately in this repo and may duplicate AttendFlow logic.
 
@@ -80,3 +80,23 @@ Decisions:
   `POST /api/import/attendflow-backup`.
 - Live: `/bridge` as in BRIDGE-PROTOCOL.md plus a `record_updated` notification so the
   UI refetches (or receives) the recomputed record.
+
+## As-built P1 notes
+
+- `crates/attend-store` provides SQLite migrations and revisioned config/state docs.
+- `zoom-companion serve` exposes the routes above; `serve --fake` starts the HTTP/UI
+  process without starting the SDK worker. `zoom-companion app` hosts the UI in a Wry /
+  Tao native window titled **AttendFlow Desktop**.
+- `apps/desktop-ui` is a Svelte 5/Vite presentation-only client. Live record changes
+  arrive as `record_updated`; the client refetches the record. Generic/roster mode is
+  persisted in per-meeting state; language selection is stored in local UI settings.
+- The companion defines `RecordProvider`; `StubRecordProvider` currently derives
+  generic participant rows from stored `users` events, with no roster matching. It
+  returns AttendFlow camelCase `AttendanceRow` fields and summary keys, including
+  `waitingRoomMinutes`. Replace it with the `attend-engine` implementation when that
+  crate is ready; no attendance calculations belong in the UI.
+- `serve --fake` seeds two demo participants in an isolated temp database and JSONL
+  folder. It does not read or write the normal `%LOCALAPPDATA%` store and never starts
+  an SDK session.
+- Build scripts build the UI into `target/{debug,release}/ui`, and package it under
+  `ui/` beside the executable. The app resolves that directory relative to its exe.

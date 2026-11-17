@@ -8,6 +8,8 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use crate::record::{RecordProvider, StubRecordProvider};
+use attend_store::Store;
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
@@ -15,8 +17,8 @@ use axum::{
     },
     http::{HeaderMap, StatusCode, Uri},
     response::{Html, IntoResponse, Response},
-    routing::get,
-    Router,
+    routing::{get, post},
+    Json, Router,
 };
 use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
@@ -203,7 +205,11 @@ impl Tracker {
         if resumed.is_some() {
             self.load_history(&m.instance_id);
         }
-        let kind = if resumed.is_some() { "instance_resumed" } else { "instance_started" };
+        let kind = if resumed.is_some() {
+            "instance_resumed"
+        } else {
+            "instance_started"
+        };
         self.emit(kind, json!({"meeting":m}))
     }
     /// Starts an instance and records the current participant list as a `sync_all`
@@ -219,7 +225,10 @@ impl Tracker {
         let mut out: Vec<Value> = self.start(number, topic, mt, st, me).into_iter().collect();
         if !out.is_empty() {
             let users = self.users.clone();
-            out.extend(self.emit("users", json!({"action":"sync_all","users":users,"source":"snapshot"})));
+            out.extend(self.emit(
+                "users",
+                json!({"action":"sync_all","users":users,"source":"snapshot"}),
+            ));
         }
         out
     }
@@ -443,6 +452,10 @@ struct App {
     port: u16,
     allowed: Vec<String>,
     ui: Option<PathBuf>,
+    log_dir: PathBuf,
+    store: Arc<Store>,
+    provider: Arc<dyn RecordProvider>,
+    record_updates: Arc<Mutex<std::collections::HashMap<String, u64>>>,
 }
 trait BridgeEventSource: Send {
     fn recv_event(&self, timeout: Duration) -> Result<Event, mpsc::RecvTimeoutError>;
@@ -607,22 +620,58 @@ fn request(a: &App, method: &str, p: &Value) -> Result<Value, (&'static str, Str
     res.map_err(|e| ("sdk_rejected", e.to_string()))
 }
 
-pub fn run(port: u16, ui: Option<PathBuf>, open: bool, allowed: Vec<String>) -> anyhow::Result<()> {
+pub fn run(
+    port: u16,
+    ui: Option<PathBuf>,
+    open: bool,
+    allowed: Vec<String>,
+    fake: bool,
+) -> anyhow::Result<()> {
+    let ui = ui.or_else(|| {
+        std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|p| p.join("ui")))
+    });
     let rt = tokio::runtime::Runtime::new()?;
     rt.block_on(async move {
         let (tx, _) = broadcast::channel(1024);
+        let data_dir = if fake {
+            std::env::temp_dir().join(format!("zoom-companion-fake-{}", std::process::id()))
+        } else {
+            std::env::var_os("LOCALAPPDATA")
+                .map(PathBuf::from)
+                .unwrap_or_else(std::env::temp_dir)
+                .join("zoom-companion")
+        };
+        let log_dir = if fake {
+            data_dir.join("meetings")
+        } else {
+            meetings_dir()
+        };
         let app = App {
             tx: tx.clone(),
-            tracker: Arc::new(Mutex::new(Tracker::new(Some(meetings_dir())))),
+            tracker: Arc::new(Mutex::new(Tracker::new(Some(log_dir.clone())))),
             session: Arc::new(Mutex::new(None)),
             shutdown: Arc::new(AtomicBool::new(false)),
             port,
             allowed,
             ui,
+            store: Arc::new(Store::open(data_dir.join("data.db"))?),
+            provider: Arc::new(StubRecordProvider),
+            record_updates: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            log_dir,
         };
+        import_logs(&app, &app.log_dir);
+        if fake {
+            seed_fake_meeting(&app);
+        }
         let worker = app.clone();
         let stop = app.shutdown.clone();
-        let worker_task = tokio::task::spawn_blocking(move || sdk_loop(worker));
+        let worker_task = if fake {
+            None
+        } else {
+            Some(tokio::task::spawn_blocking(move || sdk_loop(worker)))
+        };
         let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await?;
         let url = format!("http://127.0.0.1:{port}/");
         if open {
@@ -630,6 +679,19 @@ pub fn run(port: u16, ui: Option<PathBuf>, open: bool, allowed: Vec<String>) -> 
         }
         let router = Router::new()
             .route("/bridge", get(ws))
+            .route("/api/config/:key", get(api_get_config).put(api_put_config))
+            .route("/api/meetings", get(api_meetings))
+            .route(
+                "/api/meetings/:id",
+                get(api_meeting).delete(api_delete_meeting),
+            )
+            .route("/api/meetings/:id/events", get(api_events))
+            .route("/api/meetings/:id/record", get(api_record))
+            .route(
+                "/api/meetings/:id/state",
+                get(api_get_state).put(api_put_state),
+            )
+            .route("/api/import/attendflow-backup", post(api_import_backup))
             .fallback(get(root))
             .with_state(app);
         axum::serve(listener, router)
@@ -638,17 +700,114 @@ pub fn run(port: u16, ui: Option<PathBuf>, open: bool, allowed: Vec<String>) -> 
                 stop.store(true, Ordering::SeqCst);
             })
             .await?;
-        let _ = worker_task.await;
+        if let Some(worker_task) = worker_task {
+            let _ = worker_task.await;
+        }
         Ok::<_, anyhow::Error>(())
     })?;
     Ok(())
 }
+
+pub fn app() -> anyhow::Result<()> {
+    use tao::{
+        event::{Event, WindowEvent},
+        event_loop::{ControlFlow, EventLoop},
+        window::WindowBuilder,
+    };
+    let exe = std::env::current_exe()?;
+    let ui = exe
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("."))
+        .join("ui");
+    let url = "http://127.0.0.1:47812/".to_owned();
+    std::thread::spawn(move || {
+        if let Err(e) = run(47812, Some(ui), false, vec![], false) {
+            log::error!("app server stopped: {e:#}");
+        }
+    });
+    for _ in 0..100 {
+        if std::net::TcpStream::connect("127.0.0.1:47812").is_ok() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    let event_loop = EventLoop::new();
+    let window = WindowBuilder::new()
+        .with_title("AttendFlow Desktop")
+        .with_inner_size(tao::dpi::LogicalSize::new(1280.0, 820.0))
+        .build(&event_loop)?;
+    let _webview = wry::WebViewBuilder::new().with_url(&url).build(&window)?;
+    event_loop.run(move |event, _, control_flow| {
+        *control_flow = ControlFlow::Wait;
+        if let Event::WindowEvent {
+            event: WindowEvent::CloseRequested,
+            ..
+        } = event
+        {
+            *control_flow = ControlFlow::Exit;
+        }
+    });
+}
 fn publish(a: &App, events: Vec<Value>) {
-    let changed = events
-        .iter()
-        .any(|e| e["kind"] == "instance_started" || e["kind"] == "instance_resumed" || e["kind"] == "instance_ended");
+    let changed = events.iter().any(|e| {
+        e["kind"] == "instance_started"
+            || e["kind"] == "instance_resumed"
+            || e["kind"] == "instance_ended"
+    });
+    let mut changed_id: Option<String> = None;
     for e in events {
+        if e["type"] == "event" {
+            if let Some(id) = e["instanceId"].as_str() {
+                changed_id = Some(id.to_owned());
+                let kind = e["kind"].as_str().unwrap_or("unknown");
+                let mut payload = e.clone();
+                if let Some(o) = payload.as_object_mut() {
+                    for k in ["type", "seq", "at", "instanceId", "kind"] {
+                        o.remove(k);
+                    }
+                }
+                if matches!(kind, "instance_started" | "instance_resumed") {
+                    if let Err(err) =
+                        a.store
+                            .upsert_meeting(&e["meeting"], None, e["seq"].as_u64().unwrap_or(0))
+                    {
+                        log::error!("persist meeting: {err}");
+                    }
+                } else if let Ok(Some(mut meta)) = a.store.meeting(id) {
+                    if kind == "self_changed" {
+                        meta["isHost"] = e["isHost"].clone();
+                        meta["myself"] = e["myself"].clone();
+                    }
+                    let end = if kind == "instance_ended" {
+                        Some((
+                            e["at"].as_u64().unwrap_or_else(now),
+                            e["reason"].as_str().unwrap_or("ended").to_owned(),
+                        ))
+                    } else {
+                        None
+                    };
+                    if let Err(err) =
+                        a.store
+                            .upsert_meeting(&meta, end, e["seq"].as_u64().unwrap_or(0))
+                    {
+                        log::error!("update meeting: {err}");
+                    }
+                }
+                if let Err(err) = a.store.append_event(
+                    id,
+                    e["seq"].as_u64().unwrap_or(0),
+                    e["at"].as_u64().unwrap_or_else(now),
+                    kind,
+                    &payload,
+                ) {
+                    log::error!("persist event: {err}");
+                }
+            }
+        }
         let _ = a.tx.send(e);
+    }
+    if let Some(id) = changed_id {
+        emit_record_updated(a, &id);
     }
     if changed {
         let state = a.tracker.lock().unwrap().state();
@@ -757,11 +916,16 @@ fn sdk_loop(a: App) {
                             break;
                         }
                         let no_meeting = a.tracker.lock().unwrap().meeting.is_none();
-                        if no_meeting && want_start && last_try.elapsed() >= Duration::from_secs(1) {
+                        if no_meeting && want_start && last_try.elapsed() >= Duration::from_secs(1)
+                        {
                             last_try = std::time::Instant::now();
                             if let Some(d) = meeting_data(&a) {
                                 refresh_users(&a);
-                                let out = a.tracker.lock().unwrap().start_with_snapshot(d.0, d.1, d.2, d.3, d.4);
+                                let out = a
+                                    .tracker
+                                    .lock()
+                                    .unwrap()
+                                    .start_with_snapshot(d.0, d.1, d.2, d.3, d.4);
                                 publish(&a, out);
                                 want_start = false;
                             }
@@ -1027,6 +1191,12 @@ mod tests {
             port,
             allowed: vec![],
             ui: None,
+            log_dir: std::env::temp_dir(),
+            store: Arc::new(
+                Store::open(std::env::temp_dir().join(format!("zc-api-{}.db", now()))).unwrap(),
+            ),
+            provider: Arc::new(StubRecordProvider),
+            record_updates: Arc::new(Mutex::new(std::collections::HashMap::new())),
         };
         let router = Router::new()
             .route("/bridge", get(ws))
@@ -1086,4 +1256,467 @@ mod tests {
         assert!(pushed.contains("\"connected\":true"));
         task.abort();
     }
+}
+async fn api_get_config(
+    State(a): State<App>,
+    axum::extract::Path(key): axum::extract::Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    if let Some(r) = api_origin(&a, &headers) {
+        return r;
+    }
+    if !["roster", "aliases", "profiles", "settings"].contains(&key.as_str()) {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    match a.store.get_doc(&key) {
+        Ok((revision, value)) => Json(json!({"revision":revision,"value":value})).into_response(),
+        Err(e) => api_error(e),
+    }
+}
+async fn api_put_config(
+    State(a): State<App>,
+    axum::extract::Path(key): axum::extract::Path<String>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Response {
+    if let Some(r) = api_origin(&a, &headers) {
+        return r;
+    }
+    if !["roster", "aliases", "profiles", "settings"].contains(&key.as_str()) {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    let Some(rev) = body["revision"].as_u64() else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    let val = body.get("value").cloned().unwrap_or(Value::Null);
+    match a.store.put_doc(&key, rev, &val, now()) {
+        Ok(Ok(revision)) => Json(json!({"revision":revision,"value":val})).into_response(),
+        Ok(Err(actual)) => Json(json!({"error":"stale_revision","revision":actual}))
+            .into_response_with_status(StatusCode::CONFLICT),
+        Err(e) => api_error(e),
+    }
+}
+async fn api_meetings(State(a): State<App>, headers: HeaderMap) -> Response {
+    if let Some(r) = api_origin(&a, &headers) {
+        return r;
+    }
+    match a.store.meetings(){Ok(rows)=>Json(rows.iter().map(|m|json!({"instanceId":m.instance_id,"meetingNumber":m.meeting_number,"topic":m.topic,"startedAt":m.started_at,"endedAt":m.ended_at,"endReason":m.end_reason,"isHost":m.is_host,"lastSeq":m.last_seq})).collect::<Vec<_>>()).into_response(),Err(e)=>api_error(e)}
+}
+async fn api_meeting(
+    State(a): State<App>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    if let Some(r) = api_origin(&a, &headers) {
+        return r;
+    }
+    match a.store.meeting(&id) {
+        Ok(Some(v)) => Json(v).into_response(),
+        Ok(None) => StatusCode::NOT_FOUND.into_response(),
+        Err(e) => api_error(e),
+    }
+}
+async fn api_events(
+    State(a): State<App>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    if let Some(r) = api_origin(&a, &headers) {
+        return r;
+    }
+    match a.store.events(&id) {
+        Ok(v) => Json(v.iter().map(|e| stored_event(&id, e)).collect::<Vec<_>>()).into_response(),
+        Err(e) => api_error(e),
+    }
+}
+async fn api_record(
+    State(a): State<App>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    if let Some(r) = api_origin(&a, &headers) {
+        return r;
+    }
+    let Ok(Some(meeting)) = a.store.meeting(&id) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let events = match a.store.events(&id) {
+        Ok(e) => e,
+        Err(e) => return api_error(e),
+    };
+    let vals = events
+        .iter()
+        .map(|e| {
+            let mut v = stored_event(&id, e);
+            v["instanceId"] = Value::Null;
+            v
+        })
+        .collect::<Vec<_>>();
+    let docs = json!({"roster":a.store.get_doc("roster").map(|x|x.1).unwrap_or(Value::Null),"aliases":a.store.get_doc("aliases").map(|x|x.1).unwrap_or(Value::Null),"profiles":a.store.get_doc("profiles").map(|x|x.1).unwrap_or(Value::Null),"settings":a.store.get_doc("settings").map(|x|x.1).unwrap_or(Value::Null)});
+    let state = a
+        .store
+        .get_state(&id)
+        .map(|x| x.1)
+        .unwrap_or(json!({"mode":"generic"}));
+    Json(
+        a.provider
+            .build_record(&meeting, &vals, &docs, &state, now()),
+    )
+    .into_response()
+}
+fn stored_event(id: &str, e: &attend_store::EventRow) -> Value {
+    let mut v = json!({"seq":e.seq,"at":e.at,"instanceId":id,"kind":e.kind});
+    if let (Some(dst), Some(src)) = (v.as_object_mut(), e.payload.as_object()) {
+        dst.extend(src.clone())
+    }
+    v
+}
+async fn api_get_state(
+    State(a): State<App>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    if let Some(r) = api_origin(&a, &headers) {
+        return r;
+    }
+    match a.store.get_state(&id) {
+        Ok((revision, value)) => Json(json!({"revision":revision,"value":value})).into_response(),
+        Err(e) => api_error(e),
+    }
+}
+async fn api_put_state(
+    State(a): State<App>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Response {
+    if let Some(r) = api_origin(&a, &headers) {
+        return r;
+    }
+    let Some(rev) = body["revision"].as_u64() else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    let val = body.get("value").cloned().unwrap_or(json!({}));
+    match a.store.put_state(&id, rev, &val, now()) {
+        Ok(Ok(revision)) => {
+            emit_record_updated(&a, &id);
+            Json(json!({"revision":revision,"value":val})).into_response()
+        }
+        Ok(Err(u64::MAX)) => StatusCode::NOT_FOUND.into_response(),
+        Ok(Err(actual)) => Json(json!({"error":"stale_revision","revision":actual}))
+            .into_response_with_status(StatusCode::CONFLICT),
+        Err(e) => api_error(e),
+    }
+}
+async fn api_delete_meeting(
+    State(a): State<App>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+    headers: HeaderMap,
+) -> Response {
+    if let Some(r) = api_origin(&a, &headers) {
+        return r;
+    }
+    if a.tracker
+        .lock()
+        .unwrap()
+        .meeting
+        .as_ref()
+        .is_some_and(|m| m.instance_id == id)
+        || a.store
+            .meeting(&id)
+            .ok()
+            .flatten()
+            .is_some_and(|m| m["endedAt"].is_null())
+    {
+        return (
+            StatusCode::CONFLICT,
+            Json(json!({"error":"active_meeting"})),
+        )
+            .into_response();
+    }
+    match a.store.delete_meeting(&id) {
+        Ok(true) => StatusCode::NO_CONTENT.into_response(),
+        Ok(false) => StatusCode::NOT_FOUND.into_response(),
+        Err(e) => api_error(e),
+    }
+}
+async fn api_import_backup(
+    State(a): State<App>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Response {
+    if let Some(r) = api_origin(&a, &headers) {
+        return r;
+    }
+    let version = body["version"]
+        .as_u64()
+        .or_else(|| body["schemaVersion"].as_u64());
+    if version != Some(3) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error":"expected AttendFlow backup v3"})),
+        )
+            .into_response();
+    }
+    let entries = [
+        ("roster", "rosterPeople"),
+        ("aliases", "aliasMappings"),
+        ("profiles", "attendanceProfiles"),
+    ];
+    let mut counts = serde_json::Map::new();
+    for (key, field) in entries {
+        let val = body.get(field).cloned().unwrap_or(Value::Array(vec![]));
+        let revision = a.store.get_doc(key).map(|x| x.0).unwrap_or(0);
+        if let Err(e) = a.store.put_doc(key, revision, &val, now()) {
+            return api_error(e);
+        }
+        counts.insert(field.into(), json!(val.as_array().map_or(0, |x| x.len())));
+    }
+    let sessions = body
+        .get("sessions")
+        .and_then(Value::as_array)
+        .map_or(0, |x| x.len());
+    Json(json!({"imported":counts,"sessionsIgnored":sessions})).into_response()
+}
+fn api_origin(a: &App, h: &HeaderMap) -> Option<Response> {
+    let o = h.get("origin").and_then(|v| v.to_str().ok());
+    if o.is_some() && !origin_allowed(o, a.port, &a.allowed) {
+        Some(StatusCode::FORBIDDEN.into_response())
+    } else {
+        None
+    }
+}
+fn api_error(e: impl std::fmt::Display) -> Response {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(json!({"error":e.to_string()})),
+    )
+        .into_response()
+}
+trait JsonStatus {
+    fn into_response_with_status(self, status: StatusCode) -> Response;
+}
+impl JsonStatus for Json<Value> {
+    fn into_response_with_status(self, status: StatusCode) -> Response {
+        (status, self).into_response()
+    }
+}
+fn emit_record_updated(a: &App, id: &str) {
+    let id = id.to_owned();
+    let generation = {
+        let mut g = a.record_updates.lock().unwrap();
+        let n = g.entry(id.clone()).or_insert(0);
+        *n += 1;
+        *n
+    };
+    let updates = a.record_updates.clone();
+    let tx = a.tx.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(500));
+        if updates.lock().unwrap().get(&id) == Some(&generation) {
+            let _ = tx.send(json!({"type":"record_updated","instanceId":id}));
+        }
+    });
+}
+fn import_logs(a: &App, dir: &std::path::Path) {
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().is_some_and(|x| x == "jsonl") {
+                if let Err(e) = a.store.import_jsonl(&path) {
+                    log::warn!("could not import {}: {e}", path.display());
+                }
+            }
+        }
+    }
+}
+fn seed_fake_meeting(a: &App) {
+    let mut tracker = a.tracker.lock().unwrap();
+    tracker.connected = true;
+    tracker.users = vec![
+        User {
+            user_id: 101,
+            name: "Ada Lovelace".into(),
+            host: false,
+            myself: false,
+            waiting_room: false,
+            audio_muted: false,
+            video_on: true,
+            raised_hand: false,
+            talking: false,
+            spotlighted: false,
+        },
+        User {
+            user_id: 102,
+            name: "毛若水".into(),
+            host: false,
+            myself: false,
+            waiting_room: false,
+            audio_muted: true,
+            video_on: false,
+            raised_hand: false,
+            talking: false,
+            spotlighted: false,
+        },
+    ];
+    let events = tracker.start_with_snapshot(
+        "fake-47812".into(),
+        "Fake attendance demo".into(),
+        1,
+        status::MEETING_STATUS_INMEETING,
+        None,
+    );
+    drop(tracker);
+    publish(a, events);
+}
+
+#[tokio::test]
+async fn fake_record_api_returns_attendflow_row_shape() {
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+    let store = Arc::new(
+        Store::open(std::env::temp_dir().join(format!("zc-record-api-{}.db", now()))).unwrap(),
+    );
+    let meeting = json!({"instanceId":"fake-1","meetingNumber":"1","topic":"Fake","startedAt":1000,"isHost":false});
+    store.upsert_meeting(&meeting, None, 1).unwrap();
+    store
+        .append_event(
+            "fake-1",
+            1,
+            1000,
+            "instance_started",
+            &json!({"meeting":meeting}),
+        )
+        .unwrap();
+    store
+        .append_event(
+            "fake-1",
+            2,
+            2000,
+            "users",
+            &json!({"action":"add","users":[{"userId":7,"name":"Ada"}]}),
+        )
+        .unwrap();
+    let app = App {
+        tx: broadcast::channel(8).0,
+        tracker: Arc::new(Mutex::new(Tracker::default())),
+        session: Arc::new(Mutex::new(None)),
+        shutdown: Arc::new(AtomicBool::new(false)),
+        port: 47812,
+        allowed: vec![],
+        ui: None,
+        log_dir: std::env::temp_dir(),
+        store,
+        provider: Arc::new(StubRecordProvider),
+        record_updates: Arc::new(Mutex::new(Default::default())),
+    };
+    let api = Router::new()
+        .route("/api/meetings/:id/record", get(api_record))
+        .with_state(app);
+    let response = api
+        .oneshot(
+            axum::http::Request::builder()
+                .uri("/api/meetings/fake-1/record")
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    let value: Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(value["rows"][0]["zoomName"], "Ada");
+    assert_eq!(value["rows"][0]["currentStatus"], "present");
+    assert_eq!(value["summary"]["seen"], 1);
+}
+#[tokio::test]
+async fn backup_import_revision_conflict_and_state_notification() {
+    use tower::ServiceExt;
+    let store = Arc::new(
+        Store::open(std::env::temp_dir().join(format!("zc-api-import-{}.db", now()))).unwrap(),
+    );
+    store.upsert_meeting(&json!({"instanceId":"m1","meetingNumber":"1","topic":"Demo","startedAt":1,"isHost":false}),None,1).unwrap();
+    let (tx, _) = broadcast::channel(8);
+    let mut updates = tx.subscribe();
+    let app = App {
+        tx,
+        tracker: Arc::new(Mutex::new(Tracker::default())),
+        session: Arc::new(Mutex::new(None)),
+        shutdown: Arc::new(AtomicBool::new(false)),
+        port: 47812,
+        allowed: vec![],
+        ui: None,
+        log_dir: std::env::temp_dir(),
+        store: store.clone(),
+        provider: Arc::new(StubRecordProvider),
+        record_updates: Arc::new(Mutex::new(Default::default())),
+    };
+    let api = Router::new()
+        .route("/api/import/attendflow-backup", post(api_import_backup))
+        .route("/api/config/:key", get(api_get_config).put(api_put_config))
+        .route(
+            "/api/meetings/:id",
+            get(api_meeting).delete(api_delete_meeting),
+        )
+        .route(
+            "/api/meetings/:id/state",
+            get(api_get_state).put(api_put_state),
+        )
+        .with_state(app);
+    let backup = json!({"version":3,"rosterPeople":[{"personId":1}],"aliasMappings":[{"zoomName":"Ada"}],"attendanceProfiles":[{"id":"default"}],"sessions":[{},{}]});
+    let req = axum::http::Request::builder()
+        .method("POST")
+        .uri("/api/import/attendflow-backup")
+        .header("content-type", "application/json")
+        .body(axum::body::Body::from(backup.to_string()))
+        .unwrap();
+    assert_eq!(
+        api.clone().oneshot(req).await.unwrap().status(),
+        StatusCode::OK
+    );
+    assert_eq!(store.get_doc("roster").unwrap().0, 1);
+    assert_eq!(
+        store
+            .get_doc("profiles")
+            .unwrap()
+            .1
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    let stale = json!({"revision":0,"value":[]});
+    let req = axum::http::Request::builder()
+        .method("PUT")
+        .uri("/api/config/roster")
+        .header("content-type", "application/json")
+        .body(axum::body::Body::from(stale.to_string()))
+        .unwrap();
+    assert_eq!(
+        api.clone().oneshot(req).await.unwrap().status(),
+        StatusCode::CONFLICT
+    );
+    let req = axum::http::Request::builder()
+        .method("DELETE")
+        .uri("/api/meetings/m1")
+        .body(axum::body::Body::empty())
+        .unwrap();
+    assert_eq!(
+        api.clone().oneshot(req).await.unwrap().status(),
+        StatusCode::CONFLICT
+    );
+    let state = json!({"revision":0,"value":{"mode":"roster"}});
+    let req = axum::http::Request::builder()
+        .method("PUT")
+        .uri("/api/meetings/m1/state")
+        .header("content-type", "application/json")
+        .body(axum::body::Body::from(state.to_string()))
+        .unwrap();
+    assert_eq!(api.oneshot(req).await.unwrap().status(), StatusCode::OK);
+    let update = tokio::time::timeout(Duration::from_secs(2), updates.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(update["type"], "record_updated");
+    assert_eq!(update["instanceId"], "m1");
 }
