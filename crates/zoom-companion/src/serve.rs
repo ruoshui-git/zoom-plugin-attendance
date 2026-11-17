@@ -110,6 +110,8 @@ struct Tracker {
     file: Option<std::fs::File>,
     resume: Option<Resume>,
 }
+/// A companion restart within this window of the last event resumes the same instance.
+const RESUME_WINDOW_MS: u64 = 15 * 60 * 1000;
 #[derive(Clone, Serialize, Deserialize)]
 struct Resume {
     #[serde(rename = "instanceId")]
@@ -183,7 +185,7 @@ impl Tracker {
             return None;
         }
         let resumed = self.resume.take().filter(|r| {
-            r.meeting_number == number && now().saturating_sub(r.last_seen_at) <= 15 * 60 * 1000
+            r.meeting_number == number && now().saturating_sub(r.last_seen_at) <= RESUME_WINDOW_MS
         });
         let started = resumed.as_ref().map(|r| r.started_at).unwrap_or_else(now);
         let id = resumed
@@ -282,6 +284,12 @@ impl Tracker {
     }
     fn end(&mut self, reason: &str) -> Option<Value> {
         let v = self.emit("instance_ended", json!({"reason":reason}));
+        // An ended meeting must never be resumed: the next meeting is a new record,
+        // even with the same meeting number (owner rule: no continuation after end).
+        self.resume = None;
+        if let Some(root) = &self.root {
+            let _ = fs::remove_file(root.join("current.json"));
+        }
         self.meeting = None;
         self.users.clear();
         self.file = None;
@@ -664,8 +672,28 @@ pub fn run(
             log_dir,
         };
         import_logs(&app, &app.log_dir);
-        // Any still-open record belongs to a process that ended before this one started.
-        app.store.close_stale_meetings(now())?;
+        // A resume point is only valid for a meeting whose end was never recorded and
+        // that was seen within the resume window; that one stays open for resumption.
+        let keep = {
+            let mut t = app.tracker.lock().unwrap();
+            let ended = t.resume.as_ref().is_some_and(|r| {
+                app.store
+                    .meeting(&r.instance_id)
+                    .ok()
+                    .flatten()
+                    .is_some_and(|m| !m["endedAt"].is_null())
+            });
+            let expired = t
+                .resume
+                .as_ref()
+                .is_some_and(|r| now().saturating_sub(r.last_seen_at) > RESUME_WINDOW_MS);
+            if ended || expired {
+                t.resume = None;
+            }
+            t.resume.as_ref().map(|r| r.instance_id.clone())
+        };
+        // Every other still-open record belongs to a process that ended before this one.
+        app.store.close_open_meetings_except(now(), keep.as_deref())?;
         if fake {
             seed_fake_meeting(&app);
         }
@@ -832,6 +860,11 @@ fn publish(a: &App, events: Vec<Value>) {
                             .upsert_meeting(&e["meeting"], None, e["seq"].as_u64().unwrap_or(0))
                     {
                         log::error!("persist meeting: {err}");
+                    }
+                    if kind == "instance_started" {
+                        if let Err(err) = a.store.close_open_meetings_except(now(), Some(id)) {
+                            log::error!("close previous meetings: {err}");
+                        }
                     }
                 } else if let Ok(Some(mut meta)) = a.store.meeting(id) {
                     if kind == "self_changed" {
@@ -1258,6 +1291,23 @@ mod tests {
         let next = r.start("7".into(), "".into(), 1, 3, None).unwrap();
         assert_eq!(next["instanceId"], id);
         assert_eq!(next["seq"], 3);
+        let _ = fs::remove_dir_all(path);
+    }
+    #[test]
+    fn ended_instance_is_never_resumed() {
+        let path = std::env::temp_dir().join(format!("zc-test-end-{}", now()));
+        let mut t = Tracker::new(Some(path.clone()));
+        let first = t.start("7".into(), "".into(), 1, 3, None).unwrap();
+        let id = first["instanceId"].as_str().unwrap().to_owned();
+        t.emit("users", json!({"action":"add"}));
+        t.end("ended");
+        drop(t);
+        // Same meeting number restarts right away (e.g. host ended then restarted the PMI).
+        std::thread::sleep(Duration::from_millis(5));
+        let mut r = Tracker::new(Some(path.clone()));
+        let next = r.start("7".into(), "".into(), 1, 3, None).unwrap();
+        assert_eq!(next["kind"], "instance_started");
+        assert_ne!(next["instanceId"], id);
         let _ = fs::remove_dir_all(path);
     }
     #[tokio::test]

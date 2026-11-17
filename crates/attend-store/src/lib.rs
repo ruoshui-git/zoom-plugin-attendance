@@ -208,8 +208,13 @@ impl Store {
     }
     /// Close records left open by a process shutdown, using the last persisted event time.
     pub fn close_stale_meetings(&self, ended_at: u64) -> Result<usize> {
+        self.close_open_meetings_except(ended_at, None)
+    }
+    /// Closes every open meeting except `keep` (the live or resumable instance) at its
+    /// last event time, with end reason `companion_offline`. Only one meeting is live.
+    pub fn close_open_meetings_except(&self, ended_at: u64, keep: Option<&str>) -> Result<usize> {
         self.with(|c| {
-            Ok(c.execute("UPDATE meetings SET ended_at=COALESCE((SELECT MAX(events.at) FROM events WHERE events.instance_id=meetings.instance_id),?1), end_reason='companion_offline' WHERE ended_at IS NULL", [ended_at as i64])?)
+            Ok(c.execute("UPDATE meetings SET ended_at=COALESCE((SELECT MAX(events.at) FROM events WHERE events.instance_id=meetings.instance_id),?1), end_reason='companion_offline' WHERE ended_at IS NULL AND instance_id IS NOT ?2", params![ended_at as i64, keep])?)
         })
     }
     pub fn import_jsonl(&self, path: &Path) -> Result<usize> {
