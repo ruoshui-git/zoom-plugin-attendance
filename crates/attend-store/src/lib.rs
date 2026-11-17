@@ -143,6 +143,28 @@ impl Store {
     ) -> Result<Result<u64, u64>> {
         self.with(|c| { let tx=c.unchecked_transaction()?; let actual:i64=tx.query_row("SELECT revision FROM docs WHERE key=?1",[key],|r|r.get(0)).optional()?.unwrap_or(0); if actual as u64 != revision { return Ok(Err(actual as u64)); } let next=revision+1; tx.execute("INSERT INTO docs(key,revision,json,updated_at) VALUES(?1,?2,?3,?4) ON CONFLICT(key) DO UPDATE SET revision=excluded.revision,json=excluded.json,updated_at=excluded.updated_at",params![key,next as i64,value.to_string(),now as i64])?; tx.commit()?; Ok(Ok(next)) })
     }
+    /// Compare revisions and update several configuration documents in one SQLite transaction.
+    pub fn put_docs_atomic(
+        &self,
+        docs: &[(String, u64, Value)],
+        now: u64,
+    ) -> Result<Result<Vec<u64>, (String, u64)>> {
+        self.with(|c| {
+            let tx=c.unchecked_transaction()?;
+            for (key,revision,_) in docs {
+                let actual:i64=tx.query_row("SELECT revision FROM docs WHERE key=?1",[key],|r|r.get(0)).optional()?.unwrap_or(0);
+                if actual as u64 != *revision { return Ok(Err((key.clone(),actual as u64))); }
+            }
+            let mut revisions=Vec::with_capacity(docs.len());
+            for (key,revision,value) in docs {
+                let next=revision+1;
+                tx.execute("INSERT INTO docs(key,revision,json,updated_at) VALUES(?1,?2,?3,?4) ON CONFLICT(key) DO UPDATE SET revision=excluded.revision,json=excluded.json,updated_at=excluded.updated_at",params![key,next as i64,value.to_string(),now as i64])?;
+                revisions.push(next);
+            }
+            tx.commit()?;
+            Ok(Ok(revisions))
+        })
+    }
     pub fn get_state(&self, id: &str) -> Result<(u64, Value)> {
         self.with(|c| {
             Ok(c.query_row(

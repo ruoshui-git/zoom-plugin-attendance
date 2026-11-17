@@ -682,6 +682,16 @@ pub fn run(
         let router = Router::new()
             .route("/bridge", get(ws))
             .route("/api/config/:key", get(api_get_config).put(api_put_config))
+            .route("/api/names/pinyin", post(api_name_pinyin))
+            .route(
+                "/api/config/:key/import/preview",
+                post(api_config_import_preview),
+            )
+            .route(
+                "/api/config/:key/import/commit",
+                post(api_config_import_commit),
+            )
+            .route("/api/config/:key/export", get(api_config_export))
             .route("/api/meetings", get(api_meetings))
             .route("/api/records/export", get(api_export_records))
             .route("/api/records/delete", post(api_delete_records))
@@ -748,7 +758,43 @@ pub fn app() -> anyhow::Result<()> {
         .with_title("AttendFlow Desktop")
         .with_inner_size(tao::dpi::LogicalSize::new(1280.0, 820.0))
         .build(&event_loop)?;
-    let _webview = wry::WebViewBuilder::new().with_url(&url).build(&window)?;
+    let _webview = wry::WebViewBuilder::new()
+        .with_url(&url)
+        .with_download_started_handler(|download_url, suggested_path| {
+            if !download_url.contains("/api/config/roster/export")
+                && !download_url.contains("/api/config/aliases/export")
+            {
+                return true;
+            }
+            let name = suggested_path
+                .file_name()
+                .map(|x| x.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "attendflow-export.csv".into());
+            match rfd::FileDialog::new()
+                .add_filter("CSV", &["csv"])
+                .set_file_name(name)
+                .save_file()
+            {
+                Some(path) => {
+                    *suggested_path = path;
+                    true
+                }
+                None => false,
+            }
+        })
+        .with_download_completed_handler(|url, path, success| {
+            if url.contains("/api/config/") && url.contains("/export") {
+                if success {
+                    log::info!(
+                        "configuration CSV saved to {}",
+                        path.map(|p| p.display().to_string()).unwrap_or_default()
+                    );
+                } else {
+                    log::warn!("configuration CSV download failed");
+                }
+            }
+        })
+        .build(&window)?;
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
         if let Event::WindowEvent {
@@ -1010,6 +1056,32 @@ mod tests {
             47812,
             &["http://localhost:5173".into()]
         ));
+    }
+    // Ported cases from AttendFlow roster-import.test.ts and alias-import.test.ts:
+    // BOM/GB18030 decoding, full-width comma, added rows, invalid nickname targets.
+    #[test]
+    fn roster_alias_import_csv_decoding_cases() {
+        assert_eq!(
+            decode_config_csv_bytes("\u{feff}id，姓名\r\n1，张三".as_bytes()),
+            "id,姓名\r\n1,张三"
+        );
+        assert_eq!(
+            decode_config_csv_bytes("id,姓名\n1,张三".as_bytes()),
+            "id,姓名\n1,张三"
+        );
+        assert_eq!(
+            decode_config_csv_bytes(&[b'i', b'd', b',', 0xd6, 0xd0]),
+            "id,中"
+        );
+        #[cfg(windows)]
+        assert_eq!(
+            decode_config_csv_bytes(&[b'i', b'd', b',', 0x94, 0x39, 0xfc, 0x36]),
+            "id,😀"
+        );
+        assert_eq!(
+            csv_cells("id,name\n1,\"A, B\""),
+            vec![vec!["id", "name"], vec!["1", "A, B"]]
+        );
     }
     #[test]
     fn replay_filters_sequence_and_instance() {
@@ -1309,22 +1381,47 @@ async fn api_put_config(
             .into_response();
     }
     match a.store.put_doc(&key, rev, &val, now()) {
-        Ok(Ok(revision)) => Json(json!({"revision":revision,"value":val})).into_response(),
+        Ok(Ok(revision)) => {
+            if key == "roster" {
+                prune_orphan_aliases(&a, &val);
+            }
+            Json(json!({"revision":revision,"value":val})).into_response()
+        }
         Ok(Err(actual)) => Json(json!({"error":"stale_revision","revision":actual}))
             .into_response_with_status(StatusCode::CONFLICT),
         Err(e) => api_error(e),
     }
 }
+fn prune_orphan_aliases(a: &App, roster: &Value) {
+    let ids: std::collections::HashSet<i64> = roster
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|x| x["personId"].as_i64().or_else(|| x["id"].as_i64()))
+        .collect();
+    if let Ok((revision, aliases)) = a.store.get_doc("aliases") {
+        if let Some(rows) = aliases.as_array() {
+            let filtered: Vec<Value> = rows
+                .iter()
+                .filter(|x| ids.contains(&x["personId"].as_i64().unwrap_or(-1)))
+                .cloned()
+                .collect();
+            if filtered.len() != rows.len() {
+                let _ = a
+                    .store
+                    .put_doc("aliases", revision, &json!(filtered), now());
+            }
+        }
+    }
+}
 fn norm_config_name(value: &str) -> String {
-    value
-        .chars()
-        .filter(|c| {
-            !c.is_whitespace()
-                && !c.is_ascii_punctuation()
-                && !"，。！？；：、（）【】《》“”‘’·—…".contains(*c)
-        })
-        .flat_map(char::to_lowercase)
-        .collect()
+    attend_engine::normalize_name(value)
+}
+async fn api_name_pinyin(_headers: HeaderMap, Json(body): Json<Value>) -> Response {
+    let Some(name) = body["name"].as_str() else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    Json(json!({"pinyin":attend_engine::build_pinyin(name)})).into_response()
 }
 fn validate_config(a: &App, key: &str, value: &Value) -> Option<String> {
     let rows = value.as_array()?;
@@ -1364,6 +1461,12 @@ fn validate_config(a: &App, key: &str, value: &Value) -> Option<String> {
         }
     } else if key == "aliases" {
         let roster = a.store.get_doc("roster").ok()?.1;
+        let roster_ids: std::collections::HashSet<i64> = roster
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|p| p["personId"].as_i64().or_else(|| p["id"].as_i64()))
+            .collect();
         let canonical: std::collections::HashSet<String> = roster
             .as_array()
             .into_iter()
@@ -1384,6 +1487,13 @@ fn validate_config(a: &App, key: &str, value: &Value) -> Option<String> {
             }
             if canonical.contains(&norm) {
                 return Some(format!("nickname conflicts with canonical name: {name}"));
+            }
+            let person_id = alias["personId"]
+                .as_i64()
+                .or_else(|| alias["id"].as_i64())
+                .unwrap_or(-1);
+            if !roster_ids.contains(&person_id) {
+                return Some(format!("roster person not found: {person_id}"));
             }
         }
     } else if key == "profiles" {
@@ -1406,6 +1516,575 @@ fn validate_config(a: &App, key: &str, value: &Value) -> Option<String> {
         }
     }
     None
+}
+
+// Configuration CSV workflows are kept in the companion so preview and commit
+// use the same normalization and validation as all other roster mutations.
+fn csv_cells(input: &str) -> Vec<Vec<String>> {
+    let mut rows = Vec::new();
+    let mut row = Vec::new();
+    let mut cell = String::new();
+    let mut quoted = false;
+    let mut chars = input.chars().peekable();
+    while let Some(ch) = chars.next() {
+        match ch {
+            '"' if quoted && chars.peek() == Some(&'"') => {
+                cell.push('"');
+                chars.next();
+            }
+            '"' => quoted = !quoted,
+            ',' if !quoted => row.push(std::mem::take(&mut cell)),
+            '\n' if !quoted => {
+                row.push(std::mem::take(&mut cell));
+                rows.push(std::mem::take(&mut row));
+            }
+            '\r' if !quoted => {}
+            _ => cell.push(ch),
+        }
+    }
+    if !cell.is_empty() || !row.is_empty() {
+        row.push(cell);
+        rows.push(row);
+    }
+    rows
+}
+fn decode_config_csv_bytes(data: &[u8]) -> String {
+    let bytes = data;
+    let bytes = bytes.strip_prefix(&[0xef, 0xbb, 0xbf]).unwrap_or(bytes);
+    let decoded = std::str::from_utf8(bytes)
+        .map(str::to_owned)
+        .unwrap_or_else(|_| {
+            #[cfg(windows)]
+            {
+                use windows_sys::Win32::Globalization::MultiByteToWideChar;
+                const CP_GB18030: u32 = 54936;
+                unsafe {
+                    let size = MultiByteToWideChar(
+                        CP_GB18030,
+                        0,
+                        bytes.as_ptr(),
+                        bytes.len() as i32,
+                        std::ptr::null_mut(),
+                        0,
+                    );
+                    if size > 0 {
+                        let mut wide = vec![0u16; size as usize];
+                        let written = MultiByteToWideChar(
+                            CP_GB18030,
+                            0,
+                            bytes.as_ptr(),
+                            bytes.len() as i32,
+                            wide.as_mut_ptr(),
+                            size,
+                        );
+                        if written > 0 {
+                            return String::from_utf16_lossy(&wide[..written as usize]);
+                        }
+                    }
+                }
+            }
+            let (s, _, _) = encoding_rs::GBK.decode(bytes);
+            s.into_owned()
+        });
+    decoded.replace('，', ",")
+}
+fn csv_escape(s: &str) -> String {
+    if s.contains([',', '"', '\n', '\r']) {
+        format!("\"{}\"", s.replace('"', "\"\""))
+    } else {
+        s.into()
+    }
+}
+fn decode_query_component(value: &str) -> String {
+    let bytes = value.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let Ok(hex) = u8::from_str_radix(&value[i + 1..i + 3], 16) {
+                out.push(hex);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(if bytes[i] == b'+' { b' ' } else { bytes[i] });
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+fn bool_csv(v: &Value) -> &'static str {
+    if v == false {
+        "false"
+    } else {
+        "true"
+    }
+}
+fn config_export_csv(a: &App, key: &str, zh: bool, selected: &[String]) -> Result<String, String> {
+    let rows = a.store.get_doc(key).map_err(|e| e.to_string())?.1;
+    let fields: &[&str] = if key == "roster" {
+        if zh {
+            &["id", "姓名", "拼音", "分组", "启用", "删除"]
+        } else {
+            &["id", "canonicalName", "pinyin", "group", "active", "delete"]
+        }
+    } else if zh {
+        &["固定编号", "姓名", "昵称", "删除", "最后使用时间"]
+    } else {
+        &[
+            "personId",
+            "canonicalName",
+            "nickname",
+            "delete",
+            "lastUsedAt",
+        ]
+    };
+    let mut out = String::from("\u{feff}");
+    out.push_str(&fields.join(","));
+    out.push_str("\r\n");
+    let roster = if key == "aliases" {
+        a.store.get_doc("roster").map_err(|e| e.to_string())?.1
+    } else {
+        Value::Null
+    };
+    for item in rows.as_array().into_iter().flatten() {
+        let id = item["personId"]
+            .as_i64()
+            .or_else(|| item["id"].as_i64())
+            .unwrap_or(0);
+        let row_key = if key == "roster" {
+            id.to_string()
+        } else {
+            item["id"]
+                .as_i64()
+                .map(|x| x.to_string())
+                .unwrap_or_else(|| {
+                    item["zoomName"]
+                        .as_str()
+                        .or_else(|| item["alias"].as_str())
+                        .unwrap_or("")
+                        .to_string()
+                })
+        };
+        if !selected.is_empty() && !selected.contains(&row_key) {
+            continue;
+        }
+        let values = if key == "roster" {
+            vec![
+                id.to_string(),
+                item["canonicalName"].as_str().unwrap_or("").into(),
+                item["pinyin"].as_str().unwrap_or("").into(),
+                item["group"].as_str().unwrap_or("").into(),
+                bool_csv(&item["active"]).into(),
+                String::new(),
+            ]
+        } else {
+            let pid = item["personId"].as_i64().unwrap_or(0);
+            let cname = roster
+                .as_array()
+                .into_iter()
+                .flatten()
+                .find(|p| p["personId"].as_i64().or_else(|| p["id"].as_i64()) == Some(pid))
+                .and_then(|p| p["canonicalName"].as_str())
+                .unwrap_or("");
+            vec![
+                pid.to_string(),
+                cname.into(),
+                item["zoomName"]
+                    .as_str()
+                    .or_else(|| item["alias"].as_str())
+                    .unwrap_or("")
+                    .into(),
+                String::new(),
+                item["lastUsedAt"].as_str().unwrap_or("").into(),
+            ]
+        };
+        out.push_str(
+            &values
+                .iter()
+                .map(|v| csv_escape(v))
+                .collect::<Vec<_>>()
+                .join(","),
+        );
+        out.push_str("\r\n");
+    }
+    Ok(out)
+}
+async fn api_config_export(
+    State(a): State<App>,
+    axum::extract::Path(key): axum::extract::Path<String>,
+    headers: HeaderMap,
+    uri: Uri,
+) -> Response {
+    if let Some(r) = api_origin(&a, &headers) {
+        return r;
+    }
+    if !["roster", "aliases"].contains(&key.as_str()) {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    let zh = uri.query().unwrap_or("").contains("language=zh");
+    let selected_query = uri
+        .query()
+        .unwrap_or("")
+        .split("selected=")
+        .nth(1)
+        .unwrap_or("")
+        .split('&')
+        .next()
+        .unwrap_or("");
+    let selected = decode_query_component(selected_query)
+        .split('|')
+        .filter(|v| !v.is_empty())
+        .map(str::to_owned)
+        .collect::<Vec<String>>();
+    let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
+    let language = if zh { "zh" } else { "en" };
+    let stem = if key == "roster" {
+        format!("roster-{language}-{}", stamp)
+    } else {
+        format!("zoom-name-matching-{language}-{}", stamp)
+    };
+    let filename = if selected.is_empty() {
+        format!("{stem}.csv")
+    } else {
+        format!("{}-selected.csv", stem)
+    };
+    match config_export_csv(&a, &key, zh, &selected) {
+        Ok(csv) => {
+            let mut h = HeaderMap::new();
+            h.insert(
+                axum::http::header::CONTENT_TYPE,
+                "text/csv; charset=utf-8".parse().unwrap(),
+            );
+            h.insert(
+                axum::http::header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"{filename}\"")
+                    .parse()
+                    .unwrap(),
+            );
+            (h, csv).into_response()
+        }
+        Err(e) => api_error(e),
+    }
+}
+async fn api_config_import_preview(
+    State(a): State<App>,
+    axum::extract::Path(key): axum::extract::Path<String>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Response {
+    if let Some(r) = api_origin(&a, &headers) {
+        return r;
+    }
+    if !["roster", "aliases"].contains(&key.as_str()) {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    let bytes: Vec<u8> = if let Some(a) = body["csvBytes"].as_array() {
+        a.iter()
+            .filter_map(Value::as_u64)
+            .map(|x| x as u8)
+            .collect()
+    } else if let Some(text) = body["csv"].as_str() {
+        text.as_bytes().to_vec()
+    } else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    let parsed = csv_cells(&decode_config_csv_bytes(&bytes));
+    if parsed.is_empty() {
+        return Json(json!({"revision":0,"changes":[]})).into_response();
+    }
+    let norm_header = |s: &str| s.trim().to_lowercase().replace(char::is_whitespace, "");
+    let headers: Vec<String> = parsed[0].iter().map(|x| norm_header(x)).collect();
+    let existing = match a.store.get_doc(&key) {
+        Ok(x) => x,
+        Err(e) => return api_error(e),
+    };
+    let roster = if key == "aliases" {
+        a.store.get_doc("roster").map(|x| x.1).unwrap_or(json!([]))
+    } else {
+        existing.1.clone()
+    };
+    let mut next = existing.1.as_array().cloned().unwrap_or_default();
+    let mut changes = Vec::new();
+    let mut import_alias_names = std::collections::HashSet::new();
+    let mut next_id = next
+        .iter()
+        .filter_map(|x| x["personId"].as_i64().or_else(|| x["id"].as_i64()))
+        .max()
+        .unwrap_or(0)
+        + 1;
+    for (i, cells) in parsed.iter().enumerate().skip(1) {
+        if cells.iter().all(|x| x.trim().is_empty()) {
+            continue;
+        }
+        let get = |names: &[&str]| -> String {
+            headers
+                .iter()
+                .position(|h| names.contains(&h.as_str()))
+                .and_then(|idx| cells.get(idx))
+                .cloned()
+                .unwrap_or_default()
+                .trim()
+                .into()
+        };
+        let mut action = "Reject";
+        let mut note = String::new();
+        let mut before = Value::Null;
+        let mut after = Value::Null;
+        let mut pid = 0i64;
+        if key == "roster" {
+            let idtxt = get(&["id"]);
+            let name = get(&["canonicalname/姓名", "canonicalname", "姓名"]);
+            let delete = get(&["delete/删除", "delete", "删除"]);
+            let id = idtxt.parse::<i64>().ok();
+            let existing_pos = id.and_then(|id| {
+                next.iter()
+                    .position(|p| p["personId"].as_i64().or_else(|| p["id"].as_i64()) == Some(id))
+            });
+            let name = if name.is_empty() {
+                existing_pos
+                    .and_then(|p| next[p]["canonicalName"].as_str())
+                    .unwrap_or("")
+                    .to_string()
+            } else {
+                name
+            };
+            if ["1", "true", "yes", "y", "是"].contains(&delete.to_lowercase().as_str()) {
+                if let Some(id) = id {
+                    if let Some(pos) = next.iter().position(|p| {
+                        p["personId"].as_i64().or_else(|| p["id"].as_i64()) == Some(id)
+                    }) {
+                        before = next.remove(pos);
+                        action = "Delete";
+                        pid = id;
+                    } else {
+                        note = "roster person not found".into();
+                    }
+                } else {
+                    note = "id is required for delete".into();
+                }
+            } else if name.is_empty() {
+                note = "canonical name is required".into();
+            } else {
+                let pos = existing_pos;
+                let pinyin = get(&["pinyin/拼音", "pinyin", "拼音"]);
+                let group = get(&["group/分组", "group", "分组"]);
+                let active = get(&["active/启用", "active", "启用"]);
+                let (obj, act) = if let Some(pos) = pos {
+                    let mut o = next[pos].as_object().cloned().unwrap_or_default();
+                    o.insert("canonicalName".into(), json!(name));
+                    if !pinyin.is_empty() {
+                        o.insert("pinyin".into(), json!(pinyin));
+                    }
+                    if !group.is_empty() {
+                        o.insert("group".into(), json!(group));
+                    }
+                    if !active.is_empty() {
+                        o.insert(
+                            "active".into(),
+                            json!(!["0", "false", "no", "n", "否", "停用"]
+                                .contains(&active.to_lowercase().as_str())),
+                        );
+                    }
+                    (o, "Update")
+                } else {
+                    let id = id.unwrap_or_else(|| {
+                        let n = next_id;
+                        next_id += 1;
+                        n
+                    });
+                    let py = if pinyin.is_empty() {
+                        attend_engine::build_pinyin(&name)
+                    } else {
+                        pinyin
+                    };
+                    let active_on = active.is_empty()
+                        || !["0", "false", "no", "n", "否", "停用"]
+                            .contains(&active.to_lowercase().as_str());
+                    (
+                        serde_json::Map::from_iter([
+                            ("personId".into(), json!(id)),
+                            ("canonicalName".into(), json!(name)),
+                            ("pinyin".into(), json!(py)),
+                            ("group".into(), json!(group)),
+                            ("active".into(), json!(active_on)),
+                        ]),
+                        "Add",
+                    )
+                };
+                pid = obj.get("personId").and_then(Value::as_i64).unwrap_or(0);
+                after = Value::Object(obj.clone());
+                action = act;
+                before = pos.map(|p| next[p].clone()).unwrap_or(Value::Null);
+                if let Some(pos) = pos {
+                    next[pos] = after.clone();
+                } else {
+                    next.push(after.clone());
+                }
+            }
+        } else {
+            let nick = get(&["nickname/昵称", "nickname", "昵称"]);
+            let pidtxt = get(&["personid", "固定编号", "id"]);
+            let canonical = get(&["canonicalname/姓名", "canonicalname", "姓名"]);
+            let del = get(&["delete/删除", "delete", "删除"]);
+            let id = pidtxt.parse::<i64>().ok();
+            let keyname = attend_engine::normalize_name(&nick);
+            let found = next.iter().position(|x| {
+                x["zoomName"]
+                    .as_str()
+                    .or_else(|| x["alias"].as_str())
+                    .is_some_and(|n| attend_engine::normalize_name(n) == keyname)
+            });
+            let delete = matches!(
+                del.to_lowercase().as_str(),
+                "1" | "true" | "yes" | "y" | "是"
+            );
+            if !del.is_empty()
+                && !matches!(
+                    del.to_lowercase().as_str(),
+                    "1" | "true" | "yes" | "y" | "是" | "0" | "false" | "no" | "n" | "否"
+                )
+            {
+                note = "invalid delete boolean".into();
+            } else if nick.is_empty() {
+                note = "nickname is required".into();
+            } else if !import_alias_names.insert(keyname.clone()) {
+                note = "nickname appears more than once in the import".into();
+            } else if delete {
+                if let Some(pos) = found {
+                    before = next.remove(pos);
+                    action = "Delete";
+                    pid = before["personId"].as_i64().unwrap_or(0);
+                } else {
+                    note = "nickname not found".into();
+                }
+            } else {
+                let resolved = id.or_else(|| {
+                    roster
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .find(|p| {
+                            p["canonicalName"].as_str().is_some_and(|n| {
+                                attend_engine::normalize_name(n)
+                                    == attend_engine::normalize_name(&canonical)
+                            })
+                        })
+                        .and_then(|p| p["personId"].as_i64().or_else(|| p["id"].as_i64()))
+                });
+                let target =
+                    resolved.and_then(|rid| {
+                        roster.as_array().into_iter().flatten().find(|p| {
+                            p["personId"].as_i64().or_else(|| p["id"].as_i64()) == Some(rid)
+                        })
+                    });
+                if let Some(rid) = resolved.filter(|_| target.is_some()) {
+                    let canonical_conflict = roster.as_array().into_iter().flatten().any(|p| {
+                        p["canonicalName"]
+                            .as_str()
+                            .is_some_and(|n| attend_engine::normalize_name(n) == keyname)
+                    });
+                    if canonical_conflict {
+                        note = "nickname conflicts with canonical name".into();
+                    } else if let Some(person) = target {
+                        if !canonical.is_empty()
+                            && !person["canonicalName"].as_str().is_some_and(|n| {
+                                attend_engine::normalize_name(n)
+                                    == attend_engine::normalize_name(&canonical)
+                            })
+                        {
+                            note = "ID and canonical name do not match".into();
+                        } else {
+                            pid = rid;
+                            let last =
+                                get(&["lastused/最后使用时间", "lastusedat", "最后使用时间"]);
+                            if let Some(pos) = found {
+                                before = next[pos].clone();
+                                let oldlast = next[pos]["lastUsedAt"].clone();
+                                after = json!({"zoomName":nick,"personId":pid,"notes":next[pos]["notes"].as_str().unwrap_or(""),"lastUsedAt":if last.is_empty(){oldlast}else{json!(last)}});
+                                next[pos] = after.clone();
+                                action = "Update";
+                            } else {
+                                after = json!({"zoomName":nick,"personId":pid,"notes":"","lastUsedAt":if last.is_empty(){Value::Null}else{json!(last)}});
+                                next.push(after.clone());
+                                action = "Add";
+                            }
+                        }
+                    } else {
+                        note = format!("roster person {rid} not found");
+                    }
+                } else {
+                    note = "ID or canonical name must identify a roster person".into();
+                }
+            }
+        }
+        changes.push(json!({"row":i+1,"action":action,"id":pid,"before":before,"after":after,"notes":note,"aliasImpact":if key=="roster"&&action=="Delete" { a.store.get_doc("aliases").ok().and_then(|(_,v)|v.as_array().cloned()).unwrap_or_default().iter().filter(|x|x["personId"].as_i64()==Some(pid)).count() } else {0}}));
+    }
+    let result = json!({"revision":existing.0,"changes":changes,"value":next});
+    Json(result).into_response()
+}
+async fn api_config_import_commit(
+    State(a): State<App>,
+    axum::extract::Path(key): axum::extract::Path<String>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Response {
+    if let Some(r) = api_origin(&a, &headers) {
+        return r;
+    }
+    if !["roster", "aliases"].contains(&key.as_str()) {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    let Some(revision) = body["revision"].as_u64() else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    let Some(value) = body.get("value") else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    if body["changes"]
+        .as_array()
+        .is_some_and(|cs| cs.iter().any(|c| c["action"] == "Reject"))
+    {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({"error":"validation_error","message":"Import contains rejected rows"})),
+        )
+            .into_response();
+    }
+    if let Some(message) = validate_config(&a, &key, value) {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({"error":"validation_error","message":message})),
+        )
+            .into_response();
+    }
+    let mut docs = vec![(key.clone(), revision, value.clone())];
+    if key == "roster" {
+        let ids: std::collections::HashSet<i64> = value
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|x| x["personId"].as_i64().or_else(|| x["id"].as_i64()))
+            .collect();
+        match a.store.get_doc("aliases") {
+            Ok((ar, aliases)) => {
+                let filtered: Vec<Value> = aliases
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter(|x| ids.contains(&x["personId"].as_i64().unwrap_or(-1)))
+                    .cloned()
+                    .collect();
+                docs.push(("aliases".into(), ar, json!(filtered)));
+            }
+            Err(e) => return api_error(e),
+        }
+    }
+    match a.store.put_docs_atomic(&docs, now()) {
+        Ok(Ok(revisions)) => Json(json!({"revision":revisions[0],"value":value})).into_response(),
+        Ok(Err((_, actual))) => Json(json!({"error":"stale_revision","revision":actual}))
+            .into_response_with_status(StatusCode::CONFLICT),
+        Err(e) => api_error(e),
+    }
 }
 async fn api_meetings(State(a): State<App>, headers: HeaderMap) -> Response {
     if let Some(r) = api_origin(&a, &headers) {
@@ -1732,6 +2411,122 @@ async fn api_import_backup(
         .and_then(Value::as_array)
         .map_or(0, |x| x.len());
     Json(json!({"imported":counts,"sessionsIgnored":sessions})).into_response()
+}
+#[tokio::test]
+async fn roster_csv_preview_api_decodes_and_returns_commit_plan() {
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+    let store = Arc::new(
+        Store::open(std::env::temp_dir().join(format!("zc-roster-preview-{}.db", now()))).unwrap(),
+    );
+    let app = App {
+        tx: broadcast::channel(8).0,
+        tracker: Arc::new(Mutex::new(Tracker::default())),
+        session: Arc::new(Mutex::new(None)),
+        shutdown: Arc::new(AtomicBool::new(false)),
+        port: 47812,
+        allowed: vec![],
+        ui: None,
+        log_dir: std::env::temp_dir(),
+        store: store.clone(),
+        provider: Arc::new(StubRecordProvider),
+        record_updates: Arc::new(Mutex::new(Default::default())),
+    };
+    let api = Router::new()
+        .route(
+            "/api/config/:key/import/preview",
+            post(api_config_import_preview),
+        )
+        .route(
+            "/api/config/:key/import/commit",
+            post(api_config_import_commit),
+        )
+        .with_state(app);
+    let req = axum::http::Request::builder()
+        .method("POST")
+        .uri("/api/config/roster/import/preview")
+        .header("content-type", "application/json")
+        .body(axum::body::Body::from(
+            json!({"csv":"id,姓名,分组\n,张三,一组"}).to_string(),
+        ))
+        .unwrap();
+    let response = api.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value =
+        serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(body["changes"][0]["action"], "Add");
+    assert_eq!(body["value"][0]["canonicalName"], "张三");
+    let req = axum::http::Request::builder()
+        .method("POST")
+        .uri("/api/config/roster/import/commit")
+        .header("content-type", "application/json")
+        .body(axum::body::Body::from(
+            json!({"revision":body["revision"],"value":body["value"],"changes":body["changes"]})
+                .to_string(),
+        ))
+        .unwrap();
+    assert_eq!(api.oneshot(req).await.unwrap().status(), StatusCode::OK);
+    assert_eq!(
+        store.get_doc("roster").unwrap().1[0]["canonicalName"],
+        "张三"
+    );
+}
+#[tokio::test]
+async fn alias_csv_preview_resolves_canonical_name_and_commits_atomically() {
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+    let store = Arc::new(
+        Store::open(std::env::temp_dir().join(format!("zc-alias-preview-{}.db", now()))).unwrap(),
+    );
+    store.put_doc("roster",0,&json!([{"personId":7,"canonicalName":"毛若水","pinyin":"maoruoshui","group":"","active":true}]),now()).unwrap().unwrap();
+    let app = App {
+        tx: broadcast::channel(8).0,
+        tracker: Arc::new(Mutex::new(Tracker::default())),
+        session: Arc::new(Mutex::new(None)),
+        shutdown: Arc::new(AtomicBool::new(false)),
+        port: 47812,
+        allowed: vec![],
+        ui: None,
+        log_dir: std::env::temp_dir(),
+        store: store.clone(),
+        provider: Arc::new(StubRecordProvider),
+        record_updates: Arc::new(Mutex::new(Default::default())),
+    };
+    let api = Router::new()
+        .route(
+            "/api/config/:key/import/preview",
+            post(api_config_import_preview),
+        )
+        .route(
+            "/api/config/:key/import/commit",
+            post(api_config_import_commit),
+        )
+        .with_state(app);
+    let req = axum::http::Request::builder()
+        .method("POST")
+        .uri("/api/config/aliases/import/preview")
+        .header("content-type", "application/json")
+        .body(axum::body::Body::from(
+            json!({"csv":"姓名,昵称\n毛若水,小毛"}).to_string(),
+        ))
+        .unwrap();
+    let response = api.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value =
+        serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(body["changes"][0]["action"], "Add");
+    assert_eq!(body["value"][0]["personId"], 7);
+    let req = axum::http::Request::builder()
+        .method("POST")
+        .uri("/api/config/aliases/import/commit")
+        .header("content-type", "application/json")
+        .body(axum::body::Body::from(
+            json!({"revision":body["revision"],"value":body["value"],"changes":body["changes"]})
+                .to_string(),
+        ))
+        .unwrap();
+    assert_eq!(api.oneshot(req).await.unwrap().status(), StatusCode::OK);
+    assert_eq!(store.get_doc("aliases").unwrap().1[0]["zoomName"], "小毛");
 }
 fn api_origin(a: &App, h: &HeaderMap) -> Option<Response> {
     let o = h.get("origin").and_then(|v| v.to_str().ok());
