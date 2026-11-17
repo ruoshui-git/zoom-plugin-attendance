@@ -1,6 +1,6 @@
 # Fixture parity results
 
-Rust Zoom-Apps adapter + `EngineOptions::attendflow_compat()` compared with generic-mode AttendFlow output goldens. **34/56 pass; no mismatches are allow-listed.**
+Rust Zoom-Apps adapter + `EngineOptions::attendflow_compat()` compared with generic-mode AttendFlow output goldens. **33/56 pass; no mismatches are allow-listed.**
 
 | Fixture | Result | Exact differing fields |
 |---|---|---|
@@ -9,19 +9,19 @@ Rust Zoom-Apps adapter + `EngineOptions::attendflow_compat()` compared with gene
 | `fixtures/meeting-replay-ignored.json` | Fail | "Another Guest" fields: currentLocation,status,tags,totalPresenceMinutes; summary fields: fullPresent,leftEarly |
 | `fixtures/recording-20260328-235314-EnterExit.json` | Fail | "陈雨桐" fields: absenceCount,tags,totalPresenceMinutes,wasLate; "李浩然" fields: tags,wasLate; "Mason Lee" fields: absenceCount,tags,totalPresenceMinutes,wasLate; summary fields: late |
 | `fixtures/simple-meeting.json` | Fail | "Alice Johnson" fields: absenceCount,lastSeenAt,tags,totalPresenceMinutes,wasLate; "Bob Smith" fields: currentLocation,firstJoinAt,lastSeenAt,status,tags,totalPresenceMinutes; summary fields: late,leftEarly |
-| `zoomsdk-recordings/admit-from-waiting-room.json` | Fail | "赵一诺" fields: currentLocation,firstJoinAt,status,tags; summary fields: fullPresent,leftEarly |
+| `zoomsdk-recordings/admit-from-waiting-room.json` | Fail | "赵一诺" fields: firstJoinAt |
 | `zoomsdk-recordings/direct-join-then-leave.json` | Pass | — |
 | `zoomsdk-recordings/duplicate-display-names-1775010675841.json` | Pass | — |
 | `zoomsdk-recordings/leave-then-rejoin-same-name-1775009576013.json` | Pass | — |
 | `zoomsdk-recordings/manual-snapshot-during-meeting-1775011081473.json` | Pass | — |
 | `zoomsdk-recordings/manual-sync-during-meeting-1775010951353.json` | Pass | — |
 | `zoomsdk-recordings/meeting-end-with-active-participants-1775012457780.json` | Pass | — |
-| `zoomsdk-recordings/move-to-waiting-room-1775010517314.json` | Fail | "Mason Lee" fields: absenceCount,currentLocation,status,tags; summary fields: fullPresent,leftEarly |
+| `zoomsdk-recordings/move-to-waiting-room-1775010517314.json` | Fail | "Mason Lee" fields: absenceCount |
 | `zoomsdk-recordings/rename-while-present-1775010591362.json` | Fail | "Mason Leonardo": missing actual row |
 | `zoomsdk-recordings/two-joins-near-same-time-1775009780982.json` | Pass | — |
 | `zoomsdk-recordings/unmatched-guest-joins-leaves-1775010197531.json` | Pass | — |
 | `zoomsdk-recordings/waiting-room-leave-plus-join-1775010058492.json` | Pass | — |
-| `zoomsdk-recordings-1/burst-mixed-join-leave-waiting-room-1775080021222.json` | Fail | "王晓彤" fields: currentLocation,status,tags; "赵美玲" fields: currentLocation,status,tags; "赵一诺" fields: currentLocation,status,tags; "Liam Bennett" fields: currentLocation,status,tags; summary fields: fullPresent,leftEarly |
+| `zoomsdk-recordings-1/burst-mixed-join-leave-waiting-room-1775080021222.json` | Pass | — |
 | `zoomsdk-recordings-1/direct-join-stays-1775069035231.json` | Pass | — |
 | `zoomsdk-recordings-1/duplicate-display-names-1775068160303.json` | Fail | "赵美玲" fields: firstJoinAt |
 | `zoomsdk-recordings-1/duplicate-name-leave-and-rejoin-1775068518586.json` | Fail | "赵美玲": missing actual row; row_count expected=4 actual=3; summary fields: leftEarly,seen,total |
@@ -32,7 +32,7 @@ Rust Zoom-Apps adapter + `EngineOptions::attendflow_compat()` compared with gene
 | `zoomsdk-recordings-1/host-not-in-roster-1775073255719.json` | Pass | — |
 | `zoomsdk-recordings-1/join-and-leave-crossing-1775069317924.json` | Pass | — |
 | `zoomsdk-recordings-1/leave-then-rejoin-same-name-1775068002490.json` | Fail | "Liam Bennett": missing actual row; row_count expected=3 actual=2; summary fields: leftEarly,seen,total |
-| `zoomsdk-recordings-1/long-presence-with-polling-only-changes-1775080247962.json` | Pass | — |
+| `zoomsdk-recordings-1/long-presence-with-polling-only-changes-1775080247962.json` | Fail | "Admin": missing actual row |
 | `zoomsdk-recordings-1/manual-snapshot-after-joins-1775074452700.json` | Fail | "王晓彤" fields: firstJoinAt; "赵美玲" fields: firstJoinAt; "赵一诺" fields: firstJoinAt |
 | `zoomsdk-recordings-1/manual-snapshot-after-leaves-1775074576875.json` | Pass | — |
 | `zoomsdk-recordings-1/manual-snapshot-with-waiting-room-1775074655659.json` | Fail | "赵一诺" fields: lastSeenAt; "Liam Bennett" fields: lastSeenAt |
@@ -42,15 +42,15 @@ Rust Zoom-Apps adapter + `EngineOptions::attendflow_compat()` compared with gene
 | `zoomsdk-recordings-1/matched-person-joins-1775073069658.json` | Pass | — |
 | `zoomsdk-recordings-1/matched-person-leaves-1775073162871.json` | Pass | — |
 | `zoomsdk-recordings-1/meeting-to-waiting-room-to-meeting-1775069616835.json` | Fail | "赵美玲" fields: absenceCount |
-| `zoomsdk-recordings-1/move-to-waiting-room-1775068706487.json` | Fail | "Lucas Young" fields: absenceCount,currentLocation,status,tags; summary fields: fullPresent,leftEarly |
+| `zoomsdk-recordings-1/move-to-waiting-room-1775068706487.json` | Fail | "Lucas Young" fields: absenceCount |
 | `zoomsdk-recordings-1/multiple-unmatched-guests-1775073332546.json` | Fail | "游客" fields: firstJoinAt; "Another Random Guest" fields: firstJoinAt |
 | `zoomsdk-recordings-1/privilege-gained-mid-meeting-1775075068177.json` | Pass | — |
 | `zoomsdk-recordings-1/privilege-lost-mid-meeting-1775075287756.json` | Pass | — |
 | `zoomsdk-recordings-1/raise-hand-multiple-1775079006550.json` | Pass | — |
 | `zoomsdk-recordings-1/raise-hand-raise-then-lower-1775075579914.json` | Pass | — |
 | `zoomsdk-recordings-1/raise-hand-single-1775075517753.json` | Pass | — |
-| `zoomsdk-recordings-1/raise-hand-with-rename-1775075617682.json` | Pass | — |
-| `zoomsdk-recordings-1/rename-after-rejoin-1775068853519.json` | Fail | "Lucas Young" fields: currentLocation,lastSeenAt,status,tags; "New Name": missing actual row; row_count expected=3 actual=2; summary fields: leftEarly,seen,total |
+| `zoomsdk-recordings-1/raise-hand-with-rename-1775075617682.json` | Fail | "Admin": missing actual row |
+| `zoomsdk-recordings-1/rename-after-rejoin-1775068853519.json` | Fail | "Lucas Young": missing actual row; "New Name": missing actual row; row_count expected=3 actual=2; summary fields: leftEarly,seen,total |
 | `zoomsdk-recordings-1/repeated-rejoin-same-person-1775083969036.json` | Fail | "Liam Bennett" fields: absenceCount,firstJoinAt; "Liam Bennett": missing actual row; "Liam Bennett": missing actual row; row_count expected=4 actual=2; summary fields: leftEarly,seen,total |
 | `zoomsdk-recordings-1/same-person-different-zoom-name-rejoin-1775073913925.json` | Pass | — |
 | `zoomsdk-recordings-1/same-person-different-zoom-name-while-present-1775074147973.json` | Fail | "Lucas Young": missing actual row |

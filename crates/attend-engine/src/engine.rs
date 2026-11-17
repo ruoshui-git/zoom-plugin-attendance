@@ -88,9 +88,7 @@ pub fn adapt_zoom_apps_events(fixture: &Value) -> Result<Vec<Value>, EngineError
         let first_response = |method: &str| {
             timeline
                 .iter()
-                .filter(|entry| {
-                    entry["category"] == "sdk_call" && entry["type"] == method
-                })
+                .filter(|entry| entry["category"] == "sdk_call" && entry["type"] == method)
                 .filter_map(|entry| entry["payload"]["response"]["participants"].as_array())
                 .next()
         };
@@ -115,6 +113,75 @@ pub fn adapt_zoom_apps_events(fixture: &Value) -> Result<Vec<Value>, EngineError
                     }));
                 }
             }
+        }
+        // Later paired SDK responses are the snapshots applied by the live
+        // repository after a debounced callback batch or during a roster poll.
+        // Keep each complete meeting + waiting-room response as one replacement.
+        let mut pending = Vec::<(i64, Value)>::new();
+        for entry in timeline
+            .iter()
+            .filter(|entry| entry["category"] == "sdk_call")
+        {
+            let method = entry["type"].as_str().unwrap_or("");
+            let location = match method {
+                "getMeetingParticipants" => "meeting",
+                "getWaitingRoomParticipants" => "waiting-room",
+                _ => continue,
+            };
+            let participants = entry["payload"]["response"]["participants"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
+            let relative = entry["relativeMs"].as_i64().unwrap_or(0);
+            pending.extend(
+                participants
+                    .into_iter()
+                    .map(|p| (relative, json!({"participant":p,"location":location}))),
+            );
+        }
+        let first_relative = timeline
+            .iter()
+            .filter(|e| {
+                e["category"] == "sdk_call"
+                    && matches!(
+                        e["type"].as_str(),
+                        Some("getMeetingParticipants" | "getWaitingRoomParticipants")
+                    )
+            })
+            .filter_map(|e| e["relativeMs"].as_i64())
+            .min()
+            .unwrap_or(i64::MIN);
+        pending.sort_by_key(|(relative, _)| *relative);
+        let mut groups: Vec<(i64, Vec<Value>)> = Vec::new();
+        for (relative, participant) in pending {
+            if let Some((at, values)) = groups.last_mut() {
+                if relative - *at <= 5 {
+                    values.push(participant);
+                    continue;
+                }
+            }
+            groups.push((relative, vec![participant]));
+        }
+        for (relative, values) in groups {
+            let snapshot_at = started_ms(started).unwrap_or(0) + relative;
+            // The first SDK snapshot seeds the record at reference time; it is
+            // already represented by joinedBefore events above.
+            if relative == first_relative {
+                continue;
+            }
+            let participants: Vec<Value> = values
+                .iter()
+                .map(|v| {
+                    let mut p = participant_value(
+                        &v["participant"],
+                        &json!(snapshot_at as f64 / 1000.0),
+                        false,
+                    );
+                    p["location"] = json!(v["location"]);
+                    p
+                })
+                .collect();
+            out.push(json!({"eventType":"rosterSnapshot","timestamp":iso_from_millis(snapshot_at),"participants":participants}));
         }
     }
     for e in events {
@@ -173,6 +240,16 @@ pub fn adapt_zoom_apps_events(fixture: &Value) -> Result<Vec<Value>, EngineError
     out.sort_by_key(|event| timestamp_ms(&event["timestamp"]).unwrap_or(0));
     Ok(out)
 }
+fn started_ms(s: &str) -> Option<i64> {
+    DateTime::parse_from_rfc3339(s)
+        .ok()
+        .map(|d| d.timestamp_millis())
+}
+fn iso_from_millis(ms: i64) -> String {
+    DateTime::<Utc>::from_timestamp_millis(ms)
+        .unwrap_or_default()
+        .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+}
 fn participant_value(p: &Value, timestamp: &Value, leave: bool) -> Value {
     // Zoom Apps recordings mix seconds and epoch milliseconds depending on the
     // recording generation. The 13 digit values are milliseconds.
@@ -189,6 +266,7 @@ fn participant_value(p: &Value, timestamp: &Value, leave: bool) -> Value {
 pub fn adapt_bridge_events(events: &[Value]) -> Result<Vec<Value>, EngineError> {
     let mut out = Vec::new();
     let mut names = HashMap::<String, String>::new();
+    let mut live_roster = HashMap::<String, Value>::new();
     for e in events {
         let kind = e.get("kind").and_then(Value::as_str).unwrap_or("");
         let at = e.get("at").and_then(Value::as_f64).unwrap_or(0.0) / 1000.0;
@@ -197,6 +275,9 @@ pub fn adapt_bridge_events(events: &[Value]) -> Result<Vec<Value>, EngineError> 
         if kind == "users" {
             let action = e.get("action").and_then(Value::as_str).unwrap_or("");
             if let Some(users) = e.get("users").and_then(Value::as_array) {
+                if matches!(action, "sync_all" | "syncAll") {
+                    live_roster.clear();
+                }
                 for u in users {
                     let uid = u
                         .get("userId")
@@ -213,6 +294,12 @@ pub fn adapt_bridge_events(events: &[Value]) -> Result<Vec<Value>, EngineError> 
                         format!("{instance}:{uid}"),
                         u["name"].as_str().unwrap_or("").into(),
                     );
+                    let uuid = format!("{instance}:{uid}");
+                    if action == "left" {
+                        live_roster.remove(&uuid);
+                    } else {
+                        live_roster.insert(uuid.clone(), json!({"participantUUID":uuid,"screenName":u["name"].as_str().unwrap_or(""),"role":if u["host"].as_bool().unwrap_or(false){"host"}else{"attendee"},"location":if waiting{"waiting-room"}else{"meeting"}}));
+                    }
                     let et = match action {
                         "left" if waiting => "waitingRoomLeave",
                         "left" => "leave",
@@ -223,6 +310,10 @@ pub fn adapt_bridge_events(events: &[Value]) -> Result<Vec<Value>, EngineError> 
                     };
                     out.push(json!({"eventType":et,"timestamp":ts,"participantUUID":format!("{instance}:{uid}"),"screenName":u["name"].as_str().unwrap_or(""),"role":if u["host"].as_bool().unwrap_or(false){"host"}else{"attendee"},"location":if waiting{"waiting-room"}else{"meeting"}}));
                 }
+                let snapshot: Vec<Value> = live_roster.values().cloned().collect();
+                out.push(
+                    json!({"eventType":"rosterSnapshot","timestamp":ts,"participants":snapshot}),
+                );
             }
         } else if kind == "hand" {
             if let Some(uid) = e.get("userId") {
@@ -263,6 +354,8 @@ pub fn build_record(
     let mut participants = Vec::<SessionParticipant>::new();
     let mut name_changes = Vec::<NameChange>::new();
     let mut uuid_map = HashMap::<String, String>::new();
+    let mut observed_roster: Option<HashMap<String, ZoomParticipant>> = None;
+    let mut snapshot_active = HashSet::<String>::new();
     let mut end = meta.ended_at.clone();
     let mut hands = Vec::new();
     let mut ordered = raw_events.to_vec();
@@ -280,6 +373,69 @@ pub fn build_record(
             continue;
         }
         if ended {
+            continue;
+        }
+        if ty == "rosterSnapshot" {
+            let mut snapshot = HashMap::new();
+            let mut next_active = HashSet::new();
+            if let Some(items) = e["participants"].as_array() {
+                for item in items {
+                    let uuid = item["participantUUID"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .to_string();
+                    if uuid.is_empty() {
+                        continue;
+                    }
+                    let name = item["screenName"].as_str().unwrap_or_default().to_string();
+                    let loc = if item["location"] == "waiting-room" {
+                        ParticipantLocation::WaitingRoom
+                    } else {
+                        ParticipantLocation::Meeting
+                    };
+                    let role = item["role"].as_str().unwrap_or("attendee").to_string();
+                    let ts = ts.clone();
+                    let Some(id) = uuid_map.get(&uuid).cloned() else {
+                        continue;
+                    };
+                    if let Some(p) = participants
+                        .iter_mut()
+                        .find(|p| p.session_participant_id == id)
+                    {
+                        if p.current_screen_name != name {
+                            name_changes.push(NameChange {
+                                id: format!("rename-{}", name_changes.len() + 1),
+                                timestamp: ts.clone(),
+                                session_participant_id: id.clone(),
+                                participant_uuid: uuid.clone(),
+                                previous_screen_name: p.current_screen_name.clone(),
+                                next_screen_name: name.clone(),
+                            });
+                            p.current_screen_name = name.clone();
+                            if !p.screen_names.contains(&name) {
+                                p.screen_names.push(name.clone());
+                            }
+                        }
+                        p.current_participant_uuid = uuid.clone();
+                        p.current_location = loc.clone();
+                        p.role = role.clone();
+                        p.last_seen_at = ts;
+                    }
+                    snapshot.insert(
+                        uuid.clone(),
+                        ZoomParticipant {
+                            participant_uuid: uuid,
+                            screen_name: name.clone(),
+                            screen_name_pinyin: build_pinyin(&name),
+                            role,
+                            location: loc,
+                        },
+                    );
+                    next_active.insert(id);
+                }
+            }
+            snapshot_active = next_active;
+            observed_roster = Some(snapshot);
             continue;
         }
         if ty == "hand" {
@@ -329,7 +485,6 @@ pub fn build_record(
         let participant_id = if let Some(id) = uuid_map.get(&uuid) {
             id.clone()
         } else {
-            let norm = normalize_name(&name);
             let mut activity = HashMap::<String, bool>::new();
             for event in &events {
                 if let Some(id) = &event.session_participant_id {
@@ -350,11 +505,12 @@ pub fn build_record(
             let active: HashSet<String> = activity
                 .into_iter()
                 .filter_map(|(id, yes)| yes.then_some(id))
+                .chain(snapshot_active.iter().cloned())
                 .collect();
             let by_name: Vec<_> = participants
                 .iter()
                 .filter(|p| {
-                    normalize_name(&p.current_screen_name) == norm
+                    normalize_name(&p.current_screen_name) == normalize_name(&name)
                         && !active.contains(&p.session_participant_id)
                 })
                 .collect();
@@ -500,7 +656,10 @@ pub fn build_record(
         }
     }
     let ended_at = end.clone().unwrap_or_else(|| now.into());
-    let roster = latest_roster(&events);
+    let roster = observed_roster
+        .as_ref()
+        .map(|m| m.values().cloned().collect())
+        .unwrap_or_else(|| latest_roster(&events));
     let rows = make_rows(
         &participants,
         &events,
@@ -512,6 +671,7 @@ pub fn build_record(
         late,
         return_window,
         &options,
+        observed_roster.as_ref(),
     )?;
     let summary = compute_summary(&rows, &state.mode, end.is_some());
     Ok(Record {
@@ -558,6 +718,7 @@ fn make_rows(
     late_after: u32,
     return_window: u32,
     opts: &EngineOptions,
+    latest_roster: Option<&HashMap<String, ZoomParticipant>>,
 ) -> Result<Vec<AttendanceRow>, EngineError> {
     let end_ms = timestamp_ms(&json!(end)).unwrap_or(0);
     let start_ms = timestamp_ms(&json!(start)).unwrap_or(end_ms);
@@ -654,6 +815,9 @@ fn make_rows(
             } else {
                 total += d
             }
+        }
+        if let Some(roster) = latest_roster {
+            currently = roster.contains_key(&p.current_participant_uuid);
         }
         let first_join = first
             .as_deref()
@@ -788,8 +952,7 @@ fn make_rows(
                 absence_count: absence,
                 returned_after_long_absence: long_return,
                 tags,
-                shared_name: p.has_ambiguous_name
-                    || is_likely_shared_name(&p.current_screen_name),
+                shared_name: p.has_ambiguous_name || is_likely_shared_name(&p.current_screen_name),
                 split_person_ids: vec![],
                 split_canonical_names: vec![],
                 notes: None,
@@ -826,8 +989,7 @@ fn make_rows(
                 absence_count: absence,
                 returned_after_long_absence: long_return,
                 tags,
-                shared_name: p.has_ambiguous_name
-                    || is_likely_shared_name(&p.current_screen_name),
+                shared_name: p.has_ambiguous_name || is_likely_shared_name(&p.current_screen_name),
                 split_person_ids: split.iter().map(|x| x.person_id).collect(),
                 split_canonical_names: split.iter().map(|x| x.canonical_name.clone()).collect(),
                 notes: None,

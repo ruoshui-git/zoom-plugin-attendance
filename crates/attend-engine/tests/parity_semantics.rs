@@ -44,7 +44,7 @@ fn field_differences(expected: &Value, actual: &Value) -> Vec<String> {
 }
 
 #[test]
-#[ignore = "AttendFlow parity in progress (34/56); see tests/parity/PARITY-RESULTS.md"]
+#[ignore = "AttendFlow parity in progress (33/56); see tests/parity/PARITY-RESULTS.md"]
 fn every_recording_fixture_matches_attendflow_semantics() {
     let fixture_root = Path::new("tests/parity/fixtures");
     let golden_root = Path::new("tests/parity/goldens");
@@ -80,6 +80,7 @@ fn every_recording_fixture_matches_attendflow_semantics() {
         state.mode = mode;
         let now = events
             .iter()
+            .filter(|e| e["eventType"] != "rosterSnapshot")
             .filter_map(|e| e["timestamp"].as_str())
             .max()
             .unwrap_or(&started);
