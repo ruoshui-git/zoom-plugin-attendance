@@ -30,8 +30,10 @@ reconnect/meeting-change handling) and close the unverified items listed there.
   values. More complete stale-instance recovery when a new meeting starts is still needed.
 - P2 records/config/settings work adds date-prefix record search, bulk delete with live
   record refusal, JSON record export, v3-shaped backup export/config restore, local-data
-  clearing, and initial roster/alias/profile management UI. CSV preview workflows,
-  bulk configuration operations, complete settings persistence, and example data remain.
+  clearing, and initial roster/alias/profile management UI. The roster and name-matching
+  work now includes searchable/sortable CRUD tables, bulk actions, Rust CSV preview/commit
+  and export endpoints, GB18030/BOM handling, and roster-to-alias cascade deletion. The
+  remaining settings/profile gaps are unchanged.
 
 ## 1. What was installed
 

@@ -15,6 +15,7 @@ path = "src/main.rs"
 zoom-bridge.workspace = true
 zoom-auth.workspace = true
 attend-store.workspace = true
+attend-engine = { path = "../attend-engine" }
 anyhow.workspace = true
 log.workspace = true
 env_logger.workspace = true
@@ -27,6 +28,8 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal
 axum = { version = "0.7", features = ["ws"] }
 futures-util = "0.3"
 mime_guess = "2"
+encoding_rs = "0.8"
+rfd = { version = "0.15", default-features = false }
 clap = { version = "4", features = ["derive"] }
 tao = "0.30"
 wry = "0.53"
