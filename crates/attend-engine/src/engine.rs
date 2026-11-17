@@ -80,6 +80,43 @@ pub fn adapt_zoom_apps_events(fixture: &Value) -> Result<Vec<Value>, EngineError
         .and_then(Value::as_array)
         .ok_or_else(|| EngineError::InvalidEvent("missing events array".into()))?;
     let mut out = Vec::new();
+    // AttendFlow bootstraps the record with the first SDK roster responses at
+    // the replay reference time. These responses are recorded in `timeline`,
+    // separately from callback events, and are essential when a participant
+    // was already present before recording began.
+    if let Some(timeline) = fixture.get("timeline").and_then(Value::as_array) {
+        let first_response = |method: &str| {
+            timeline
+                .iter()
+                .filter(|entry| {
+                    entry["category"] == "sdk_call" && entry["type"] == method
+                })
+                .filter_map(|entry| entry["payload"]["response"]["participants"].as_array())
+                .next()
+        };
+        let started = fixture
+            .get("startedAt")
+            .and_then(Value::as_str)
+            .unwrap_or("1970-01-01T00:00:00.000Z");
+        for (method, location) in [
+            ("getMeetingParticipants", "meeting"),
+            ("getWaitingRoomParticipants", "waiting-room"),
+        ] {
+            if let Some(participants) = first_response(method) {
+                for participant in participants {
+                    let p = participant_value(participant, &json!(started), false);
+                    out.push(json!({
+                        "eventType": if location == "meeting" { "joinedBefore" } else { "waitingRoomJoinedBefore" },
+                        "timestamp": started,
+                        "participantUUID": p["participantUUID"],
+                        "screenName": p["screenName"],
+                        "role": p["role"],
+                        "location": location,
+                    }));
+                }
+            }
+        }
+    }
     for e in events {
         let kind = e.get("type").and_then(Value::as_str).unwrap_or("");
         let data = &e["data"];
@@ -109,12 +146,21 @@ pub fn adapt_zoom_apps_events(fixture: &Value) -> Result<Vec<Value>, EngineError
             "onWaitingRoomParticipantJoin" | "onWaitingRoomParticipantLeave" => {
                 let p = &data["participant"];
                 let leave = kind.ends_with("Leave");
+                let action = p.get("action").and_then(Value::as_str).unwrap_or("");
+                if !leave && action == "putFromMainMeeting" {
+                    let mut left = participant_value(p, &timestamp, true);
+                    left["eventType"] = json!("leave");
+                    left["location"] = json!("meeting");
+                    out.push(left);
+                }
                 let mut v = participant_value(p, &timestamp, leave);
                 v["location"] = json!("waiting-room");
                 v["eventType"] = json!(if leave {
                     "waitingRoomLeave"
-                } else {
+                } else if action == "joinMeeting" {
                     "waitingRoomJoinFromOutside"
+                } else {
+                    "waitingRoomJoinFromMeeting"
                 });
                 out.push(v);
             }
@@ -124,6 +170,7 @@ pub fn adapt_zoom_apps_events(fixture: &Value) -> Result<Vec<Value>, EngineError
             _ => {}
         }
     }
+    out.sort_by_key(|event| timestamp_ms(&event["timestamp"]).unwrap_or(0));
     Ok(out)
 }
 fn participant_value(p: &Value, timestamp: &Value, leave: bool) -> Value {
@@ -418,6 +465,40 @@ pub fn build_record(
             },
         });
     }
+    // Flag identities when their active intervals overlap with the same
+    // normalized name. A historical name reuse after a participant leaves is
+    // a rejoin candidate, not a shared-name collision.
+    let mut active_names = HashMap::<String, String>::new();
+    let mut ambiguous_ids = HashSet::<String>::new();
+    for event in &events {
+        let Some(id) = &event.session_participant_id else {
+            continue;
+        };
+        let name = normalize_name(&event.participant.screen_name);
+        match event.kind {
+            MovementType::Join
+            | MovementType::JoinedBefore
+            | MovementType::WaitingRoomJoinFromOutside
+            | MovementType::WaitingRoomJoinFromMeeting
+            | MovementType::WaitingRoomJoinedBefore => {
+                for (active_id, active_name) in &active_names {
+                    if active_id != id && active_name == &name {
+                        ambiguous_ids.insert(id.clone());
+                        ambiguous_ids.insert(active_id.clone());
+                    }
+                }
+                active_names.insert(id.clone(), name);
+            }
+            MovementType::Leave | MovementType::WaitingRoomLeave => {
+                active_names.remove(id);
+            }
+        }
+    }
+    for participant in &mut participants {
+        if ambiguous_ids.contains(&participant.session_participant_id) {
+            participant.has_ambiguous_name = true;
+        }
+    }
     let ended_at = end.clone().unwrap_or_else(|| now.into());
     let roster = latest_roster(&events);
     let rows = make_rows(
@@ -707,7 +788,8 @@ fn make_rows(
                 absence_count: absence,
                 returned_after_long_absence: long_return,
                 tags,
-                shared_name: is_likely_shared_name(&p.current_screen_name),
+                shared_name: p.has_ambiguous_name
+                    || is_likely_shared_name(&p.current_screen_name),
                 split_person_ids: vec![],
                 split_canonical_names: vec![],
                 notes: None,
@@ -744,7 +826,8 @@ fn make_rows(
                 absence_count: absence,
                 returned_after_long_absence: long_return,
                 tags,
-                shared_name: is_likely_shared_name(&p.current_screen_name),
+                shared_name: p.has_ambiguous_name
+                    || is_likely_shared_name(&p.current_screen_name),
                 split_person_ids: split.iter().map(|x| x.person_id).collect(),
                 split_canonical_names: split.iter().map(|x| x.canonical_name.clone()).collect(),
                 notes: None,
