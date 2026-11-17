@@ -31,3 +31,5 @@ Thumbs.db
 
 /apps/desktop-ui/node_modules/
 /apps/desktop-ui/dist/
+
+/apps/desktop-ui/screenshots/
