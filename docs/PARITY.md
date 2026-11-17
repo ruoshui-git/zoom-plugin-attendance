@@ -1,5 +1,8 @@
 # AttendFlow → desktop app parity checklist
 
+Engine rows are implemented in Rust (`crates/attend-engine`) and verified against goldens
+produced by AttendFlow's real pipeline (see NEW-APP.md).
+
 Source: AttendFlow `main` @ 405abd5 (inventory 2026-11-17). Phase column: P1 / P2 / P3,
 **N/A** = exists only because of Zoom Apps constraints (replaced by a simpler mechanism),
 **OFF** = feature-flagged off in AttendFlow's `mvp` build (optional, P3).
@@ -25,7 +28,8 @@ Source: AttendFlow `main` @ 405abd5 (inventory 2026-11-17). Phase column: P1 / P
 | isExpected via included subgroups; out-of-scope ⚠ | engine | P1 |
 | Manual snapshots (capture current list) | ManualAttendanceTab | P2 |
 | Raise-hand entries + captures (dedup raise/lower) | RaiseHandPanel | P2 (better: SDK gives raised flag at connect) |
-| Waiting-room time counts as presence (AttendFlow behaviour; owner to confirm) | applyJoinLikeEvent | P1 (configurable later) |
+| **Deliberate deviation:** waiting-room time is shown separately and is NOT presence (owner 2026-11-17); AttendFlow counts it. Engine flag reproduces AttendFlow for the parity harness | applyJoinLikeEvent | P1 |
+| **Deliberate deviation:** no new record after a meeting ends (AttendFlow phantom-session bug) | Meeting.svelte effect | P1 |
 
 ## Live meeting view (AttendFlow Meeting surface)
 
