@@ -1,0 +1,223 @@
+{
+  "schemaVersion": 2,
+  "sessionId": "recording-host-not-in-roster-1775073255719",
+  "startedAt": "2026-04-01T19:54:15.721Z",
+  "events": [],
+  "timeline": [
+    {
+      "sequence": 1,
+      "timestamp": 1775073245514,
+      "relativeMs": -10207,
+      "category": "startup",
+      "type": "app_bootstrap",
+      "payload": {
+        "requestedContext": "zoom_sdk_config",
+        "timestamp": "2026-04-01T19:54:05.514Z"
+      }
+    },
+    {
+      "sequence": 2,
+      "timestamp": 1775073245514,
+      "relativeMs": -10207,
+      "category": "startup",
+      "type": "config_request",
+      "payload": {
+        "size": {
+          "width": 480,
+          "height": 360
+        },
+        "capabilities": [
+          "openUrl",
+          "getRunningContext",
+          "onRunningContextChange",
+          "getMeetingContext",
+          "onMyUserContextChange",
+          "getUserContext",
+          "getMeetingUUID",
+          "connect",
+          "postMessage",
+          "onConnect",
+          "onMessage",
+          "onMeeting",
+          "getMeetingParticipants",
+          "onParticipantChange",
+          "getWaitingRoomParticipants",
+          "onWaitingRoomParticipantJoin",
+          "onWaitingRoomParticipantLeave",
+          "onFeedbackReaction",
+          "onRemoveFeedbackReaction",
+          "removeAllFeedbackReaction",
+          "setFeedbackReaction",
+          "removeFeedbackReaction",
+          "expandApp",
+          "onExpandApp",
+          "appPopout",
+          "onAppPopout",
+          "onIncomingParticipantAudioChange",
+          "getSupportedJsApis",
+          "onMyReaction",
+          "onReaction",
+          "toggleParticipantMediaAudio",
+          "toggleParticipantMediaVideo",
+          "getWaitingRoomState",
+          "setWaitingRoomState",
+          "putParticipantToWaitingRoom",
+          "admitParticipantFromWaitingRoom",
+          "removeParticipant",
+          "putParticipantToWaitingRoom"
+        ]
+      }
+    },
+    {
+      "sequence": 3,
+      "timestamp": 1775073245514,
+      "relativeMs": -10207,
+      "category": "startup",
+      "type": "config_request",
+      "payload": {
+        "options": {
+          "size": {
+            "width": 480,
+            "height": 360
+          },
+          "capabilities": [
+            "openUrl",
+            "getRunningContext",
+            "onRunningContextChange",
+            "getMeetingContext",
+            "onMyUserContextChange",
+            "getUserContext",
+            "getMeetingUUID",
+            "connect",
+            "postMessage",
+            "onConnect",
+            "onMessage",
+            "onMeeting",
+            "getMeetingParticipants",
+            "onParticipantChange",
+            "getWaitingRoomParticipants",
+            "onWaitingRoomParticipantJoin",
+            "onWaitingRoomParticipantLeave",
+            "onFeedbackReaction",
+            "onRemoveFeedbackReaction",
+            "removeAllFeedbackReaction",
+            "setFeedbackReaction",
+            "removeFeedbackReaction",
+            "expandApp",
+            "onExpandApp",
+            "appPopout",
+            "onAppPopout",
+            "onIncomingParticipantAudioChange",
+            "getSupportedJsApis",
+            "onMyReaction",
+            "onReaction",
+            "toggleParticipantMediaAudio",
+            "toggleParticipantMediaVideo",
+            "getWaitingRoomState",
+            "setWaitingRoomState",
+            "putParticipantToWaitingRoom",
+            "admitParticipantFromWaitingRoom",
+            "removeParticipant",
+            "putParticipantToWaitingRoom"
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 4,
+      "timestamp": 1775073245677,
+      "relativeMs": -10044,
+      "category": "startup",
+      "type": "config_response",
+      "payload": {
+        "response": {
+          "auth": {
+            "status": "authorized",
+            "upgradable": true
+          },
+          "browserVersion": "webview2/146.0.3856.84",
+          "clientVersion": "7.0.1.34140",
+          "launchContext": {
+            "openBy": "user",
+            "origin": "App Launcher"
+          },
+          "media": {
+            "video": null
+          },
+          "product": "desktop",
+          "runningContext": "inMeeting",
+          "themeMode": "light",
+          "unsupportedApis": [],
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0;Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36 Edg/137.0.0.0"
+        }
+      }
+    },
+    {
+      "sequence": 5,
+      "timestamp": 1775073245677,
+      "relativeMs": -10044,
+      "category": "startup",
+      "type": "config_context_resolved",
+      "payload": {
+        "runningContext": "inMeeting"
+      }
+    },
+    {
+      "sequence": 6,
+      "timestamp": 1775073255721,
+      "relativeMs": 0,
+      "category": "startup",
+      "type": "recording_started",
+      "payload": {
+        "sessionId": "recording-host-not-in-roster-1775073255719",
+        "metadata": {
+          "startedFrom": "console",
+          "context": "inMeeting",
+          "startedAt": "2026-04-01T19:54:15.719Z",
+          "meetingId": "1234509876",
+          "meetingTopic": "Admin's Personal Meeting Room",
+          "meetingUUID": "6yP6efVuQXqi8FKTi8H6Pw=="
+        }
+      }
+    },
+    {
+      "sequence": 7,
+      "timestamp": 1775073255739,
+      "relativeMs": 18,
+      "category": "sdk_call",
+      "type": "getMeetingParticipants",
+      "payload": {
+        "response": {
+          "participants": [
+            {
+              "participantId": "16778240",
+              "participantUUID": "6A289A5F-A57F-303A-1D5C-8A63A3AE7F6E",
+              "role": "host",
+              "screenName": "Admin"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 8,
+      "timestamp": 1775073255739,
+      "relativeMs": 18,
+      "category": "sdk_call",
+      "type": "getWaitingRoomParticipants",
+      "payload": {
+        "response": {
+          "participants": []
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "startedFrom": "console",
+    "context": "inMeeting",
+    "startedAt": "2026-04-01T19:54:15.719Z",
+    "meetingId": "1234509876",
+    "meetingTopic": "Admin's Personal Meeting Room",
+    "meetingUUID": "6yP6efVuQXqi8FKTi8H6Pw=="
+  }
+}

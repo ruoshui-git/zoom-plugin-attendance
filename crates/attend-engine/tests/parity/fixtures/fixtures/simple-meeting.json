@@ -1,0 +1,64 @@
+{
+  "sessionId": "test-session-001",
+  "events": [
+    {
+      "type": "onParticipantChange",
+      "timestamp": 1700000000000,
+      "data": {
+        "timestamp": 1700000000,
+        "participants": [
+          {
+            "participantUUID": "user-1",
+            "screenName": "Alice Johnson",
+            "role": "attendee",
+            "status": "join"
+          }
+        ]
+      }
+    },
+    {
+      "type": "onParticipantChange",
+      "timestamp": 1700000010000,
+      "data": {
+        "timestamp": 1700000010000,
+        "participants": [
+          {
+            "participantUUID": "user-2",
+            "screenName": "Bob Smith",
+            "role": "attendee",
+            "status": "join"
+          }
+        ]
+      }
+    },
+    {
+      "type": "onFeedbackReaction",
+      "timestamp": 1700000020000,
+      "data": {
+        "timestamp": 1700000020000,
+        "participantUUID": "user-1",
+        "feedback": "raiseHand"
+      }
+    },
+    {
+      "type": "onParticipantChange",
+      "timestamp": 1700000100000,
+      "data": {
+        "timestamp": 1700000100000,
+        "participants": [
+          {
+            "participantUUID": "user-1",
+            "screenName": "Alice Johnson",
+            "role": "attendee",
+            "status": "leave"
+          }
+        ]
+      }
+    }
+  ],
+  "metadata": {
+    "meetingId": "123-456-789",
+    "meetingTopic": "Test Meeting",
+    "meetingUUID": "test-uuid-123"
+  }
+}

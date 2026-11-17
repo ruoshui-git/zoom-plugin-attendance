@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 2,
+  "sessionId": "meeting-replay-admit",
+  "startedAt": "2026-03-31T19:49:00.000Z",
+  "events": [
+    {
+      "sequence": 1,
+      "type": "onWaitingRoomParticipantJoin",
+      "timestamp": 100000,
+      "data": {
+        "participant": {
+          "action": "joinMeeting",
+          "participantUUID": "participant-mason",
+          "screenName": "Mason Lee"
+        },
+        "timestamp": 100
+      }
+    },
+    {
+      "sequence": 2,
+      "type": "onWaitingRoomParticipantLeave",
+      "timestamp": 160000,
+      "data": {
+        "participant": {
+          "participantUUID": "participant-mason",
+          "screenName": "Mason Lee"
+        },
+        "timestamp": 160
+      }
+    },
+    {
+      "sequence": 3,
+      "type": "onParticipantChange",
+      "timestamp": 160000,
+      "data": {
+        "participants": [
+          {
+            "participantId": 1,
+            "participantUUID": "participant-mason",
+            "role": "attendee",
+            "screenName": "Mason Lee",
+            "status": "join"
+          }
+        ],
+        "timestamp": 160
+      }
+    }
+  ],
+  "timeline": [],
+  "metadata": {
+    "meetingId": "test-meeting-1",
+    "meetingTopic": "Replay Admit"
+  }
+}

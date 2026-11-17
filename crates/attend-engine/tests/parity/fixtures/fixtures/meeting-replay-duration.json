@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 2,
+  "sessionId": "meeting-replay-duration",
+  "startedAt": "2026-03-31T19:49:00.000Z",
+  "events": [
+    {
+      "sequence": 1,
+      "type": "onWaitingRoomParticipantJoin",
+      "timestamp": 100000,
+      "data": {
+        "participant": {
+          "action": "joinMeeting",
+          "participantUUID": "participant-group-a",
+          "screenName": "刘志远 赵美玲"
+        },
+        "timestamp": 100
+      }
+    },
+    {
+      "sequence": 2,
+      "type": "onWaitingRoomParticipantLeave",
+      "timestamp": 160000,
+      "data": {
+        "participant": {
+          "participantUUID": "participant-group-a",
+          "screenName": "刘志远 赵美玲"
+        },
+        "timestamp": 160
+      }
+    },
+    {
+      "sequence": 3,
+      "type": "onParticipantChange",
+      "timestamp": 160000,
+      "data": {
+        "participants": [
+          {
+            "participantId": 2,
+            "participantUUID": "participant-group-a",
+            "role": "attendee",
+            "screenName": "刘志远 赵美玲",
+            "status": "join"
+          }
+        ],
+        "timestamp": 160
+      }
+    },
+    {
+      "sequence": 4,
+      "type": "onParticipantChange",
+      "timestamp": 280000,
+      "data": {
+        "participants": [
+          {
+            "participantId": 2,
+            "participantUUID": "participant-group-a",
+            "role": "attendee",
+            "screenName": "刘志远 赵美玲",
+            "status": "leave"
+          }
+        ],
+        "timestamp": 280
+      }
+    }
+  ],
+  "timeline": [],
+  "metadata": {
+    "meetingId": "test-meeting-2",
+    "meetingTopic": "Replay Duration"
+  }
+}

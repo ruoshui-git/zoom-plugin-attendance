@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 2,
+  "sessionId": "meeting-replay-ignored",
+  "startedAt": "2026-03-31T19:41:00.000Z",
+  "events": [
+    {
+      "sequence": 1,
+      "type": "onParticipantChange",
+      "timestamp": 100000,
+      "data": {
+        "participants": [
+          {
+            "participantId": 10,
+            "participantUUID": "guest-random",
+            "role": "attendee",
+            "screenName": "Random",
+            "status": "join"
+          }
+        ],
+        "timestamp": 100
+      }
+    },
+    {
+      "sequence": 2,
+      "type": "onParticipantChange",
+      "timestamp": 110000,
+      "data": {
+        "participants": [
+          {
+            "participantId": 11,
+            "participantUUID": "guest-other",
+            "role": "attendee",
+            "screenName": "Another Guest",
+            "status": "join"
+          }
+        ],
+        "timestamp": 110
+      }
+    },
+    {
+      "sequence": 3,
+      "type": "onParticipantChange",
+      "timestamp": 140000,
+      "data": {
+        "participants": [
+          {
+            "participantId": 10,
+            "participantUUID": "guest-random",
+            "role": "attendee",
+            "screenName": "Random",
+            "status": "leave"
+          }
+        ],
+        "timestamp": 140
+      }
+    }
+  ],
+  "timeline": [],
+  "metadata": {
+    "meetingId": "test-meeting-3",
+    "meetingTopic": "Replay Ignored Count"
+  }
+}

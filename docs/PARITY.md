@@ -1,7 +1,9 @@
 # AttendFlow → desktop app parity checklist
 
-Engine rows are implemented in Rust (`crates/attend-engine`) and verified against goldens
-produced by AttendFlow's real pipeline (see NEW-APP.md).
+The Rust engine crate is in progress at `crates/attend-engine`. Its current tests cover
+basic normalization, wildcard groups, scoring, bridge mapping, and fixture input
+integrity. Real-pipeline output goldens and full semantic parity are still outstanding;
+see the crate README for the implemented API and verification limits.
 
 Source: AttendFlow `main` @ 405abd5 (inventory 2026-11-17). Phase column: P1 / P2 / P3,
 **N/A** = exists only because of Zoom Apps constraints (replaced by a simpler mechanism),
@@ -9,27 +11,27 @@ Source: AttendFlow `main` @ 405abd5 (inventory 2026-11-17). Phase column: P1 / P
 
 ## Engine and data (must be semantically identical)
 
-| Feature | AttendFlow source | Phase |
+| Feature | AttendFlow source | Phase | Rust status |
 |---|---|---|
-| Name normalization (trim, lowercase, strip whitespace incl. U+3000, punctuation) | lib/name-utils.ts | P1 |
-| Pinyin (tiny-pinyin, toneless) for search, sort (zh-CN collation), roster auto-fill | name-utils.ts | P1 |
-| Identity stitching: uuid_direct → unique inactive name → unique inactive roster/alias target → new / ambiguous | session-engine.ts resolveSessionParticipantForRecord | P1 |
-| Movement events (7 types) incl. waiting-room ones; admission pairing ±5 s | session-engine.ts | P1 |
-| Presence intervals, absenceCount, returnedAfterLongAbsence (return window), wasLate (late threshold) | buildAttendanceStates, resolveCurrentStatus | P1 |
-| Statuses present / missing / late / leftEarly / returned / guest / unmatched; tags seen, full_present, late, left_early, returned, missing, ignored | lib/attendance-status.ts | P1 |
-| Summary counts (generic vs roster counting rules) | computeAttendanceSummary | P1 |
-| Score % = presence / duration, grades ≥90 / ≥75 / ≥50 / >0 / 0 | lib/attendance-score.ts | P1 |
-| Roster matching: canonical name / pinyin / alias; >1 candidate = error | matchZoomNameToRoster | P1 |
-| Decisions: match, guest, split (≥2 people), name_change_keep_match, revert | repository.ts + engine | P2 |
-| Shared-name detection + split suggestions | isLikelySharedName, getSplitSuggestionsForZoomName | P2 |
-| Name-change events + pending-rename gating | engine | P1 (log) / P2 (gating UI) |
-| Profile auto-selection: meetingIds exact → topic keyword → default → first active | guessMeetingProfile | P1 |
-| Profile fields: name, description, included subgroups (`*`), late, return, meetingIds, topic keywords, group sort order, active; default profile `default-all` (locked, factory reset 10 / 8) | MeetingProfileWorkspace | P2 |
-| isExpected via included subgroups; out-of-scope ⚠ | engine | P1 |
-| Manual snapshots (capture current list) | ManualAttendanceTab | P2 |
-| Raise-hand entries + captures (dedup raise/lower) | RaiseHandPanel | P2 (better: SDK gives raised flag at connect) |
-| **Deliberate deviation:** waiting-room time is shown separately and is NOT presence (owner 2026-11-17); AttendFlow counts it. Engine flag reproduces AttendFlow for the parity harness | applyJoinLikeEvent | P1 |
-| **Deliberate deviation:** no new record after a meeting ends (AttendFlow phantom-session bug) | Meeting.svelte effect | P1 |
+| Name normalization (trim, lowercase, strip whitespace incl. U+3000, punctuation) | lib/name-utils.ts | P1 | ✓ |
+| Pinyin (tiny-pinyin, toneless) for search, sort (zh-CN collation), roster auto-fill | name-utils.ts | P1 | partial: `pinyin` crate; parity unmeasured |
+| Identity stitching: uuid_direct → unique inactive name → unique inactive roster/alias target → new / ambiguous | session-engine.ts resolveSessionParticipantForRecord | P1 | partial |
+| Movement events (7 types) incl. waiting-room ones; admission pairing ±5 s | session-engine.ts | P1 | partial: seven event variants, pairing not yet parity-verified |
+| Presence intervals, absenceCount, returnedAfterLongAbsence (return window), wasLate (late threshold) | buildAttendanceStates, resolveCurrentStatus | P1 | partial |
+| Statuses present / missing / late / leftEarly / returned / guest / unmatched; tags seen, full_present, late, left_early, returned, missing, ignored | lib/attendance-status.ts | P1 | partial |
+| Summary counts (generic vs roster counting rules) | computeAttendanceSummary | P1 | partial |
+| Score % = presence / duration, grades ≥90 / ≥75 / ≥50 / >0 / 0 | lib/attendance-score.ts | P1 | ✓ |
+| Roster matching: canonical name / pinyin / alias; >1 candidate = error | matchZoomNameToRoster | P1 | partial |
+| Decisions: match, guest, split (≥2 people), name_change_keep_match, revert | repository.ts + engine | P2 | partial |
+| Shared-name detection + split suggestions | isLikelySharedName, getSplitSuggestionsForZoomName | P2 | partial: detection/token parsing |
+| Name-change events + pending-rename gating | engine | P1 (log) / P2 (gating UI) | partial: log only |
+| Profile auto-selection: meetingIds exact → topic keyword → default → first active | guessMeetingProfile | P1 | ✓ |
+| Profile fields: name, description, included subgroups (`*`), late, return, meetingIds, topic keywords, group sort order, active; default profile `default-all` (locked, factory reset 10 / 8) | MeetingProfileWorkspace | P2 | partial: model and selection |
+| isExpected via included subgroups; out-of-scope ⚠ | engine | P1 | ✓ |
+| Manual snapshots (capture current list) | ManualAttendanceTab | P2 | not implemented |
+| Raise-hand entries + captures (dedup raise/lower) | RaiseHandPanel | P2 (better: SDK gives raised flag at connect) | partial: event entries |
+| **Deliberate deviation:** waiting-room time is shown separately and is NOT presence (owner 2026-11-17); AttendFlow counts it. Engine flag reproduces AttendFlow for the parity harness | applyJoinLikeEvent | P1 | ✓: option and separate row fields |
+| **Deliberate deviation:** no new record after a meeting ends (AttendFlow phantom-session bug) | Meeting.svelte effect | P1 | ✓: ignores subsequent events |
 
 ## Live meeting view (AttendFlow Meeting surface)
 

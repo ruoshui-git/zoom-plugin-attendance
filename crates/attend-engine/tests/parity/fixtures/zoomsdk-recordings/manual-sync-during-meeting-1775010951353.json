@@ -1,0 +1,352 @@
+{
+  "schemaVersion": 2,
+  "sessionId": "recording-manual-sync-during-meeting-1775010951353",
+  "startedAt": "2026-04-01T02:35:51.354Z",
+  "events": [
+    {
+      "type": "onMessage",
+      "timestamp": 1775010960000,
+      "data": {
+        "payload": {
+          "message": "{\"type\":\"CONFIG_SNAPSHOT\",\"version\":1,\"source\":\"client\",\"timestamp\":\"2026-04-01T02:36:00.677Z\",\"payload\":{\"configVersion\":4,\"rosterPeople\":[{\"personId\":19,\"canonicalName\":\"Ava Johnson\",\"pinyin\":\"avajohnson\",\"group\":\"Students-HighSchool\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:05.470Z\",\"updatedAt\":\"2026-03-31T20:10:05.470Z\"},{\"personId\":23,\"canonicalName\":\"Chloe Davis\",\"pinyin\":\"chloedavis\",\"group\":\"Students-ElementarySchool\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:05.470Z\",\"updatedAt\":\"2026-03-31T20:10:05.470Z\"},{\"personId\":17,\"canonicalName\":\"Daniel Cruz\",\"pinyin\":\"danielcruz\",\"group\":\"Staff-Support\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:05.470Z\",\"updatedAt\":\"2026-03-31T20:10:05.470Z\"},{\"personId\":13,\"canonicalName\":\"Emma Reed\",\"pinyin\":\"emmareed\",\"group\":\"Staff-Admin\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:05.470Z\",\"updatedAt\":\"2026-03-31T20:10:05.470Z\"},{\"personId\":20,\"canonicalName\":\"Ethan Miller\",\"pinyin\":\"ethanmiller\",\"group\":\"Students-HighSchool\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:05.470Z\",\"updatedAt\":\"2026-03-31T20:10:05.470Z\"},{\"personId\":18,\"canonicalName\":\"Grace Morgan\",\"pinyin\":\"gracemorgan\",\"group\":\"Staff-Support\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:05.470Z\",\"updatedAt\":\"2026-03-31T20:10:05.470Z\"},{\"personId\":16,\"canonicalName\":\"Liam Bennett\",\"pinyin\":\"liambennett\",\"group\":\"Staff-Teachers\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:05.470Z\",\"updatedAt\":\"2026-03-31T20:10:05.470Z\"},{\"personId\":21,\"canonicalName\":\"Lily Nguyen\",\"pinyin\":\"lilynguyen\",\"group\":\"Students-MiddleSchool\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:05.470Z\",\"updatedAt\":\"2026-03-31T20:10:05.470Z\"},{\"personId\":24,\"canonicalName\":\"Lucas Young\",\"pinyin\":\"lucasyoung\",\"group\":\"Students-ElementarySchool\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:05.470Z\",\"updatedAt\":\"2026-03-31T20:10:05.470Z\"},{\"personId\":22,\"canonicalName\":\"Mason Lee\",\"pinyin\":\"masonlee\",\"group\":\"Students-MiddleSchool\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:05.470Z\",\"updatedAt\":\"2026-03-31T20:10:05.470Z\"},{\"personId\":14,\"canonicalName\":\"Noah Brooks\",\"pinyin\":\"noahbrooks\",\"group\":\"Staff-Admin\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:05.470Z\",\"updatedAt\":\"2026-03-31T20:10:05.470Z\"},{\"personId\":15,\"canonicalName\":\"Olivia Carter\",\"pinyin\":\"oliviacarter\",\"group\":\"Staff-Teachers\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:05.470Z\",\"updatedAt\":\"2026-03-31T20:10:05.470Z\"},{\"personId\":4,\"canonicalName\":\"刘志远\",\"pinyin\":\"liuzhiyuan\",\"group\":\"员工-教师\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:04.203Z\",\"updatedAt\":\"2026-03-31T20:10:04.203Z\"},{\"personId\":11,\"canonicalName\":\"刘晨曦\",\"pinyin\":\"liuchenxi\",\"group\":\"学生-小学\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:04.203Z\",\"updatedAt\":\"2026-03-31T20:10:04.203Z\"},{\"personId\":5,\"canonicalName\":\"张国强\",\"pinyin\":\"zhangguoqiang\",\"group\":\"员工-后勤\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:04.203Z\",\"updatedAt\":\"2026-03-31T20:10:04.203Z\"},{\"personId\":10,\"canonicalName\":\"张欣怡\",\"pinyin\":\"zhangxinyi\",\"group\":\"学生-初中\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:04.203Z\",\"updatedAt\":\"2026-03-31T20:10:04.203Z\"},{\"personId\":2,\"canonicalName\":\"李文静\",\"pinyin\":\"liwenjing\",\"group\":\"员工-行政\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:04.203Z\",\"updatedAt\":\"2026-03-31T20:10:04.203Z\"},{\"personId\":9,\"canonicalName\":\"李浩然\",\"pinyin\":\"lihaoran\",\"group\":\"学生-初中\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:04.203Z\",\"updatedAt\":\"2026-03-31T20:10:04.203Z\"},{\"personId\":7,\"canonicalName\":\"王子涵\",\"pinyin\":\"wangzihan\",\"group\":\"学生-高中\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:04.203Z\",\"updatedAt\":\"2026-03-31T20:10:04.203Z\"},{\"personId\":1,\"canonicalName\":\"王晓彤\",\"pinyin\":\"wangxiaotong\",\"group\":\"员工-行政\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:04.203Z\",\"updatedAt\":\"2026-03-31T20:10:04.203Z\"},{\"personId\":12,\"canonicalName\":\"赵一诺\",\"pinyin\":\"zhaoyinuo\",\"group\":\"学生-小学\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:04.203Z\",\"updatedAt\":\"2026-03-31T20:10:04.203Z\"},{\"personId\":6,\"canonicalName\":\"赵美玲\",\"pinyin\":\"zhaomeiling\",\"group\":\"员工-后勤\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:04.203Z\",\"updatedAt\":\"2026-03-31T20:10:04.203Z\"},{\"personId\":3,\"canonicalName\":\"陈雅婷\",\"pinyin\":\"chenyating\",\"group\":\"员工-教师\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:04.203Z\",\"updatedAt\":\"2026-03-31T20:10:04.203Z\"},{\"personId\":8,\"canonicalName\":\"陈雨桐\",\"pinyin\":\"chenyutong\",\"group\":\"学生-高中\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:04.203Z\",\"updatedAt\":\"2026-03-31T20:10:04.203Z\"}],\"aliasMappings\":[{\"zoomName\":\"王晓彤-电脑\",\"personId\":1,\"notes\":\"\",\"id\":215},{\"zoomName\":\"李文静-iPad\",\"personId\":2,\"notes\":\"\",\"id\":216},{\"zoomName\":\"陈雅婷老师\",\"personId\":3,\"notes\":\"\",\"id\":217},{\"zoomName\":\"刘志远-平板\",\"personId\":4,\"notes\":\"\",\"id\":218},{\"zoomName\":\"张国强-后勤\",\"personId\":5,\"notes\":\"\",\"id\":219},{\"zoomName\":\"赵美玲-手机\",\"personId\":6,\"notes\":\"\",\"id\":220},{\"zoomName\":\"王子涵-学生端\",\"personId\":7,\"notes\":\"\",\"id\":221},{\"zoomName\":\"陈雨桐-家里\",\"personId\":8,\"notes\":\"\",\"id\":222},{\"zoomName\":\"李浩然-初中部\",\"personId\":9,\"notes\":\"\",\"id\":223},{\"zoomName\":\"张欣怡-平板\",\"personId\":10,\"notes\":\"\",\"id\":224},{\"zoomName\":\"刘晨曦-家长手机\",\"personId\":11,\"notes\":\"\",\"id\":225},{\"zoomName\":\"赵一诺-客厅设备\",\"personId\":12,\"notes\":\"\",\"id\":226},{\"zoomName\":\"Emma R. (Laptop)\",\"personId\":13,\"notes\":\"\",\"id\":227},{\"zoomName\":\"Noah B Phone\",\"personId\":14,\"notes\":\"\",\"id\":228},{\"zoomName\":\"Mrs Carter Zoom\",\"personId\":15,\"notes\":\"\",\"id\":229},{\"zoomName\":\"Liam B - Tablet\",\"personId\":16,\"notes\":\"\",\"id\":230},{\"zoomName\":\"Daniel C Ops\",\"personId\":17,\"notes\":\"\",\"id\":231},{\"zoomName\":\"Grace M Support\",\"personId\":18,\"notes\":\"\",\"id\":232},{\"zoomName\":\"Ava J Student\",\"personId\":19,\"notes\":\"\",\"id\":233},{\"zoomName\":\"Ethan M Student\",\"personId\":20,\"notes\":\"\",\"id\":234},{\"zoomName\":\"Lily N iPad\",\"personId\":21,\"notes\":\"\",\"id\":235},{\"zoomName\":\"Mason L Home\",\"personId\":22,\"notes\":\"\",\"id\":236},{\"zoomName\":\"Chloe D Family Device\",\"personId\":23,\"notes\":\"\",\"id\":237},{\"zoomName\":\"Lucas Y Parent Phone\",\"personId\":24,\"notes\":\"\",\"id\":238}],\"meetingProfiles\":[{\"id\":\"default-all\",\"name\":\"System Initial Profile/系统初始会议配制\",\"description\":\"Profile that is used when no other meeting configuration is available/无其它会议配置时使用的默认会议配置\",\"includedSubgroups\":[],\"lateAfterMinutes\":10,\"returnWindowMinutes\":8,\"meetingIds\":[],\"topicKeywords\":[],\"specialParticipants\":[],\"blacklist\":[],\"groupSortOrder\":[],\"active\":true,\"isDefault\":true},{\"id\":\"example-all-personnel\",\"name\":\"All Personnel Meeting\",\"description\":\"Meeting for everybody. Lateness rules apply.\",\"includedSubgroups\":[\"*\"],\"lateAfterMinutes\":5,\"returnWindowMinutes\":5,\"meetingIds\":[],\"topicKeywords\":[\"All Hands\",\"Town Hall\"],\"specialParticipants\":[],\"blacklist\":[],\"groupSortOrder\":[\"Staff-*\",\"Students-*\"],\"active\":true,\"isDefault\":false},{\"id\":\"example-all-personnel-zh\",\"name\":\"全员会议\",\"description\":\"统计所有人员。启用迟到规则。\",\"includedSubgroups\":[\"*\"],\"lateAfterMinutes\":5,\"returnWindowMinutes\":5,\"meetingIds\":[],\"topicKeywords\":[\"全体\",\"全员\",\"大会\"],\"specialParticipants\":[],\"blacklist\":[],\"groupSortOrder\":[\"员工-*\",\"学生-*\"],\"active\":true,\"isDefault\":false},{\"id\":\"example-personal-meeting\",\"name\":\"My Personal Meeting\",\"description\":\"Meeting ID fields override topic keywords during profile selection. This profile uses a fake Zoom Meeting ID example and is not the same as the app session ID.\",\"includedSubgroups\":[\"*\"],\"lateAfterMinutes\":5,\"returnWindowMinutes\":5,\"meetingIds\":[\"7492058316\"],\"topicKeywords\":[],\"specialParticipants\":[],\"blacklist\":[],\"groupSortOrder\":[],\"active\":true,\"isDefault\":false},{\"id\":\"example-personal-meeting-zh\",\"name\":\"我的个人会议\",\"description\":\"会议 ID 匹配会优先于主题关键词。这里使用的是虚构 Zoom 会议号示例，不是 App 会话 ID。\",\"includedSubgroups\":[\"*\"],\"lateAfterMinutes\":5,\"returnWindowMinutes\":5,\"meetingIds\":[\"7492058316\"],\"topicKeywords\":[],\"specialParticipants\":[],\"blacklist\":[],\"groupSortOrder\":[],\"active\":true,\"isDefault\":false},{\"id\":\"example-staff-meetings\",\"name\":\"Staff Meetings\",\"description\":\"Meeting for staff members only, exclude attendance for students. No lateness rules.\",\"includedSubgroups\":[\"Staff-*\"],\"lateAfterMinutes\":99999,\"returnWindowMinutes\":99999,\"meetingIds\":[],\"topicKeywords\":[\"Staff\"],\"specialParticipants\":[],\"blacklist\":[],\"groupSortOrder\":[\"Staff-Admin\",\"Staff-Teachers\",\"Staff-Support\"],\"active\":true,\"isDefault\":false},{\"id\":\"example-staff-meetings-zh\",\"name\":\"员工会议\",\"description\":\"仅统计员工出席，不统计学生。不启用严格迟到规则。\",\"includedSubgroups\":[\"员工-*\"],\"lateAfterMinutes\":15,\"returnWindowMinutes\":10,\"meetingIds\":[],\"topicKeywords\":[\"员工\"],\"specialParticipants\":[],\"blacklist\":[],\"groupSortOrder\":[\"员工-行政\",\"员工-教师\",\"员工-后勤\"],\"active\":true,\"isDefault\":false},{\"id\":\"example-student-meeting\",\"name\":\"Student Meeting\",\"description\":\"Meeting for students and teachers only, exclude attendance tracking for other groups. Lateness rules apply.\",\"includedSubgroups\":[\"Staff-Teachers\",\"Students-*\"],\"lateAfterMinutes\":5,\"returnWindowMinutes\":5,\"meetingIds\":[],\"topicKeywords\":[\"Student\"],\"specialParticipants\":[],\"blacklist\":[],\"groupSortOrder\":[\"Students-HighSchool\",\"Students-MiddleSchool\",\"Students-ElementarySchool\"],\"active\":true,\"isDefault\":false},{\"id\":\"example-student-meeting-zh\",\"name\":\"学生会议\",\"description\":\"仅统计学生和教师，其他分组不纳入考勤。启用迟到规则。\",\"includedSubgroups\":[\"员工-教师\",\"学生-*\"],\"lateAfterMinutes\":5,\"returnWindowMinutes\":5,\"meetingIds\":[],\"topicKeywords\":[\"学生\"],\"specialParticipants\":[],\"blacklist\":[],\"groupSortOrder\":[\"学生-高中\",\"学生-初中\",\"学生-小学\"],\"active\":true,\"isDefault\":false}],\"meetingScale\":\"compact\"}}"
+        },
+        "timestamp": 1775010960
+      },
+      "sequence": 1
+    }
+  ],
+  "timeline": [
+    {
+      "sequence": 1,
+      "timestamp": 1775010935886,
+      "relativeMs": -15468,
+      "category": "startup",
+      "type": "app_bootstrap",
+      "payload": {
+        "requestedContext": "zoom_sdk_config",
+        "timestamp": "2026-04-01T02:35:35.886Z"
+      }
+    },
+    {
+      "sequence": 2,
+      "timestamp": 1775010935886,
+      "relativeMs": -15468,
+      "category": "startup",
+      "type": "config_request",
+      "payload": {
+        "size": {
+          "width": 480,
+          "height": 360
+        },
+        "capabilities": [
+          "openUrl",
+          "getRunningContext",
+          "onRunningContextChange",
+          "getMeetingContext",
+          "onMyUserContextChange",
+          "getUserContext",
+          "getMeetingUUID",
+          "connect",
+          "postMessage",
+          "onConnect",
+          "onMessage",
+          "onMeeting",
+          "getMeetingParticipants",
+          "onParticipantChange",
+          "getWaitingRoomParticipants",
+          "onWaitingRoomParticipantJoin",
+          "onWaitingRoomParticipantLeave",
+          "onFeedbackReaction",
+          "onRemoveFeedbackReaction",
+          "removeAllFeedbackReaction",
+          "setFeedbackReaction",
+          "removeFeedbackReaction",
+          "expandApp",
+          "onExpandApp",
+          "appPopout",
+          "onAppPopout",
+          "onIncomingParticipantAudioChange",
+          "getSupportedJsApis",
+          "onMyReaction",
+          "onReaction",
+          "toggleParticipantMediaAudio",
+          "toggleParticipantMediaVideo",
+          "getWaitingRoomState",
+          "setWaitingRoomState",
+          "putParticipantToWaitingRoom",
+          "admitParticipantFromWaitingRoom",
+          "removeParticipant",
+          "putParticipantToWaitingRoom"
+        ]
+      }
+    },
+    {
+      "sequence": 3,
+      "timestamp": 1775010935886,
+      "relativeMs": -15468,
+      "category": "startup",
+      "type": "config_request",
+      "payload": {
+        "options": {
+          "size": {
+            "width": 480,
+            "height": 360
+          },
+          "capabilities": [
+            "openUrl",
+            "getRunningContext",
+            "onRunningContextChange",
+            "getMeetingContext",
+            "onMyUserContextChange",
+            "getUserContext",
+            "getMeetingUUID",
+            "connect",
+            "postMessage",
+            "onConnect",
+            "onMessage",
+            "onMeeting",
+            "getMeetingParticipants",
+            "onParticipantChange",
+            "getWaitingRoomParticipants",
+            "onWaitingRoomParticipantJoin",
+            "onWaitingRoomParticipantLeave",
+            "onFeedbackReaction",
+            "onRemoveFeedbackReaction",
+            "removeAllFeedbackReaction",
+            "setFeedbackReaction",
+            "removeFeedbackReaction",
+            "expandApp",
+            "onExpandApp",
+            "appPopout",
+            "onAppPopout",
+            "onIncomingParticipantAudioChange",
+            "getSupportedJsApis",
+            "onMyReaction",
+            "onReaction",
+            "toggleParticipantMediaAudio",
+            "toggleParticipantMediaVideo",
+            "getWaitingRoomState",
+            "setWaitingRoomState",
+            "putParticipantToWaitingRoom",
+            "admitParticipantFromWaitingRoom",
+            "removeParticipant",
+            "putParticipantToWaitingRoom"
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 4,
+      "timestamp": 1775010936006,
+      "relativeMs": -15348,
+      "category": "startup",
+      "type": "config_response",
+      "payload": {
+        "response": {
+          "auth": {
+            "status": "authorized",
+            "upgradable": true
+          },
+          "browserVersion": "webview2/146.0.3856.84",
+          "clientVersion": "7.0.1.34140",
+          "launchContext": {
+            "openBy": "user",
+            "origin": "App Launcher"
+          },
+          "media": {
+            "video": null
+          },
+          "product": "desktop",
+          "runningContext": "inMeeting",
+          "themeMode": "light",
+          "unsupportedApis": [],
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0;Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36 Edg/137.0.0.0"
+        }
+      }
+    },
+    {
+      "sequence": 5,
+      "timestamp": 1775010936006,
+      "relativeMs": -15348,
+      "category": "startup",
+      "type": "config_context_resolved",
+      "payload": {
+        "runningContext": "inMeeting"
+      }
+    },
+    {
+      "sequence": 6,
+      "timestamp": 1775010951355,
+      "relativeMs": 1,
+      "category": "startup",
+      "type": "recording_started",
+      "payload": {
+        "sessionId": "recording-manual-sync-during-meeting-1775010951353",
+        "metadata": {
+          "startedFrom": "console",
+          "context": "inMeeting",
+          "startedAt": "2026-04-01T02:35:51.353Z",
+          "meetingId": "1234509876",
+          "meetingTopic": "Admin's Personal Meeting Room",
+          "meetingUUID": "SOUOHeCKSKGwhkOuVvkafQ=="
+        }
+      }
+    },
+    {
+      "sequence": 7,
+      "timestamp": 1775010956096,
+      "relativeMs": 4742,
+      "category": "sdk_call",
+      "type": "getMeetingParticipants",
+      "payload": {
+        "response": {
+          "participants": [
+            {
+              "participantId": "16778240",
+              "participantUUID": "06B98A0E-C278-F521-C44D-AA75CBFA39EF",
+              "role": "host",
+              "screenName": "Admin"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 8,
+      "timestamp": 1775010956096,
+      "relativeMs": 4742,
+      "category": "sdk_call",
+      "type": "getWaitingRoomParticipants",
+      "payload": {
+        "response": {
+          "participants": []
+        }
+      }
+    },
+    {
+      "sequence": 9,
+      "timestamp": 1775010960647,
+      "relativeMs": 9293,
+      "category": "user_action",
+      "type": "trigger_sync",
+      "payload": {
+        "isMainClient": false,
+        "effectiveConnection": true
+      }
+    },
+    {
+      "sequence": 10,
+      "timestamp": 1775010960680,
+      "relativeMs": 9326,
+      "category": "sdk_event",
+      "type": "onMessage",
+      "payload": {
+        "payload": {
+          "message": "{\"type\":\"CONFIG_SNAPSHOT\",\"version\":1,\"source\":\"client\",\"timestamp\":\"2026-04-01T02:36:00.677Z\",\"payload\":{\"configVersion\":4,\"rosterPeople\":[{\"personId\":19,\"canonicalName\":\"Ava Johnson\",\"pinyin\":\"avajohnson\",\"group\":\"Students-HighSchool\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:05.470Z\",\"updatedAt\":\"2026-03-31T20:10:05.470Z\"},{\"personId\":23,\"canonicalName\":\"Chloe Davis\",\"pinyin\":\"chloedavis\",\"group\":\"Students-ElementarySchool\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:05.470Z\",\"updatedAt\":\"2026-03-31T20:10:05.470Z\"},{\"personId\":17,\"canonicalName\":\"Daniel Cruz\",\"pinyin\":\"danielcruz\",\"group\":\"Staff-Support\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:05.470Z\",\"updatedAt\":\"2026-03-31T20:10:05.470Z\"},{\"personId\":13,\"canonicalName\":\"Emma Reed\",\"pinyin\":\"emmareed\",\"group\":\"Staff-Admin\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:05.470Z\",\"updatedAt\":\"2026-03-31T20:10:05.470Z\"},{\"personId\":20,\"canonicalName\":\"Ethan Miller\",\"pinyin\":\"ethanmiller\",\"group\":\"Students-HighSchool\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:05.470Z\",\"updatedAt\":\"2026-03-31T20:10:05.470Z\"},{\"personId\":18,\"canonicalName\":\"Grace Morgan\",\"pinyin\":\"gracemorgan\",\"group\":\"Staff-Support\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:05.470Z\",\"updatedAt\":\"2026-03-31T20:10:05.470Z\"},{\"personId\":16,\"canonicalName\":\"Liam Bennett\",\"pinyin\":\"liambennett\",\"group\":\"Staff-Teachers\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:05.470Z\",\"updatedAt\":\"2026-03-31T20:10:05.470Z\"},{\"personId\":21,\"canonicalName\":\"Lily Nguyen\",\"pinyin\":\"lilynguyen\",\"group\":\"Students-MiddleSchool\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:05.470Z\",\"updatedAt\":\"2026-03-31T20:10:05.470Z\"},{\"personId\":24,\"canonicalName\":\"Lucas Young\",\"pinyin\":\"lucasyoung\",\"group\":\"Students-ElementarySchool\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:05.470Z\",\"updatedAt\":\"2026-03-31T20:10:05.470Z\"},{\"personId\":22,\"canonicalName\":\"Mason Lee\",\"pinyin\":\"masonlee\",\"group\":\"Students-MiddleSchool\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:05.470Z\",\"updatedAt\":\"2026-03-31T20:10:05.470Z\"},{\"personId\":14,\"canonicalName\":\"Noah Brooks\",\"pinyin\":\"noahbrooks\",\"group\":\"Staff-Admin\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:05.470Z\",\"updatedAt\":\"2026-03-31T20:10:05.470Z\"},{\"personId\":15,\"canonicalName\":\"Olivia Carter\",\"pinyin\":\"oliviacarter\",\"group\":\"Staff-Teachers\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:05.470Z\",\"updatedAt\":\"2026-03-31T20:10:05.470Z\"},{\"personId\":4,\"canonicalName\":\"刘志远\",\"pinyin\":\"liuzhiyuan\",\"group\":\"员工-教师\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:04.203Z\",\"updatedAt\":\"2026-03-31T20:10:04.203Z\"},{\"personId\":11,\"canonicalName\":\"刘晨曦\",\"pinyin\":\"liuchenxi\",\"group\":\"学生-小学\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:04.203Z\",\"updatedAt\":\"2026-03-31T20:10:04.203Z\"},{\"personId\":5,\"canonicalName\":\"张国强\",\"pinyin\":\"zhangguoqiang\",\"group\":\"员工-后勤\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:04.203Z\",\"updatedAt\":\"2026-03-31T20:10:04.203Z\"},{\"personId\":10,\"canonicalName\":\"张欣怡\",\"pinyin\":\"zhangxinyi\",\"group\":\"学生-初中\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:04.203Z\",\"updatedAt\":\"2026-03-31T20:10:04.203Z\"},{\"personId\":2,\"canonicalName\":\"李文静\",\"pinyin\":\"liwenjing\",\"group\":\"员工-行政\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:04.203Z\",\"updatedAt\":\"2026-03-31T20:10:04.203Z\"},{\"personId\":9,\"canonicalName\":\"李浩然\",\"pinyin\":\"lihaoran\",\"group\":\"学生-初中\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:04.203Z\",\"updatedAt\":\"2026-03-31T20:10:04.203Z\"},{\"personId\":7,\"canonicalName\":\"王子涵\",\"pinyin\":\"wangzihan\",\"group\":\"学生-高中\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:04.203Z\",\"updatedAt\":\"2026-03-31T20:10:04.203Z\"},{\"personId\":1,\"canonicalName\":\"王晓彤\",\"pinyin\":\"wangxiaotong\",\"group\":\"员工-行政\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:04.203Z\",\"updatedAt\":\"2026-03-31T20:10:04.203Z\"},{\"personId\":12,\"canonicalName\":\"赵一诺\",\"pinyin\":\"zhaoyinuo\",\"group\":\"学生-小学\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:04.203Z\",\"updatedAt\":\"2026-03-31T20:10:04.203Z\"},{\"personId\":6,\"canonicalName\":\"赵美玲\",\"pinyin\":\"zhaomeiling\",\"group\":\"员工-后勤\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:04.203Z\",\"updatedAt\":\"2026-03-31T20:10:04.203Z\"},{\"personId\":3,\"canonicalName\":\"陈雅婷\",\"pinyin\":\"chenyating\",\"group\":\"员工-教师\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:04.203Z\",\"updatedAt\":\"2026-03-31T20:10:04.203Z\"},{\"personId\":8,\"canonicalName\":\"陈雨桐\",\"pinyin\":\"chenyutong\",\"group\":\"学生-高中\",\"active\":true,\"createdAt\":\"2026-03-31T20:10:04.203Z\",\"updatedAt\":\"2026-03-31T20:10:04.203Z\"}],\"aliasMappings\":[{\"zoomName\":\"王晓彤-电脑\",\"personId\":1,\"notes\":\"\",\"id\":215},{\"zoomName\":\"李文静-iPad\",\"personId\":2,\"notes\":\"\",\"id\":216},{\"zoomName\":\"陈雅婷老师\",\"personId\":3,\"notes\":\"\",\"id\":217},{\"zoomName\":\"刘志远-平板\",\"personId\":4,\"notes\":\"\",\"id\":218},{\"zoomName\":\"张国强-后勤\",\"personId\":5,\"notes\":\"\",\"id\":219},{\"zoomName\":\"赵美玲-手机\",\"personId\":6,\"notes\":\"\",\"id\":220},{\"zoomName\":\"王子涵-学生端\",\"personId\":7,\"notes\":\"\",\"id\":221},{\"zoomName\":\"陈雨桐-家里\",\"personId\":8,\"notes\":\"\",\"id\":222},{\"zoomName\":\"李浩然-初中部\",\"personId\":9,\"notes\":\"\",\"id\":223},{\"zoomName\":\"张欣怡-平板\",\"personId\":10,\"notes\":\"\",\"id\":224},{\"zoomName\":\"刘晨曦-家长手机\",\"personId\":11,\"notes\":\"\",\"id\":225},{\"zoomName\":\"赵一诺-客厅设备\",\"personId\":12,\"notes\":\"\",\"id\":226},{\"zoomName\":\"Emma R. (Laptop)\",\"personId\":13,\"notes\":\"\",\"id\":227},{\"zoomName\":\"Noah B Phone\",\"personId\":14,\"notes\":\"\",\"id\":228},{\"zoomName\":\"Mrs Carter Zoom\",\"personId\":15,\"notes\":\"\",\"id\":229},{\"zoomName\":\"Liam B - Tablet\",\"personId\":16,\"notes\":\"\",\"id\":230},{\"zoomName\":\"Daniel C Ops\",\"personId\":17,\"notes\":\"\",\"id\":231},{\"zoomName\":\"Grace M Support\",\"personId\":18,\"notes\":\"\",\"id\":232},{\"zoomName\":\"Ava J Student\",\"personId\":19,\"notes\":\"\",\"id\":233},{\"zoomName\":\"Ethan M Student\",\"personId\":20,\"notes\":\"\",\"id\":234},{\"zoomName\":\"Lily N iPad\",\"personId\":21,\"notes\":\"\",\"id\":235},{\"zoomName\":\"Mason L Home\",\"personId\":22,\"notes\":\"\",\"id\":236},{\"zoomName\":\"Chloe D Family Device\",\"personId\":23,\"notes\":\"\",\"id\":237},{\"zoomName\":\"Lucas Y Parent Phone\",\"personId\":24,\"notes\":\"\",\"id\":238}],\"meetingProfiles\":[{\"id\":\"default-all\",\"name\":\"System Initial Profile/系统初始会议配制\",\"description\":\"Profile that is used when no other meeting configuration is available/无其它会议配置时使用的默认会议配置\",\"includedSubgroups\":[],\"lateAfterMinutes\":10,\"returnWindowMinutes\":8,\"meetingIds\":[],\"topicKeywords\":[],\"specialParticipants\":[],\"blacklist\":[],\"groupSortOrder\":[],\"active\":true,\"isDefault\":true},{\"id\":\"example-all-personnel\",\"name\":\"All Personnel Meeting\",\"description\":\"Meeting for everybody. Lateness rules apply.\",\"includedSubgroups\":[\"*\"],\"lateAfterMinutes\":5,\"returnWindowMinutes\":5,\"meetingIds\":[],\"topicKeywords\":[\"All Hands\",\"Town Hall\"],\"specialParticipants\":[],\"blacklist\":[],\"groupSortOrder\":[\"Staff-*\",\"Students-*\"],\"active\":true,\"isDefault\":false},{\"id\":\"example-all-personnel-zh\",\"name\":\"全员会议\",\"description\":\"统计所有人员。启用迟到规则。\",\"includedSubgroups\":[\"*\"],\"lateAfterMinutes\":5,\"returnWindowMinutes\":5,\"meetingIds\":[],\"topicKeywords\":[\"全体\",\"全员\",\"大会\"],\"specialParticipants\":[],\"blacklist\":[],\"groupSortOrder\":[\"员工-*\",\"学生-*\"],\"active\":true,\"isDefault\":false},{\"id\":\"example-personal-meeting\",\"name\":\"My Personal Meeting\",\"description\":\"Meeting ID fields override topic keywords during profile selection. This profile uses a fake Zoom Meeting ID example and is not the same as the app session ID.\",\"includedSubgroups\":[\"*\"],\"lateAfterMinutes\":5,\"returnWindowMinutes\":5,\"meetingIds\":[\"7492058316\"],\"topicKeywords\":[],\"specialParticipants\":[],\"blacklist\":[],\"groupSortOrder\":[],\"active\":true,\"isDefault\":false},{\"id\":\"example-personal-meeting-zh\",\"name\":\"我的个人会议\",\"description\":\"会议 ID 匹配会优先于主题关键词。这里使用的是虚构 Zoom 会议号示例，不是 App 会话 ID。\",\"includedSubgroups\":[\"*\"],\"lateAfterMinutes\":5,\"returnWindowMinutes\":5,\"meetingIds\":[\"7492058316\"],\"topicKeywords\":[],\"specialParticipants\":[],\"blacklist\":[],\"groupSortOrder\":[],\"active\":true,\"isDefault\":false},{\"id\":\"example-staff-meetings\",\"name\":\"Staff Meetings\",\"description\":\"Meeting for staff members only, exclude attendance for students. No lateness rules.\",\"includedSubgroups\":[\"Staff-*\"],\"lateAfterMinutes\":99999,\"returnWindowMinutes\":99999,\"meetingIds\":[],\"topicKeywords\":[\"Staff\"],\"specialParticipants\":[],\"blacklist\":[],\"groupSortOrder\":[\"Staff-Admin\",\"Staff-Teachers\",\"Staff-Support\"],\"active\":true,\"isDefault\":false},{\"id\":\"example-staff-meetings-zh\",\"name\":\"员工会议\",\"description\":\"仅统计员工出席，不统计学生。不启用严格迟到规则。\",\"includedSubgroups\":[\"员工-*\"],\"lateAfterMinutes\":15,\"returnWindowMinutes\":10,\"meetingIds\":[],\"topicKeywords\":[\"员工\"],\"specialParticipants\":[],\"blacklist\":[],\"groupSortOrder\":[\"员工-行政\",\"员工-教师\",\"员工-后勤\"],\"active\":true,\"isDefault\":false},{\"id\":\"example-student-meeting\",\"name\":\"Student Meeting\",\"description\":\"Meeting for students and teachers only, exclude attendance tracking for other groups. Lateness rules apply.\",\"includedSubgroups\":[\"Staff-Teachers\",\"Students-*\"],\"lateAfterMinutes\":5,\"returnWindowMinutes\":5,\"meetingIds\":[],\"topicKeywords\":[\"Student\"],\"specialParticipants\":[],\"blacklist\":[],\"groupSortOrder\":[\"Students-HighSchool\",\"Students-MiddleSchool\",\"Students-ElementarySchool\"],\"active\":true,\"isDefault\":false},{\"id\":\"example-student-meeting-zh\",\"name\":\"学生会议\",\"description\":\"仅统计学生和教师，其他分组不纳入考勤。启用迟到规则。\",\"includedSubgroups\":[\"员工-教师\",\"学生-*\"],\"lateAfterMinutes\":5,\"returnWindowMinutes\":5,\"meetingIds\":[],\"topicKeywords\":[\"学生\"],\"specialParticipants\":[],\"blacklist\":[],\"groupSortOrder\":[\"学生-高中\",\"学生-初中\",\"学生-小学\"],\"active\":true,\"isDefault\":false}],\"meetingScale\":\"compact\"}}"
+        },
+        "timestamp": 1775010960
+      }
+    },
+    {
+      "sequence": 11,
+      "timestamp": 1775010966091,
+      "relativeMs": 14737,
+      "category": "sdk_call",
+      "type": "getMeetingParticipants",
+      "payload": {
+        "response": {
+          "participants": [
+            {
+              "participantId": "16778240",
+              "participantUUID": "06B98A0E-C278-F521-C44D-AA75CBFA39EF",
+              "role": "host",
+              "screenName": "Admin"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 12,
+      "timestamp": 1775010966091,
+      "relativeMs": 14737,
+      "category": "sdk_call",
+      "type": "getWaitingRoomParticipants",
+      "payload": {
+        "response": {
+          "participants": []
+        }
+      }
+    },
+    {
+      "sequence": 13,
+      "timestamp": 1775010976094,
+      "relativeMs": 24740,
+      "category": "sdk_call",
+      "type": "getMeetingParticipants",
+      "payload": {
+        "response": {
+          "participants": [
+            {
+              "participantId": "16778240",
+              "participantUUID": "06B98A0E-C278-F521-C44D-AA75CBFA39EF",
+              "role": "host",
+              "screenName": "Admin"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 14,
+      "timestamp": 1775010976094,
+      "relativeMs": 24740,
+      "category": "sdk_call",
+      "type": "getWaitingRoomParticipants",
+      "payload": {
+        "response": {
+          "participants": []
+        }
+      }
+    },
+    {
+      "sequence": 15,
+      "timestamp": 1775010986102,
+      "relativeMs": 34748,
+      "category": "sdk_call",
+      "type": "getMeetingParticipants",
+      "payload": {
+        "response": {
+          "participants": [
+            {
+              "participantId": "16778240",
+              "participantUUID": "06B98A0E-C278-F521-C44D-AA75CBFA39EF",
+              "role": "host",
+              "screenName": "Admin"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 16,
+      "timestamp": 1775010986102,
+      "relativeMs": 34748,
+      "category": "sdk_call",
+      "type": "getWaitingRoomParticipants",
+      "payload": {
+        "response": {
+          "participants": []
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "startedFrom": "console",
+    "context": "inMeeting",
+    "startedAt": "2026-04-01T02:35:51.353Z",
+    "meetingId": "1234509876",
+    "meetingTopic": "Admin's Personal Meeting Room",
+    "meetingUUID": "SOUOHeCKSKGwhkOuVvkafQ=="
+  }
+}

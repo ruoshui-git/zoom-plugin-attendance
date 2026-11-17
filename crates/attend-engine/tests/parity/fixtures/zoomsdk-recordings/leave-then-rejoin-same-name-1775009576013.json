@@ -1,0 +1,623 @@
+{
+  "schemaVersion": 2,
+  "sessionId": "recording-leave-then-rejoin-same-name-1775009576013",
+  "startedAt": "2026-04-01T02:12:56.122Z",
+  "events": [
+    {
+      "type": "onParticipantChange",
+      "timestamp": 1775009598000,
+      "data": {
+        "participants": [
+          {
+            "participantId": 16782336,
+            "participantUUID": "3D419A75-1482-62B9-747C-C3F403017FDE",
+            "role": "attendee",
+            "screenName": "Lucas Young",
+            "status": "leave"
+          }
+        ],
+        "timestamp": 1775009598
+      },
+      "sequence": 1
+    },
+    {
+      "type": "onParticipantChange",
+      "timestamp": 1775009615000,
+      "data": {
+        "participants": [
+          {
+            "participantId": 16783360,
+            "participantUUID": "8E4AA16B-3505-1E74-99C5-D1747AA7998E",
+            "role": "attendee",
+            "screenName": "Lucas Young",
+            "status": "join"
+          }
+        ],
+        "timestamp": 1775009615
+      },
+      "sequence": 2
+    }
+  ],
+  "timeline": [
+    {
+      "sequence": 1,
+      "timestamp": 1775009466398,
+      "relativeMs": -109724,
+      "category": "startup",
+      "type": "app_bootstrap",
+      "payload": {
+        "requestedContext": "zoom_sdk_config",
+        "timestamp": "2026-04-01T02:11:06.397Z"
+      }
+    },
+    {
+      "sequence": 2,
+      "timestamp": 1775009466398,
+      "relativeMs": -109724,
+      "category": "startup",
+      "type": "config_request",
+      "payload": {
+        "size": {
+          "width": 480,
+          "height": 360
+        },
+        "capabilities": [
+          "openUrl",
+          "getRunningContext",
+          "onRunningContextChange",
+          "getMeetingContext",
+          "onMyUserContextChange",
+          "getUserContext",
+          "getMeetingUUID",
+          "connect",
+          "postMessage",
+          "onConnect",
+          "onMessage",
+          "onMeeting",
+          "getMeetingParticipants",
+          "onParticipantChange",
+          "getWaitingRoomParticipants",
+          "onWaitingRoomParticipantJoin",
+          "onWaitingRoomParticipantLeave",
+          "onFeedbackReaction",
+          "onRemoveFeedbackReaction",
+          "removeAllFeedbackReaction",
+          "setFeedbackReaction",
+          "removeFeedbackReaction",
+          "expandApp",
+          "onExpandApp",
+          "appPopout",
+          "onAppPopout",
+          "onIncomingParticipantAudioChange",
+          "getSupportedJsApis",
+          "onMyReaction",
+          "onReaction",
+          "toggleParticipantMediaAudio",
+          "toggleParticipantMediaVideo",
+          "getWaitingRoomState",
+          "setWaitingRoomState",
+          "putParticipantToWaitingRoom",
+          "admitParticipantFromWaitingRoom",
+          "removeParticipant",
+          "putParticipantToWaitingRoom"
+        ]
+      }
+    },
+    {
+      "sequence": 3,
+      "timestamp": 1775009466398,
+      "relativeMs": -109724,
+      "category": "startup",
+      "type": "config_request",
+      "payload": {
+        "options": {
+          "size": {
+            "width": 480,
+            "height": 360
+          },
+          "capabilities": [
+            "openUrl",
+            "getRunningContext",
+            "onRunningContextChange",
+            "getMeetingContext",
+            "onMyUserContextChange",
+            "getUserContext",
+            "getMeetingUUID",
+            "connect",
+            "postMessage",
+            "onConnect",
+            "onMessage",
+            "onMeeting",
+            "getMeetingParticipants",
+            "onParticipantChange",
+            "getWaitingRoomParticipants",
+            "onWaitingRoomParticipantJoin",
+            "onWaitingRoomParticipantLeave",
+            "onFeedbackReaction",
+            "onRemoveFeedbackReaction",
+            "removeAllFeedbackReaction",
+            "setFeedbackReaction",
+            "removeFeedbackReaction",
+            "expandApp",
+            "onExpandApp",
+            "appPopout",
+            "onAppPopout",
+            "onIncomingParticipantAudioChange",
+            "getSupportedJsApis",
+            "onMyReaction",
+            "onReaction",
+            "toggleParticipantMediaAudio",
+            "toggleParticipantMediaVideo",
+            "getWaitingRoomState",
+            "setWaitingRoomState",
+            "putParticipantToWaitingRoom",
+            "admitParticipantFromWaitingRoom",
+            "removeParticipant",
+            "putParticipantToWaitingRoom"
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 4,
+      "timestamp": 1775009466494,
+      "relativeMs": -109628,
+      "category": "startup",
+      "type": "config_response",
+      "payload": {
+        "response": {
+          "auth": {
+            "status": "authorized",
+            "upgradable": true
+          },
+          "browserVersion": "webview2/146.0.3856.84",
+          "clientVersion": "7.0.1.34140",
+          "launchContext": {
+            "openBy": "user",
+            "origin": "App Launcher"
+          },
+          "media": {
+            "video": null
+          },
+          "product": "desktop",
+          "runningContext": "inMeeting",
+          "themeMode": "light",
+          "unsupportedApis": [],
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0;Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36 Edg/137.0.0.0"
+        }
+      }
+    },
+    {
+      "sequence": 5,
+      "timestamp": 1775009466494,
+      "relativeMs": -109628,
+      "category": "startup",
+      "type": "config_context_resolved",
+      "payload": {
+        "runningContext": "inMeeting"
+      }
+    },
+    {
+      "sequence": 6,
+      "timestamp": 1775009576122,
+      "relativeMs": 0,
+      "category": "startup",
+      "type": "recording_started",
+      "payload": {
+        "sessionId": "recording-leave-then-rejoin-same-name-1775009576013",
+        "metadata": {
+          "startedFrom": "console",
+          "context": "inMeeting",
+          "startedAt": "2026-04-01T02:12:56.013Z",
+          "meetingId": "1234509876",
+          "meetingTopic": "Admin's Personal Meeting Room",
+          "meetingUUID": "SBHZLJlJSSScmuwbYmpFIA=="
+        }
+      }
+    },
+    {
+      "sequence": 7,
+      "timestamp": 1775009576675,
+      "relativeMs": 553,
+      "category": "sdk_call",
+      "type": "getMeetingParticipants",
+      "payload": {
+        "response": {
+          "participants": [
+            {
+              "participantId": "16782336",
+              "participantUUID": "3D419A75-1482-62B9-747C-C3F403017FDE",
+              "role": "attendee",
+              "screenName": "Lucas Young"
+            },
+            {
+              "participantId": "16778240",
+              "participantUUID": "CC83746E-839A-DF8A-9572-B90A99ADE70B",
+              "role": "host",
+              "screenName": "Admin"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 8,
+      "timestamp": 1775009576675,
+      "relativeMs": 553,
+      "category": "sdk_call",
+      "type": "getWaitingRoomParticipants",
+      "payload": {
+        "response": {
+          "participants": []
+        }
+      }
+    },
+    {
+      "sequence": 9,
+      "timestamp": 1775009586797,
+      "relativeMs": 10675,
+      "category": "sdk_call",
+      "type": "getWaitingRoomParticipants",
+      "payload": {
+        "response": {
+          "participants": []
+        }
+      }
+    },
+    {
+      "sequence": 10,
+      "timestamp": 1775009586832,
+      "relativeMs": 10710,
+      "category": "sdk_call",
+      "type": "getMeetingParticipants",
+      "payload": {
+        "response": {
+          "participants": [
+            {
+              "participantId": "16782336",
+              "participantUUID": "3D419A75-1482-62B9-747C-C3F403017FDE",
+              "role": "attendee",
+              "screenName": "Lucas Young"
+            },
+            {
+              "participantId": "16778240",
+              "participantUUID": "CC83746E-839A-DF8A-9572-B90A99ADE70B",
+              "role": "host",
+              "screenName": "Admin"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 11,
+      "timestamp": 1775009596680,
+      "relativeMs": 20558,
+      "category": "sdk_call",
+      "type": "getMeetingParticipants",
+      "payload": {
+        "response": {
+          "participants": [
+            {
+              "participantId": "16782336",
+              "participantUUID": "3D419A75-1482-62B9-747C-C3F403017FDE",
+              "role": "attendee",
+              "screenName": "Lucas Young"
+            },
+            {
+              "participantId": "16778240",
+              "participantUUID": "CC83746E-839A-DF8A-9572-B90A99ADE70B",
+              "role": "host",
+              "screenName": "Admin"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 12,
+      "timestamp": 1775009596680,
+      "relativeMs": 20558,
+      "category": "sdk_call",
+      "type": "getWaitingRoomParticipants",
+      "payload": {
+        "response": {
+          "participants": []
+        }
+      }
+    },
+    {
+      "sequence": 13,
+      "timestamp": 1775009598321,
+      "relativeMs": 22199,
+      "category": "sdk_event",
+      "type": "onParticipantChange",
+      "payload": {
+        "participants": [
+          {
+            "participantId": 16782336,
+            "participantUUID": "3D419A75-1482-62B9-747C-C3F403017FDE",
+            "role": "attendee",
+            "screenName": "Lucas Young",
+            "status": "leave"
+          }
+        ],
+        "timestamp": 1775009598
+      }
+    },
+    {
+      "sequence": 14,
+      "timestamp": 1775009599334,
+      "relativeMs": 23212,
+      "category": "sdk_call",
+      "type": "getMeetingParticipants",
+      "payload": {
+        "response": {
+          "participants": [
+            {
+              "participantId": "16778240",
+              "participantUUID": "CC83746E-839A-DF8A-9572-B90A99ADE70B",
+              "role": "host",
+              "screenName": "Admin"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 15,
+      "timestamp": 1775009599335,
+      "relativeMs": 23213,
+      "category": "sdk_call",
+      "type": "getWaitingRoomParticipants",
+      "payload": {
+        "response": {
+          "participants": []
+        }
+      }
+    },
+    {
+      "sequence": 16,
+      "timestamp": 1775009606672,
+      "relativeMs": 30550,
+      "category": "sdk_call",
+      "type": "getMeetingParticipants",
+      "payload": {
+        "response": {
+          "participants": [
+            {
+              "participantId": "16778240",
+              "participantUUID": "CC83746E-839A-DF8A-9572-B90A99ADE70B",
+              "role": "host",
+              "screenName": "Admin"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 17,
+      "timestamp": 1775009606672,
+      "relativeMs": 30550,
+      "category": "sdk_call",
+      "type": "getWaitingRoomParticipants",
+      "payload": {
+        "response": {
+          "participants": []
+        }
+      }
+    },
+    {
+      "sequence": 18,
+      "timestamp": 1775009615121,
+      "relativeMs": 38999,
+      "category": "sdk_event",
+      "type": "onParticipantChange",
+      "payload": {
+        "participants": [
+          {
+            "participantId": 16783360,
+            "participantUUID": "8E4AA16B-3505-1E74-99C5-D1747AA7998E",
+            "role": "attendee",
+            "screenName": "Lucas Young",
+            "status": "join"
+          }
+        ],
+        "timestamp": 1775009615
+      }
+    },
+    {
+      "sequence": 19,
+      "timestamp": 1775009616127,
+      "relativeMs": 40005,
+      "category": "sdk_call",
+      "type": "getMeetingParticipants",
+      "payload": {
+        "response": {
+          "participants": [
+            {
+              "participantId": "16783360",
+              "participantUUID": "8E4AA16B-3505-1E74-99C5-D1747AA7998E",
+              "role": "attendee",
+              "screenName": "Lucas Young"
+            },
+            {
+              "participantId": "16778240",
+              "participantUUID": "CC83746E-839A-DF8A-9572-B90A99ADE70B",
+              "role": "host",
+              "screenName": "Admin"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 20,
+      "timestamp": 1775009616127,
+      "relativeMs": 40005,
+      "category": "sdk_call",
+      "type": "getWaitingRoomParticipants",
+      "payload": {
+        "response": {
+          "participants": []
+        }
+      }
+    },
+    {
+      "sequence": 21,
+      "timestamp": 1775009616669,
+      "relativeMs": 40547,
+      "category": "sdk_call",
+      "type": "getMeetingParticipants",
+      "payload": {
+        "response": {
+          "participants": [
+            {
+              "participantId": "16783360",
+              "participantUUID": "8E4AA16B-3505-1E74-99C5-D1747AA7998E",
+              "role": "attendee",
+              "screenName": "Lucas Young"
+            },
+            {
+              "participantId": "16778240",
+              "participantUUID": "CC83746E-839A-DF8A-9572-B90A99ADE70B",
+              "role": "host",
+              "screenName": "Admin"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 22,
+      "timestamp": 1775009616670,
+      "relativeMs": 40548,
+      "category": "sdk_call",
+      "type": "getWaitingRoomParticipants",
+      "payload": {
+        "response": {
+          "participants": []
+        }
+      }
+    },
+    {
+      "sequence": 23,
+      "timestamp": 1775009626666,
+      "relativeMs": 50544,
+      "category": "sdk_call",
+      "type": "getMeetingParticipants",
+      "payload": {
+        "response": {
+          "participants": [
+            {
+              "participantId": "16783360",
+              "participantUUID": "8E4AA16B-3505-1E74-99C5-D1747AA7998E",
+              "role": "attendee",
+              "screenName": "Lucas Young"
+            },
+            {
+              "participantId": "16778240",
+              "participantUUID": "CC83746E-839A-DF8A-9572-B90A99ADE70B",
+              "role": "host",
+              "screenName": "Admin"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 24,
+      "timestamp": 1775009626667,
+      "relativeMs": 50545,
+      "category": "sdk_call",
+      "type": "getWaitingRoomParticipants",
+      "payload": {
+        "response": {
+          "participants": []
+        }
+      }
+    },
+    {
+      "sequence": 25,
+      "timestamp": 1775009636680,
+      "relativeMs": 60558,
+      "category": "sdk_call",
+      "type": "getMeetingParticipants",
+      "payload": {
+        "response": {
+          "participants": [
+            {
+              "participantId": "16783360",
+              "participantUUID": "8E4AA16B-3505-1E74-99C5-D1747AA7998E",
+              "role": "attendee",
+              "screenName": "Lucas Young"
+            },
+            {
+              "participantId": "16778240",
+              "participantUUID": "CC83746E-839A-DF8A-9572-B90A99ADE70B",
+              "role": "host",
+              "screenName": "Admin"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 26,
+      "timestamp": 1775009636680,
+      "relativeMs": 60558,
+      "category": "sdk_call",
+      "type": "getWaitingRoomParticipants",
+      "payload": {
+        "response": {
+          "participants": []
+        }
+      }
+    },
+    {
+      "sequence": 27,
+      "timestamp": 1775009646777,
+      "relativeMs": 70655,
+      "category": "sdk_call",
+      "type": "getMeetingParticipants",
+      "payload": {
+        "response": {
+          "participants": [
+            {
+              "participantId": "16783360",
+              "participantUUID": "8E4AA16B-3505-1E74-99C5-D1747AA7998E",
+              "role": "attendee",
+              "screenName": "Lucas Young"
+            },
+            {
+              "participantId": "16778240",
+              "participantUUID": "CC83746E-839A-DF8A-9572-B90A99ADE70B",
+              "role": "host",
+              "screenName": "Admin"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 28,
+      "timestamp": 1775009646845,
+      "relativeMs": 70723,
+      "category": "sdk_call",
+      "type": "getWaitingRoomParticipants",
+      "payload": {
+        "response": {
+          "participants": []
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "startedFrom": "console",
+    "context": "inMeeting",
+    "startedAt": "2026-04-01T02:12:56.013Z",
+    "meetingId": "1234509876",
+    "meetingTopic": "Admin's Personal Meeting Room",
+    "meetingUUID": "SBHZLJlJSSScmuwbYmpFIA=="
+  }
+}

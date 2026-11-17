@@ -1,0 +1,564 @@
+{
+  "schemaVersion": 2,
+  "sessionId": "recording-1775009012414",
+  "startedAt": "2026-04-01T02:03:32.536Z",
+  "events": [
+    {
+      "type": "onWaitingRoomParticipantJoin",
+      "timestamp": 1775009034000,
+      "data": {
+        "participant": {
+          "action": "joinMeeting",
+          "participantUUID": "29FCE6F0-D35C-109F-BB2E-B80A67C50D56",
+          "screenName": "赵一诺"
+        },
+        "timestamp": 1775009034
+      },
+      "sequence": 1
+    },
+    {
+      "type": "onParticipantChange",
+      "timestamp": 1775009051000,
+      "data": {
+        "participants": [
+          {
+            "participantId": 16781312,
+            "participantUUID": "29FCE6F0-D35C-109F-BB2E-B80A67C50D56",
+            "role": "attendee",
+            "screenName": "赵一诺",
+            "status": "join"
+          }
+        ],
+        "timestamp": 1775009051
+      },
+      "sequence": 2
+    },
+    {
+      "type": "onWaitingRoomParticipantLeave",
+      "timestamp": 1775009051000,
+      "data": {
+        "participant": {
+          "participantUUID": "29FCE6F0-D35C-109F-BB2E-B80A67C50D56",
+          "screenName": "赵一诺"
+        },
+        "timestamp": 1775009051
+      },
+      "sequence": 3
+    }
+  ],
+  "timeline": [
+    {
+      "sequence": 1,
+      "timestamp": 1775008908725,
+      "relativeMs": -103811,
+      "category": "startup",
+      "type": "app_bootstrap",
+      "payload": {
+        "requestedContext": "zoom_sdk_config",
+        "timestamp": "2026-04-01T02:01:48.724Z"
+      }
+    },
+    {
+      "sequence": 2,
+      "timestamp": 1775008908725,
+      "relativeMs": -103811,
+      "category": "startup",
+      "type": "config_request",
+      "payload": {
+        "size": {
+          "width": 480,
+          "height": 360
+        },
+        "capabilities": [
+          "openUrl",
+          "getRunningContext",
+          "onRunningContextChange",
+          "getMeetingContext",
+          "onMyUserContextChange",
+          "getUserContext",
+          "getMeetingUUID",
+          "connect",
+          "postMessage",
+          "onConnect",
+          "onMessage",
+          "onMeeting",
+          "getMeetingParticipants",
+          "onParticipantChange",
+          "getWaitingRoomParticipants",
+          "onWaitingRoomParticipantJoin",
+          "onWaitingRoomParticipantLeave",
+          "onFeedbackReaction",
+          "onRemoveFeedbackReaction",
+          "removeAllFeedbackReaction",
+          "setFeedbackReaction",
+          "removeFeedbackReaction",
+          "expandApp",
+          "onExpandApp",
+          "appPopout",
+          "onAppPopout",
+          "onIncomingParticipantAudioChange",
+          "getSupportedJsApis",
+          "onMyReaction",
+          "onReaction",
+          "toggleParticipantMediaAudio",
+          "toggleParticipantMediaVideo",
+          "getWaitingRoomState",
+          "setWaitingRoomState",
+          "putParticipantToWaitingRoom",
+          "admitParticipantFromWaitingRoom",
+          "removeParticipant",
+          "putParticipantToWaitingRoom"
+        ]
+      }
+    },
+    {
+      "sequence": 3,
+      "timestamp": 1775008908725,
+      "relativeMs": -103811,
+      "category": "startup",
+      "type": "config_request",
+      "payload": {
+        "options": {
+          "size": {
+            "width": 480,
+            "height": 360
+          },
+          "capabilities": [
+            "openUrl",
+            "getRunningContext",
+            "onRunningContextChange",
+            "getMeetingContext",
+            "onMyUserContextChange",
+            "getUserContext",
+            "getMeetingUUID",
+            "connect",
+            "postMessage",
+            "onConnect",
+            "onMessage",
+            "onMeeting",
+            "getMeetingParticipants",
+            "onParticipantChange",
+            "getWaitingRoomParticipants",
+            "onWaitingRoomParticipantJoin",
+            "onWaitingRoomParticipantLeave",
+            "onFeedbackReaction",
+            "onRemoveFeedbackReaction",
+            "removeAllFeedbackReaction",
+            "setFeedbackReaction",
+            "removeFeedbackReaction",
+            "expandApp",
+            "onExpandApp",
+            "appPopout",
+            "onAppPopout",
+            "onIncomingParticipantAudioChange",
+            "getSupportedJsApis",
+            "onMyReaction",
+            "onReaction",
+            "toggleParticipantMediaAudio",
+            "toggleParticipantMediaVideo",
+            "getWaitingRoomState",
+            "setWaitingRoomState",
+            "putParticipantToWaitingRoom",
+            "admitParticipantFromWaitingRoom",
+            "removeParticipant",
+            "putParticipantToWaitingRoom"
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 4,
+      "timestamp": 1775008908903,
+      "relativeMs": -103633,
+      "category": "startup",
+      "type": "config_response",
+      "payload": {
+        "response": {
+          "auth": {
+            "status": "authorized",
+            "upgradable": true
+          },
+          "browserVersion": "webview2/146.0.3856.84",
+          "clientVersion": "7.0.1.34140",
+          "launchContext": {
+            "openBy": "user",
+            "origin": "App Launcher"
+          },
+          "media": {
+            "video": null
+          },
+          "product": "desktop",
+          "runningContext": "inMeeting",
+          "themeMode": "light",
+          "unsupportedApis": [],
+          "userAgent": "Mozilla/5.0 (Windows NT 10.0;Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36 Edg/137.0.0.0"
+        }
+      }
+    },
+    {
+      "sequence": 5,
+      "timestamp": 1775008908903,
+      "relativeMs": -103633,
+      "category": "startup",
+      "type": "config_context_resolved",
+      "payload": {
+        "runningContext": "inMeeting"
+      }
+    },
+    {
+      "sequence": 6,
+      "timestamp": 1775009012536,
+      "relativeMs": 0,
+      "category": "startup",
+      "type": "recording_started",
+      "payload": {
+        "sessionId": "recording-1775009012414",
+        "metadata": {
+          "startedFrom": "console",
+          "context": "inMeeting",
+          "startedAt": "2026-04-01T02:03:32.414Z",
+          "meetingId": "1234509876",
+          "meetingTopic": "Test",
+          "meetingUUID": "wzJjiNaLT72lnWDfH2/Odw=="
+        }
+      }
+    },
+    {
+      "sequence": 7,
+      "timestamp": 1775009018957,
+      "relativeMs": 6421,
+      "category": "sdk_call",
+      "type": "getMeetingParticipants",
+      "payload": {
+        "response": {
+          "participants": [
+            {
+              "participantId": "16778240",
+              "participantUUID": "BCCD4D6D-BFF6-7BB3-68FC-E4FE4A5CA916",
+              "role": "host",
+              "screenName": "Admin"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 8,
+      "timestamp": 1775009018957,
+      "relativeMs": 6421,
+      "category": "sdk_call",
+      "type": "getWaitingRoomParticipants",
+      "payload": {
+        "response": {
+          "participants": []
+        }
+      }
+    },
+    {
+      "sequence": 9,
+      "timestamp": 1775009029081,
+      "relativeMs": 16545,
+      "category": "sdk_call",
+      "type": "getWaitingRoomParticipants",
+      "payload": {
+        "response": {
+          "participants": []
+        }
+      }
+    },
+    {
+      "sequence": 10,
+      "timestamp": 1775009029092,
+      "relativeMs": 16556,
+      "category": "sdk_call",
+      "type": "getMeetingParticipants",
+      "payload": {
+        "response": {
+          "participants": [
+            {
+              "participantId": "16778240",
+              "participantUUID": "BCCD4D6D-BFF6-7BB3-68FC-E4FE4A5CA916",
+              "role": "host",
+              "screenName": "Admin"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 11,
+      "timestamp": 1775009034791,
+      "relativeMs": 22255,
+      "category": "sdk_event",
+      "type": "onWaitingRoomParticipantJoin",
+      "payload": {
+        "participant": {
+          "action": "joinMeeting",
+          "participantUUID": "29FCE6F0-D35C-109F-BB2E-B80A67C50D56",
+          "screenName": "赵一诺"
+        },
+        "timestamp": 1775009034
+      }
+    },
+    {
+      "sequence": 12,
+      "timestamp": 1775009035805,
+      "relativeMs": 23269,
+      "category": "sdk_call",
+      "type": "getMeetingParticipants",
+      "payload": {
+        "response": {
+          "participants": [
+            {
+              "participantId": "16778240",
+              "participantUUID": "BCCD4D6D-BFF6-7BB3-68FC-E4FE4A5CA916",
+              "role": "host",
+              "screenName": "Admin"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 13,
+      "timestamp": 1775009035806,
+      "relativeMs": 23270,
+      "category": "sdk_call",
+      "type": "getWaitingRoomParticipants",
+      "payload": {
+        "response": {
+          "participants": [
+            {
+              "participantUUID": "29FCE6F0-D35C-109F-BB2E-B80A67C50D56",
+              "screenName": "赵一诺"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 14,
+      "timestamp": 1775009038964,
+      "relativeMs": 26428,
+      "category": "sdk_call",
+      "type": "getMeetingParticipants",
+      "payload": {
+        "response": {
+          "participants": [
+            {
+              "participantId": "16778240",
+              "participantUUID": "BCCD4D6D-BFF6-7BB3-68FC-E4FE4A5CA916",
+              "role": "host",
+              "screenName": "Admin"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 15,
+      "timestamp": 1775009038965,
+      "relativeMs": 26429,
+      "category": "sdk_call",
+      "type": "getWaitingRoomParticipants",
+      "payload": {
+        "response": {
+          "participants": [
+            {
+              "participantUUID": "29FCE6F0-D35C-109F-BB2E-B80A67C50D56",
+              "screenName": "赵一诺"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 16,
+      "timestamp": 1775009048958,
+      "relativeMs": 36422,
+      "category": "sdk_call",
+      "type": "getMeetingParticipants",
+      "payload": {
+        "response": {
+          "participants": [
+            {
+              "participantId": "16778240",
+              "participantUUID": "BCCD4D6D-BFF6-7BB3-68FC-E4FE4A5CA916",
+              "role": "host",
+              "screenName": "Admin"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 17,
+      "timestamp": 1775009048958,
+      "relativeMs": 36422,
+      "category": "sdk_call",
+      "type": "getWaitingRoomParticipants",
+      "payload": {
+        "response": {
+          "participants": [
+            {
+              "participantUUID": "29FCE6F0-D35C-109F-BB2E-B80A67C50D56",
+              "screenName": "赵一诺"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 18,
+      "timestamp": 1775009051197,
+      "relativeMs": 38661,
+      "category": "sdk_event",
+      "type": "onParticipantChange",
+      "payload": {
+        "participants": [
+          {
+            "participantId": 16781312,
+            "participantUUID": "29FCE6F0-D35C-109F-BB2E-B80A67C50D56",
+            "role": "attendee",
+            "screenName": "赵一诺",
+            "status": "join"
+          }
+        ],
+        "timestamp": 1775009051
+      }
+    },
+    {
+      "sequence": 19,
+      "timestamp": 1775009051351,
+      "relativeMs": 38815,
+      "category": "sdk_event",
+      "type": "onWaitingRoomParticipantLeave",
+      "payload": {
+        "participant": {
+          "participantUUID": "29FCE6F0-D35C-109F-BB2E-B80A67C50D56",
+          "screenName": "赵一诺"
+        },
+        "timestamp": 1775009051
+      }
+    },
+    {
+      "sequence": 20,
+      "timestamp": 1775009052375,
+      "relativeMs": 39839,
+      "category": "sdk_call",
+      "type": "getMeetingParticipants",
+      "payload": {
+        "response": {
+          "participants": [
+            {
+              "participantId": "16781312",
+              "participantUUID": "29FCE6F0-D35C-109F-BB2E-B80A67C50D56",
+              "role": "attendee",
+              "screenName": "赵一诺"
+            },
+            {
+              "participantId": "16778240",
+              "participantUUID": "BCCD4D6D-BFF6-7BB3-68FC-E4FE4A5CA916",
+              "role": "host",
+              "screenName": "Admin"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 21,
+      "timestamp": 1775009052376,
+      "relativeMs": 39840,
+      "category": "sdk_call",
+      "type": "getWaitingRoomParticipants",
+      "payload": {
+        "response": {
+          "participants": []
+        }
+      }
+    },
+    {
+      "sequence": 22,
+      "timestamp": 1775009058967,
+      "relativeMs": 46431,
+      "category": "sdk_call",
+      "type": "getMeetingParticipants",
+      "payload": {
+        "response": {
+          "participants": [
+            {
+              "participantId": "16781312",
+              "participantUUID": "29FCE6F0-D35C-109F-BB2E-B80A67C50D56",
+              "role": "attendee",
+              "screenName": "赵一诺"
+            },
+            {
+              "participantId": "16778240",
+              "participantUUID": "BCCD4D6D-BFF6-7BB3-68FC-E4FE4A5CA916",
+              "role": "host",
+              "screenName": "Admin"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 23,
+      "timestamp": 1775009058968,
+      "relativeMs": 46432,
+      "category": "sdk_call",
+      "type": "getWaitingRoomParticipants",
+      "payload": {
+        "response": {
+          "participants": []
+        }
+      }
+    },
+    {
+      "sequence": 24,
+      "timestamp": 1775009068967,
+      "relativeMs": 56431,
+      "category": "sdk_call",
+      "type": "getMeetingParticipants",
+      "payload": {
+        "response": {
+          "participants": [
+            {
+              "participantId": "16781312",
+              "participantUUID": "29FCE6F0-D35C-109F-BB2E-B80A67C50D56",
+              "role": "attendee",
+              "screenName": "赵一诺"
+            },
+            {
+              "participantId": "16778240",
+              "participantUUID": "BCCD4D6D-BFF6-7BB3-68FC-E4FE4A5CA916",
+              "role": "host",
+              "screenName": "Admin"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 25,
+      "timestamp": 1775009068968,
+      "relativeMs": 56432,
+      "category": "sdk_call",
+      "type": "getWaitingRoomParticipants",
+      "payload": {
+        "response": {
+          "participants": []
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "startedFrom": "console",
+    "context": "inMeeting",
+    "startedAt": "2026-04-01T02:03:32.414Z",
+    "meetingId": "1234509876",
+    "meetingTopic": "Test",
+    "meetingUUID": "wzJjiNaLT72lnWDfH2/Odw=="
+  }
+}

@@ -1,0 +1,113 @@
+{
+  "schemaVersion": 2,
+  "sessionId": "recording-many-participants-with-one-duplicate-name-1775084609281",
+  "startedAt": "2026-04-01T23:03:29.382Z",
+  "events": [],
+  "timeline": [
+    {
+      "sequence": 1,
+      "timestamp": 1775084609382,
+      "relativeMs": 0,
+      "category": "startup",
+      "type": "recording_started",
+      "payload": {
+        "sessionId": "recording-many-participants-with-one-duplicate-name-1775084609281",
+        "metadata": {
+          "startedFrom": "console",
+          "context": "inMeeting",
+          "startedAt": "2026-04-01T23:03:29.281Z",
+          "meetingId": "1234509876",
+          "meetingTopic": "Admin's Personal Meeting Room",
+          "meetingUUID": "ZqilzuIlTcGuk7h25iiv2w=="
+        }
+      }
+    },
+    {
+      "sequence": 2,
+      "timestamp": 1775084618048,
+      "relativeMs": 8666,
+      "category": "sdk_call",
+      "type": "getMeetingParticipants",
+      "payload": {
+        "response": {
+          "participants": [
+            {
+              "participantId": "16789504",
+              "participantUUID": "1F620086-8AAB-48D6-695E-44E9E064CF07",
+              "role": "attendee",
+              "screenName": "Mason Lee"
+            },
+            {
+              "participantId": "16788480",
+              "participantUUID": "8561E58D-3D80-0474-0997-32DF2A1E1436",
+              "role": "attendee",
+              "screenName": "Liam Bennett"
+            },
+            {
+              "participantId": "16787456",
+              "participantUUID": "E7B35D94-84AD-78E4-A9EF-B92502EEF270",
+              "role": "attendee",
+              "screenName": "陈雨桐"
+            },
+            {
+              "participantId": "16786432",
+              "participantUUID": "F549F39A-9C85-7FD7-5D34-A9EB80B89932",
+              "role": "attendee",
+              "screenName": "刘志远"
+            },
+            {
+              "participantId": "16783360",
+              "participantUUID": "B4331E9B-3843-8B16-CE89-9F1351693E47",
+              "role": "attendee",
+              "screenName": "赵一诺"
+            },
+            {
+              "participantId": "16785408",
+              "participantUUID": "539E1041-8AE5-2428-CA85-554A4CA3B838",
+              "role": "attendee",
+              "screenName": "赵美玲"
+            },
+            {
+              "participantId": "16782336",
+              "participantUUID": "C784E93D-5CC2-9373-1098-1BA1577193D6",
+              "role": "attendee",
+              "screenName": "Mason Lee"
+            },
+            {
+              "participantId": "16781312",
+              "participantUUID": "616007CA-4541-4D2F-509F-F66C0FD8F2A0",
+              "role": "attendee",
+              "screenName": "Ethan Miller"
+            },
+            {
+              "participantId": "16778240",
+              "participantUUID": "33D2C553-5462-DC42-9A73-58AC6B54F9B6",
+              "role": "host",
+              "screenName": "Admin"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "sequence": 3,
+      "timestamp": 1775084618048,
+      "relativeMs": 8666,
+      "category": "sdk_call",
+      "type": "getWaitingRoomParticipants",
+      "payload": {
+        "response": {
+          "participants": []
+        }
+      }
+    }
+  ],
+  "metadata": {
+    "startedFrom": "console",
+    "context": "inMeeting",
+    "startedAt": "2026-04-01T23:03:29.281Z",
+    "meetingId": "1234509876",
+    "meetingTopic": "Admin's Personal Meeting Room",
+    "meetingUUID": "ZqilzuIlTcGuk7h25iiv2w=="
+  }
+}

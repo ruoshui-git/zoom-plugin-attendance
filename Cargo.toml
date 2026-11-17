@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/zoom-bridge", "crates/zoom-auth", "crates/zoom-companion"]
+members = ["crates/zoom-bridge", "crates/zoom-auth", "crates/zoom-companion", "crates/attend-engine"]
 default-members = ["crates/zoom-bridge", "crates/zoom-auth", "crates/zoom-companion"]
 
 [workspace.package]
