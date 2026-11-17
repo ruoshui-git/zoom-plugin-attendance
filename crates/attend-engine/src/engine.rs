@@ -127,13 +127,21 @@ pub fn adapt_zoom_apps_events(fixture: &Value) -> Result<Vec<Value>, EngineError
     Ok(out)
 }
 fn participant_value(p: &Value, timestamp: &Value, leave: bool) -> Value {
-    let sec = timestamp.as_f64().unwrap_or(0.0);
+    // Zoom Apps recordings mix seconds and epoch milliseconds depending on the
+    // recording generation. The 13 digit values are milliseconds.
+    let value = timestamp.as_f64().unwrap_or(0.0);
+    let sec = if value.abs() > 100_000_000_000.0 {
+        value / 1000.0
+    } else {
+        value
+    };
     json!({"eventType":if leave{"leave"}else{"join"},"timestamp":iso_from_seconds(sec),"participantUUID":p.get("participantUUID").and_then(Value::as_str).unwrap_or("unknown"),"screenName":p.get("screenName").and_then(Value::as_str).unwrap_or(""),"role":p.get("role").and_then(Value::as_str).unwrap_or("attendee"),"location":"meeting"})
 }
 
 /// Companion bridge adapter; bridge `at` values are epoch milliseconds, and UUIDs are instance scoped.
 pub fn adapt_bridge_events(events: &[Value]) -> Result<Vec<Value>, EngineError> {
     let mut out = Vec::new();
+    let mut names = HashMap::<String, String>::new();
     for e in events {
         let kind = e.get("kind").and_then(Value::as_str).unwrap_or("");
         let at = e.get("at").and_then(Value::as_f64).unwrap_or(0.0) / 1000.0;
@@ -154,6 +162,10 @@ pub fn adapt_bridge_events(events: &[Value]) -> Result<Vec<Value>, EngineError> 
                         })
                         .unwrap_or_default();
                     let waiting = u["waitingRoom"].as_bool().unwrap_or(false);
+                    names.insert(
+                        format!("{instance}:{uid}"),
+                        u["name"].as_str().unwrap_or("").into(),
+                    );
                     let et = match action {
                         "left" if waiting => "waitingRoomLeave",
                         "left" => "leave",
@@ -164,6 +176,15 @@ pub fn adapt_bridge_events(events: &[Value]) -> Result<Vec<Value>, EngineError> 
                     };
                     out.push(json!({"eventType":et,"timestamp":ts,"participantUUID":format!("{instance}:{uid}"),"screenName":u["name"].as_str().unwrap_or(""),"role":if u["host"].as_bool().unwrap_or(false){"host"}else{"attendee"},"location":if waiting{"waiting-room"}else{"meeting"}}));
                 }
+            }
+        } else if kind == "hand" {
+            if let Some(uid) = e.get("userId") {
+                let uid = uid
+                    .as_str()
+                    .map(str::to_owned)
+                    .unwrap_or_else(|| uid.to_string());
+                let uuid = format!("{instance}:{uid}");
+                out.push(json!({"eventType":"hand","timestamp":ts,"participantUUID":uuid,"screenName":names.get(&uuid).cloned().unwrap_or_default(),"raised":e["raised"].as_bool().unwrap_or(false)}));
             }
         } else if kind == "instance_ended" {
             out.push(json!({"eventType":"instance_ended","timestamp":ts}));
@@ -258,17 +279,30 @@ pub fn build_record(
             ParticipantLocation::Meeting
         };
         let role = e["role"].as_str().unwrap_or("attendee").to_string();
-        if ty == "snapshot" {
-            continue;
-        }
         let participant_id = if let Some(id) = uuid_map.get(&uuid) {
             id.clone()
         } else {
             let norm = normalize_name(&name);
-            let active: HashSet<String> = events
-                .iter()
-                .filter(|x| x.kind == MovementType::Join)
-                .filter_map(|x| x.session_participant_id.clone())
+            let mut activity = HashMap::<String, bool>::new();
+            for event in &events {
+                if let Some(id) = &event.session_participant_id {
+                    match event.kind {
+                        MovementType::Join
+                        | MovementType::JoinedBefore
+                        | MovementType::WaitingRoomJoinFromOutside
+                        | MovementType::WaitingRoomJoinedBefore
+                        | MovementType::WaitingRoomJoinFromMeeting => {
+                            activity.insert(id.clone(), true);
+                        }
+                        MovementType::Leave | MovementType::WaitingRoomLeave => {
+                            activity.insert(id.clone(), false);
+                        }
+                    }
+                }
+            }
+            let active: HashSet<String> = activity
+                .into_iter()
+                .filter_map(|(id, yes)| yes.then_some(id))
                 .collect();
             let by_name: Vec<_> = participants
                 .iter()
@@ -364,6 +398,10 @@ pub fn build_record(
             "waitingRoomJoinFromMeeting" => MovementType::WaitingRoomJoinFromMeeting,
             "joinedBefore" => MovementType::JoinedBefore,
             "waitingRoomJoinedBefore" => MovementType::WaitingRoomJoinedBefore,
+            "snapshot" if loc == ParticipantLocation::WaitingRoom => {
+                MovementType::WaitingRoomJoinedBefore
+            }
+            "snapshot" => MovementType::JoinedBefore,
             _ => MovementType::Join,
         };
         events.push(MovementEvent {
@@ -517,6 +555,9 @@ fn make_rows(
                         } else {
                             total += dur
                         }
+                        if e.kind == MovementType::Leave && currently {
+                            absence += 1;
+                        }
                     }
                     currently = false;
                     last = Some(e.timestamp.clone());
@@ -550,7 +591,11 @@ fn make_rows(
                 p.current_screen_name.clone(),
             ));
         }
-        let mut match_status = MatchStatus::Unmatched;
+        let mut match_status = if state.mode == SessionMode::Generic {
+            MatchStatus::NotApplicable
+        } else {
+            MatchStatus::Unmatched
+        };
         let mut person = None;
         let mut split = Vec::new();
         if let Some(d) = decision {
@@ -643,7 +688,11 @@ fn make_rows(
                 canonical_name: Some(person.canonical_name.clone()),
                 pinyin: Some(person.pinyin.clone()),
                 group: Some(person.group.clone()),
-                current_location: Some(p.current_location.clone()),
+                current_location: if currently {
+                    Some(p.current_location.clone())
+                } else {
+                    None
+                },
                 match_status,
                 is_expected: expected,
                 has_been_seen: first.is_some(),
@@ -676,7 +725,11 @@ fn make_rows(
                 canonical_name: None,
                 pinyin: None,
                 group: None,
-                current_location: Some(p.current_location.clone()),
+                current_location: if currently {
+                    Some(p.current_location.clone())
+                } else {
+                    None
+                },
                 match_status,
                 is_expected: false,
                 has_been_seen: first.is_some(),

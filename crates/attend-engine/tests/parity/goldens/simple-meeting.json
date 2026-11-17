@@ -1,0 +1,148 @@
+{
+  "fixture": "fixtures/simple-meeting.json",
+  "mode": "generic",
+  "config": {
+    "roster": [],
+    "aliases": [],
+    "profiles": [
+      {
+        "id": "default-all",
+        "name": "System Initial Attendance Profile/系统初始考勤配制",
+        "description": "Profile that is used when no other attendance configuration is available/无其它考勤配置时使用的默认考勤配置",
+        "includedSubgroups": [],
+        "lateAfterMinutes": 10,
+        "returnWindowMinutes": 8,
+        "meetingIds": [],
+        "topicKeywords": [],
+        "specialParticipants": [],
+        "blacklist": [],
+        "groupSortOrder": [],
+        "active": true,
+        "isDefault": true
+      }
+    ]
+  },
+  "derivedRows": [
+    {
+      "entityId": "participant:participant-1794897985613-cc6lur",
+      "matchStatus": "not-applicable",
+      "isExpected": false,
+      "hasBeenSeen": true,
+      "currentStatus": "leftEarly",
+      "wasLate": false,
+      "sessionParticipantId": "participant-1794897985613-cc6lur",
+      "participantUUID": "user-1",
+      "participantUUIDs": [
+        "user-1"
+      ],
+      "zoomName": "Alice Johnson",
+      "zoomNames": [
+        "Alice Johnson"
+      ],
+      "role": "attendee",
+      "firstJoinAt": "2023-11-14T22:13:20.000Z",
+      "lastSeenAt": "2023-11-14T22:13:20.000Z",
+      "totalPresenceMinutes": 0,
+      "absenceCount": 0,
+      "isCurrentlyPresent": false,
+      "sharedName": false,
+      "tags": [
+        "left_early",
+        "seen"
+      ]
+    },
+    {
+      "entityId": "participant:participant-1794897985613-zfo5hu",
+      "matchStatus": "not-applicable",
+      "isExpected": false,
+      "hasBeenSeen": true,
+      "currentStatus": "leftEarly",
+      "wasLate": true,
+      "sessionParticipantId": "participant-1794897985613-zfo5hu",
+      "participantUUID": "user-2",
+      "participantUUIDs": [
+        "user-2"
+      ],
+      "zoomName": "Bob Smith",
+      "zoomNames": [
+        "Bob Smith"
+      ],
+      "role": "attendee",
+      "firstJoinAt": "+055840-11-09T01:00:00.000Z",
+      "lastSeenAt": "+055840-11-09T01:00:00.000Z",
+      "totalPresenceMinutes": 0,
+      "absenceCount": 0,
+      "isCurrentlyPresent": false,
+      "sharedName": false,
+      "tags": [
+        "left_early",
+        "late",
+        "seen"
+      ]
+    }
+  ],
+  "summary": {
+    "seen": 2,
+    "fullPresent": 0,
+    "late": 1,
+    "returned": 0,
+    "leftEarly": 2,
+    "absent": 0,
+    "ignored": 0,
+    "total": 2
+  },
+  "sessionParticipants": [
+    {
+      "sessionParticipantId": "participant-1794897985613-cc6lur",
+      "currentParticipantUUID": "user-1",
+      "participantUUIDs": [
+        "user-1"
+      ],
+      "currentScreenName": "Alice Johnson",
+      "screenNames": [
+        "Alice Johnson"
+      ],
+      "role": "attendee",
+      "currentLocation": "meeting",
+      "firstSeenAt": "2023-11-14T22:13:20.000Z",
+      "lastSeenAt": "2023-11-14T22:13:20.000Z",
+      "identityResolution": "new_identity",
+      "hasAmbiguousName": false
+    },
+    {
+      "sessionParticipantId": "participant-1794897985613-zfo5hu",
+      "currentParticipantUUID": "user-2",
+      "participantUUIDs": [
+        "user-2"
+      ],
+      "currentScreenName": "Bob Smith",
+      "screenNames": [
+        "Bob Smith"
+      ],
+      "role": "attendee",
+      "currentLocation": "meeting",
+      "firstSeenAt": "+055840-11-09T01:00:00.000Z",
+      "lastSeenAt": "+055840-11-09T01:00:00.000Z",
+      "identityResolution": "new_identity",
+      "hasAmbiguousName": false
+    }
+  ],
+  "movementEvents": [
+    {
+      "type": "join",
+      "timestamp": "2023-11-14T22:13:20.000Z",
+      "sessionParticipantId": "participant-1794897985613-cc6lur"
+    },
+    {
+      "type": "join",
+      "timestamp": "+055840-11-09T01:00:00.000Z",
+      "sessionParticipantId": "participant-1794897985613-zfo5hu"
+    },
+    {
+      "type": "leave",
+      "timestamp": "+055840-11-10T02:00:00.000Z",
+      "sessionParticipantId": "participant-1794897985613-cc6lur"
+    }
+  ],
+  "nameChangeEvents": []
+}

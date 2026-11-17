@@ -1,0 +1,195 @@
+{
+  "fixture": "zoomsdk-recordings/two-joins-near-same-time-1775009780982.json",
+  "mode": "generic",
+  "config": {
+    "roster": [],
+    "aliases": [],
+    "profiles": [
+      {
+        "id": "default-all",
+        "name": "System Initial Attendance Profile/系统初始考勤配制",
+        "description": "Profile that is used when no other attendance configuration is available/无其它考勤配置时使用的默认考勤配置",
+        "includedSubgroups": [],
+        "lateAfterMinutes": 10,
+        "returnWindowMinutes": 8,
+        "meetingIds": [],
+        "topicKeywords": [],
+        "specialParticipants": [],
+        "blacklist": [],
+        "groupSortOrder": [],
+        "active": true,
+        "isDefault": true
+      }
+    ]
+  },
+  "derivedRows": [
+    {
+      "entityId": "participant:participant-1794898062347-r25z64",
+      "matchStatus": "not-applicable",
+      "isExpected": false,
+      "hasBeenSeen": true,
+      "currentStatus": "present",
+      "wasLate": false,
+      "sessionParticipantId": "participant-1794898062347-r25z64",
+      "participantUUID": "49F2D83E-0302-824B-E501-59DD9B3D86F7",
+      "participantUUIDs": [
+        "49F2D83E-0302-824B-E501-59DD9B3D86F7"
+      ],
+      "zoomName": "刘志远",
+      "zoomNames": [
+        "刘志远"
+      ],
+      "role": "attendee",
+      "firstJoinAt": "2026-04-01T02:16:36.000Z",
+      "lastSeenAt": "2026-04-01T02:16:36.000Z",
+      "totalPresenceMinutes": 0,
+      "absenceCount": 0,
+      "isCurrentlyPresent": true,
+      "currentLocation": "meeting",
+      "sharedName": false,
+      "tags": [
+        "full_present",
+        "seen"
+      ]
+    },
+    {
+      "entityId": "participant:participant-1794898062347-8xgxu3",
+      "matchStatus": "not-applicable",
+      "isExpected": false,
+      "hasBeenSeen": true,
+      "currentStatus": "present",
+      "wasLate": false,
+      "sessionParticipantId": "participant-1794898062347-8xgxu3",
+      "participantUUID": "EE534346-8237-D388-36F7-1955DBC76680",
+      "participantUUIDs": [
+        "EE534346-8237-D388-36F7-1955DBC76680"
+      ],
+      "zoomName": "赵美玲",
+      "zoomNames": [
+        "赵美玲"
+      ],
+      "role": "attendee",
+      "firstJoinAt": "2026-04-01T02:16:36.000Z",
+      "lastSeenAt": "2026-04-01T02:16:36.000Z",
+      "totalPresenceMinutes": 0,
+      "absenceCount": 0,
+      "isCurrentlyPresent": true,
+      "currentLocation": "meeting",
+      "sharedName": false,
+      "tags": [
+        "full_present",
+        "seen"
+      ]
+    },
+    {
+      "entityId": "participant:participant-1794898061308-9j41gi",
+      "matchStatus": "not-applicable",
+      "isExpected": false,
+      "hasBeenSeen": true,
+      "currentStatus": "present",
+      "wasLate": false,
+      "sessionParticipantId": "participant-1794898061308-9j41gi",
+      "participantUUID": "4003006B-53F1-FD3E-F44A-42F250338D02",
+      "participantUUIDs": [
+        "4003006B-53F1-FD3E-F44A-42F250338D02"
+      ],
+      "zoomName": "Admin",
+      "zoomNames": [
+        "Admin"
+      ],
+      "role": "host",
+      "firstJoinAt": "2026-04-01T02:16:21.094Z",
+      "lastSeenAt": "2026-04-01T02:16:21.094Z",
+      "totalPresenceMinutes": 0,
+      "absenceCount": 0,
+      "isCurrentlyPresent": true,
+      "currentLocation": "meeting",
+      "sharedName": false,
+      "tags": [
+        "full_present",
+        "seen"
+      ]
+    }
+  ],
+  "summary": {
+    "seen": 3,
+    "fullPresent": 3,
+    "late": 0,
+    "returned": 0,
+    "leftEarly": 0,
+    "absent": 0,
+    "ignored": 0,
+    "total": 3
+  },
+  "sessionParticipants": [
+    {
+      "sessionParticipantId": "participant-1794898061308-9j41gi",
+      "currentParticipantUUID": "4003006B-53F1-FD3E-F44A-42F250338D02",
+      "participantUUIDs": [
+        "4003006B-53F1-FD3E-F44A-42F250338D02"
+      ],
+      "currentScreenName": "Admin",
+      "screenNames": [
+        "Admin"
+      ],
+      "role": "host",
+      "currentLocation": "meeting",
+      "firstSeenAt": "2026-04-01T02:16:21.094Z",
+      "lastSeenAt": "2026-04-01T02:16:36.000Z",
+      "identityResolution": "uuid_direct",
+      "hasAmbiguousName": false
+    },
+    {
+      "sessionParticipantId": "participant-1794898062347-r25z64",
+      "currentParticipantUUID": "49F2D83E-0302-824B-E501-59DD9B3D86F7",
+      "participantUUIDs": [
+        "49F2D83E-0302-824B-E501-59DD9B3D86F7"
+      ],
+      "currentScreenName": "刘志远",
+      "screenNames": [
+        "刘志远"
+      ],
+      "role": "attendee",
+      "currentLocation": "meeting",
+      "firstSeenAt": "2026-04-01T02:16:36.000Z",
+      "lastSeenAt": "2026-04-01T02:16:36.000Z",
+      "identityResolution": "new_identity",
+      "hasAmbiguousName": false
+    },
+    {
+      "sessionParticipantId": "participant-1794898062347-8xgxu3",
+      "currentParticipantUUID": "EE534346-8237-D388-36F7-1955DBC76680",
+      "participantUUIDs": [
+        "EE534346-8237-D388-36F7-1955DBC76680"
+      ],
+      "currentScreenName": "赵美玲",
+      "screenNames": [
+        "赵美玲"
+      ],
+      "role": "attendee",
+      "currentLocation": "meeting",
+      "firstSeenAt": "2026-04-01T02:16:36.000Z",
+      "lastSeenAt": "2026-04-01T02:16:36.000Z",
+      "identityResolution": "new_identity",
+      "hasAmbiguousName": false
+    }
+  ],
+  "movementEvents": [
+    {
+      "type": "joinedBefore",
+      "timestamp": "2026-04-01T02:16:21.094Z",
+      "sessionParticipantId": "participant-1794898061308-9j41gi"
+    },
+    {
+      "type": "join",
+      "timestamp": "2026-04-01T02:16:36.000Z",
+      "sessionParticipantId": "participant-1794898062347-r25z64"
+    },
+    {
+      "type": "join",
+      "timestamp": "2026-04-01T02:16:36.000Z",
+      "sessionParticipantId": "participant-1794898062347-8xgxu3"
+    }
+  ],
+  "nameChangeEvents": []
+}

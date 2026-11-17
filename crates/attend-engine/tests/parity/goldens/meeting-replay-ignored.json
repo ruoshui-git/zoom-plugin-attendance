@@ -1,0 +1,147 @@
+{
+  "fixture": "fixtures/meeting-replay-ignored.json",
+  "mode": "generic",
+  "config": {
+    "roster": [],
+    "aliases": [],
+    "profiles": [
+      {
+        "id": "default-all",
+        "name": "System Initial Attendance Profile/系统初始考勤配制",
+        "description": "Profile that is used when no other attendance configuration is available/无其它考勤配置时使用的默认考勤配置",
+        "includedSubgroups": [],
+        "lateAfterMinutes": 10,
+        "returnWindowMinutes": 8,
+        "meetingIds": [],
+        "topicKeywords": [],
+        "specialParticipants": [],
+        "blacklist": [],
+        "groupSortOrder": [],
+        "active": true,
+        "isDefault": true
+      }
+    ]
+  },
+  "derivedRows": [
+    {
+      "entityId": "participant:participant-1794897982476-oxu151",
+      "matchStatus": "not-applicable",
+      "isExpected": false,
+      "hasBeenSeen": true,
+      "currentStatus": "leftEarly",
+      "wasLate": false,
+      "sessionParticipantId": "participant-1794897982476-oxu151",
+      "participantUUID": "guest-other",
+      "participantUUIDs": [
+        "guest-other"
+      ],
+      "zoomName": "Another Guest",
+      "zoomNames": [
+        "Another Guest"
+      ],
+      "role": "attendee",
+      "firstJoinAt": "1970-01-01T00:01:50.000Z",
+      "lastSeenAt": "1970-01-01T00:01:50.000Z",
+      "totalPresenceMinutes": 0,
+      "absenceCount": 0,
+      "isCurrentlyPresent": false,
+      "sharedName": false,
+      "tags": [
+        "left_early",
+        "seen"
+      ]
+    },
+    {
+      "entityId": "participant:participant-1794897982476-0o5ut5",
+      "matchStatus": "not-applicable",
+      "isExpected": false,
+      "hasBeenSeen": true,
+      "currentStatus": "leftEarly",
+      "wasLate": false,
+      "sessionParticipantId": "participant-1794897982476-0o5ut5",
+      "participantUUID": "guest-random",
+      "participantUUIDs": [
+        "guest-random"
+      ],
+      "zoomName": "Random",
+      "zoomNames": [
+        "Random"
+      ],
+      "role": "attendee",
+      "firstJoinAt": "1970-01-01T00:01:40.000Z",
+      "lastSeenAt": "1970-01-01T00:02:20.000Z",
+      "totalPresenceMinutes": 1,
+      "absenceCount": 1,
+      "isCurrentlyPresent": false,
+      "sharedName": false,
+      "tags": [
+        "left_early",
+        "seen"
+      ]
+    }
+  ],
+  "summary": {
+    "seen": 2,
+    "fullPresent": 0,
+    "late": 0,
+    "returned": 0,
+    "leftEarly": 2,
+    "absent": 0,
+    "ignored": 0,
+    "total": 2
+  },
+  "sessionParticipants": [
+    {
+      "sessionParticipantId": "participant-1794897982476-0o5ut5",
+      "currentParticipantUUID": "guest-random",
+      "participantUUIDs": [
+        "guest-random"
+      ],
+      "currentScreenName": "Random",
+      "screenNames": [
+        "Random"
+      ],
+      "role": "attendee",
+      "currentLocation": "meeting",
+      "firstSeenAt": "1970-01-01T00:01:40.000Z",
+      "lastSeenAt": "1970-01-01T00:01:40.000Z",
+      "identityResolution": "new_identity",
+      "hasAmbiguousName": false
+    },
+    {
+      "sessionParticipantId": "participant-1794897982476-oxu151",
+      "currentParticipantUUID": "guest-other",
+      "participantUUIDs": [
+        "guest-other"
+      ],
+      "currentScreenName": "Another Guest",
+      "screenNames": [
+        "Another Guest"
+      ],
+      "role": "attendee",
+      "currentLocation": "meeting",
+      "firstSeenAt": "1970-01-01T00:01:50.000Z",
+      "lastSeenAt": "1970-01-01T00:01:50.000Z",
+      "identityResolution": "new_identity",
+      "hasAmbiguousName": false
+    }
+  ],
+  "movementEvents": [
+    {
+      "type": "join",
+      "timestamp": "1970-01-01T00:01:40.000Z",
+      "sessionParticipantId": "participant-1794897982476-0o5ut5"
+    },
+    {
+      "type": "join",
+      "timestamp": "1970-01-01T00:01:50.000Z",
+      "sessionParticipantId": "participant-1794897982476-oxu151"
+    },
+    {
+      "type": "leave",
+      "timestamp": "1970-01-01T00:02:20.000Z",
+      "sessionParticipantId": "participant-1794897982476-0o5ut5"
+    }
+  ],
+  "nameChangeEvents": []
+}

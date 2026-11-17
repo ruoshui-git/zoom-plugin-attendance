@@ -1,0 +1,303 @@
+{
+  "fixture": "fixtures/recording-20260328-235314-EnterExit.json",
+  "mode": "generic",
+  "config": {
+    "roster": [],
+    "aliases": [],
+    "profiles": [
+      {
+        "id": "default-all",
+        "name": "System Initial Attendance Profile/系统初始考勤配制",
+        "description": "Profile that is used when no other attendance configuration is available/无其它考勤配置时使用的默认考勤配置",
+        "includedSubgroups": [],
+        "lateAfterMinutes": 10,
+        "returnWindowMinutes": 8,
+        "meetingIds": [],
+        "topicKeywords": [],
+        "specialParticipants": [],
+        "blacklist": [],
+        "groupSortOrder": [],
+        "active": true,
+        "isDefault": true
+      }
+    ]
+  },
+  "derivedRows": [
+    {
+      "entityId": "participant:participant-1794897984045-t4k1uc",
+      "matchStatus": "not-applicable",
+      "isExpected": false,
+      "hasBeenSeen": true,
+      "currentStatus": "leftEarly",
+      "wasLate": false,
+      "sessionParticipantId": "participant-1794897984045-t4k1uc",
+      "participantUUID": "46A175AC-9610-5B3C-1107-C300CE7A9602",
+      "participantUUIDs": [
+        "35AA1743-51D5-B775-97DC-75FDCA98D348",
+        "46A175AC-9610-5B3C-1107-C300CE7A9602"
+      ],
+      "zoomName": "陈雨桐",
+      "zoomNames": [
+        "陈雨桐"
+      ],
+      "role": "attendee",
+      "firstJoinAt": "2026-03-28T23:55:07.000Z",
+      "lastSeenAt": "2026-03-29T00:00:29.000Z",
+      "totalPresenceMinutes": 5,
+      "absenceCount": 2,
+      "isCurrentlyPresent": false,
+      "sharedName": false,
+      "tags": [
+        "left_early",
+        "seen"
+      ]
+    },
+    {
+      "entityId": "participant:participant-1794897984045-drco82",
+      "matchStatus": "not-applicable",
+      "isExpected": false,
+      "hasBeenSeen": true,
+      "currentStatus": "leftEarly",
+      "wasLate": false,
+      "sessionParticipantId": "participant-1794897984045-drco82",
+      "participantUUID": "8BB19241-3071-0CE9-4CE3-336B6711A75D",
+      "participantUUIDs": [
+        "E528DE0D-8FC4-89EB-B2F8-227AE910584A",
+        "8BB19241-3071-0CE9-4CE3-336B6711A75D"
+      ],
+      "zoomName": "李浩然",
+      "zoomNames": [
+        "李浩然"
+      ],
+      "role": "attendee",
+      "firstJoinAt": "2026-03-28T23:55:07.000Z",
+      "lastSeenAt": "2026-03-29T00:00:38.000Z",
+      "totalPresenceMinutes": 5,
+      "absenceCount": 2,
+      "isCurrentlyPresent": false,
+      "sharedName": false,
+      "tags": [
+        "left_early",
+        "seen"
+      ]
+    },
+    {
+      "entityId": "participant:participant-1794897984045-3ko37c",
+      "matchStatus": "not-applicable",
+      "isExpected": false,
+      "hasBeenSeen": true,
+      "currentStatus": "leftEarly",
+      "wasLate": false,
+      "sessionParticipantId": "participant-1794897984045-3ko37c",
+      "participantUUID": "7245EEAD-5D6E-3838-B15D-A06C05D286F4",
+      "participantUUIDs": [
+        "37141C56-28E6-0CA1-8466-56F93C0D5B44",
+        "7245EEAD-5D6E-3838-B15D-A06C05D286F4"
+      ],
+      "zoomName": "Mason Lee",
+      "zoomNames": [
+        "Mason Lee"
+      ],
+      "role": "attendee",
+      "firstJoinAt": "2026-03-28T23:55:07.000Z",
+      "lastSeenAt": "2026-03-28T23:59:10.000Z",
+      "totalPresenceMinutes": 3,
+      "absenceCount": 2,
+      "isCurrentlyPresent": false,
+      "sharedName": false,
+      "tags": [
+        "left_early",
+        "seen"
+      ]
+    }
+  ],
+  "summary": {
+    "seen": 3,
+    "fullPresent": 0,
+    "late": 0,
+    "returned": 0,
+    "leftEarly": 3,
+    "absent": 0,
+    "ignored": 0,
+    "total": 3
+  },
+  "sessionParticipants": [
+    {
+      "sessionParticipantId": "participant-1794897984045-3ko37c",
+      "currentParticipantUUID": "7245EEAD-5D6E-3838-B15D-A06C05D286F4",
+      "participantUUIDs": [
+        "37141C56-28E6-0CA1-8466-56F93C0D5B44",
+        "7245EEAD-5D6E-3838-B15D-A06C05D286F4"
+      ],
+      "currentScreenName": "Mason Lee",
+      "screenNames": [
+        "Mason Lee"
+      ],
+      "role": "attendee",
+      "currentLocation": "meeting",
+      "firstSeenAt": "2026-03-28T23:55:07.000Z",
+      "lastSeenAt": "2026-03-28T23:57:45.000Z",
+      "identityResolution": "name_rejoin",
+      "hasAmbiguousName": false
+    },
+    {
+      "sessionParticipantId": "participant-1794897984045-drco82",
+      "currentParticipantUUID": "8BB19241-3071-0CE9-4CE3-336B6711A75D",
+      "participantUUIDs": [
+        "E528DE0D-8FC4-89EB-B2F8-227AE910584A",
+        "8BB19241-3071-0CE9-4CE3-336B6711A75D"
+      ],
+      "currentScreenName": "李浩然",
+      "screenNames": [
+        "李浩然"
+      ],
+      "role": "attendee",
+      "currentLocation": "meeting",
+      "firstSeenAt": "2026-03-28T23:55:07.000Z",
+      "lastSeenAt": "2026-03-28T23:57:44.000Z",
+      "identityResolution": "name_rejoin",
+      "hasAmbiguousName": false
+    },
+    {
+      "sessionParticipantId": "participant-1794897984045-t4k1uc",
+      "currentParticipantUUID": "46A175AC-9610-5B3C-1107-C300CE7A9602",
+      "participantUUIDs": [
+        "35AA1743-51D5-B775-97DC-75FDCA98D348",
+        "46A175AC-9610-5B3C-1107-C300CE7A9602"
+      ],
+      "currentScreenName": "陈雨桐",
+      "screenNames": [
+        "陈雨桐"
+      ],
+      "role": "attendee",
+      "currentLocation": "meeting",
+      "firstSeenAt": "2026-03-28T23:55:07.000Z",
+      "lastSeenAt": "2026-03-28T23:57:45.000Z",
+      "identityResolution": "name_rejoin",
+      "hasAmbiguousName": false
+    }
+  ],
+  "movementEvents": [
+    {
+      "type": "waitingRoomJoinFromOutside",
+      "timestamp": "2026-03-28T23:55:07.000Z",
+      "sessionParticipantId": "participant-1794897984045-3ko37c"
+    },
+    {
+      "type": "waitingRoomJoinFromOutside",
+      "timestamp": "2026-03-28T23:55:07.000Z",
+      "sessionParticipantId": "participant-1794897984045-drco82"
+    },
+    {
+      "type": "waitingRoomJoinFromOutside",
+      "timestamp": "2026-03-28T23:55:07.000Z",
+      "sessionParticipantId": "participant-1794897984045-t4k1uc"
+    },
+    {
+      "type": "join",
+      "timestamp": "2026-03-28T23:55:28.000Z",
+      "sessionParticipantId": "participant-1794897984045-3ko37c"
+    },
+    {
+      "type": "waitingRoomLeave",
+      "timestamp": "2026-03-28T23:55:28.000Z",
+      "sessionParticipantId": "participant-1794897984045-3ko37c"
+    },
+    {
+      "type": "waitingRoomLeave",
+      "timestamp": "2026-03-28T23:55:28.000Z",
+      "sessionParticipantId": "participant-1794897984045-drco82"
+    },
+    {
+      "type": "join",
+      "timestamp": "2026-03-28T23:55:28.000Z",
+      "sessionParticipantId": "participant-1794897984045-drco82"
+    },
+    {
+      "type": "join",
+      "timestamp": "2026-03-28T23:55:28.000Z",
+      "sessionParticipantId": "participant-1794897984045-t4k1uc"
+    },
+    {
+      "type": "waitingRoomLeave",
+      "timestamp": "2026-03-28T23:55:28.000Z",
+      "sessionParticipantId": "participant-1794897984045-t4k1uc"
+    },
+    {
+      "type": "leave",
+      "timestamp": "2026-03-28T23:56:22.000Z",
+      "sessionParticipantId": "participant-1794897984045-3ko37c"
+    },
+    {
+      "type": "leave",
+      "timestamp": "2026-03-28T23:56:54.000Z",
+      "sessionParticipantId": "participant-1794897984045-t4k1uc"
+    },
+    {
+      "type": "leave",
+      "timestamp": "2026-03-28T23:57:16.000Z",
+      "sessionParticipantId": "participant-1794897984045-drco82"
+    },
+    {
+      "type": "waitingRoomJoinFromOutside",
+      "timestamp": "2026-03-28T23:57:44.000Z",
+      "sessionParticipantId": "participant-1794897984045-drco82"
+    },
+    {
+      "type": "waitingRoomJoinFromOutside",
+      "timestamp": "2026-03-28T23:57:45.000Z",
+      "sessionParticipantId": "participant-1794897984045-t4k1uc"
+    },
+    {
+      "type": "waitingRoomJoinFromOutside",
+      "timestamp": "2026-03-28T23:57:45.000Z",
+      "sessionParticipantId": "participant-1794897984045-3ko37c"
+    },
+    {
+      "type": "join",
+      "timestamp": "2026-03-28T23:57:51.000Z",
+      "sessionParticipantId": "participant-1794897984045-t4k1uc"
+    },
+    {
+      "type": "waitingRoomLeave",
+      "timestamp": "2026-03-28T23:57:51.000Z",
+      "sessionParticipantId": "participant-1794897984045-t4k1uc"
+    },
+    {
+      "type": "waitingRoomLeave",
+      "timestamp": "2026-03-28T23:57:51.000Z",
+      "sessionParticipantId": "participant-1794897984045-3ko37c"
+    },
+    {
+      "type": "join",
+      "timestamp": "2026-03-28T23:57:51.000Z",
+      "sessionParticipantId": "participant-1794897984045-3ko37c"
+    },
+    {
+      "type": "waitingRoomLeave",
+      "timestamp": "2026-03-28T23:57:51.000Z",
+      "sessionParticipantId": "participant-1794897984045-drco82"
+    },
+    {
+      "type": "join",
+      "timestamp": "2026-03-28T23:57:51.000Z",
+      "sessionParticipantId": "participant-1794897984045-drco82"
+    },
+    {
+      "type": "leave",
+      "timestamp": "2026-03-28T23:59:10.000Z",
+      "sessionParticipantId": "participant-1794897984045-3ko37c"
+    },
+    {
+      "type": "leave",
+      "timestamp": "2026-03-29T00:00:29.000Z",
+      "sessionParticipantId": "participant-1794897984045-t4k1uc"
+    },
+    {
+      "type": "leave",
+      "timestamp": "2026-03-29T00:00:38.000Z",
+      "sessionParticipantId": "participant-1794897984045-drco82"
+    }
+  ],
+  "nameChangeEvents": []
+}

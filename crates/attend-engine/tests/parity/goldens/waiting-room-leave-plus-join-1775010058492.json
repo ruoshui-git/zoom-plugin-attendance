@@ -1,0 +1,154 @@
+{
+  "fixture": "zoomsdk-recordings/waiting-room-leave-plus-join-1775010058492.json",
+  "mode": "generic",
+  "config": {
+    "roster": [],
+    "aliases": [],
+    "profiles": [
+      {
+        "id": "default-all",
+        "name": "System Initial Attendance Profile/系统初始考勤配制",
+        "description": "Profile that is used when no other attendance configuration is available/无其它考勤配置时使用的默认考勤配置",
+        "includedSubgroups": [],
+        "lateAfterMinutes": 10,
+        "returnWindowMinutes": 8,
+        "meetingIds": [],
+        "topicKeywords": [],
+        "specialParticipants": [],
+        "blacklist": [],
+        "groupSortOrder": [],
+        "active": true,
+        "isDefault": true
+      }
+    ]
+  },
+  "derivedRows": [
+    {
+      "entityId": "participant:participant-1794898064464-u23fco",
+      "matchStatus": "not-applicable",
+      "isExpected": false,
+      "hasBeenSeen": true,
+      "currentStatus": "present",
+      "wasLate": false,
+      "sessionParticipantId": "participant-1794898064464-u23fco",
+      "participantUUID": "5F51B905-57BF-6C62-ED81-AB7C96E72090",
+      "participantUUIDs": [
+        "5F51B905-57BF-6C62-ED81-AB7C96E72090"
+      ],
+      "zoomName": "赵美玲",
+      "zoomNames": [
+        "赵美玲"
+      ],
+      "role": "attendee",
+      "firstJoinAt": "2026-04-01T02:20:58.494Z",
+      "lastSeenAt": "2026-04-01T02:21:09.000Z",
+      "totalPresenceMinutes": 0,
+      "absenceCount": 0,
+      "isCurrentlyPresent": true,
+      "currentLocation": "meeting",
+      "sharedName": false,
+      "tags": [
+        "full_present",
+        "seen"
+      ]
+    },
+    {
+      "entityId": "participant:participant-1794898064464-pxx9cm",
+      "matchStatus": "not-applicable",
+      "isExpected": false,
+      "hasBeenSeen": true,
+      "currentStatus": "present",
+      "wasLate": false,
+      "sessionParticipantId": "participant-1794898064464-pxx9cm",
+      "participantUUID": "B3624021-8FAE-9EBF-AED6-16123EF76AAF",
+      "participantUUIDs": [
+        "B3624021-8FAE-9EBF-AED6-16123EF76AAF"
+      ],
+      "zoomName": "Admin",
+      "zoomNames": [
+        "Admin"
+      ],
+      "role": "host",
+      "firstJoinAt": "2026-04-01T02:20:58.494Z",
+      "lastSeenAt": "2026-04-01T02:20:58.494Z",
+      "totalPresenceMinutes": 0,
+      "absenceCount": 0,
+      "isCurrentlyPresent": true,
+      "currentLocation": "meeting",
+      "sharedName": false,
+      "tags": [
+        "full_present",
+        "seen"
+      ]
+    }
+  ],
+  "summary": {
+    "seen": 2,
+    "fullPresent": 2,
+    "late": 0,
+    "returned": 0,
+    "leftEarly": 0,
+    "absent": 0,
+    "ignored": 0,
+    "total": 2
+  },
+  "sessionParticipants": [
+    {
+      "sessionParticipantId": "participant-1794898064464-pxx9cm",
+      "currentParticipantUUID": "B3624021-8FAE-9EBF-AED6-16123EF76AAF",
+      "participantUUIDs": [
+        "B3624021-8FAE-9EBF-AED6-16123EF76AAF"
+      ],
+      "currentScreenName": "Admin",
+      "screenNames": [
+        "Admin"
+      ],
+      "role": "host",
+      "currentLocation": "meeting",
+      "firstSeenAt": "2026-04-01T02:20:58.494Z",
+      "lastSeenAt": "2026-04-01T02:21:09.000Z",
+      "identityResolution": "uuid_direct",
+      "hasAmbiguousName": false
+    },
+    {
+      "sessionParticipantId": "participant-1794898064464-u23fco",
+      "currentParticipantUUID": "5F51B905-57BF-6C62-ED81-AB7C96E72090",
+      "participantUUIDs": [
+        "5F51B905-57BF-6C62-ED81-AB7C96E72090"
+      ],
+      "currentScreenName": "赵美玲",
+      "screenNames": [
+        "赵美玲"
+      ],
+      "role": "attendee",
+      "currentLocation": "meeting",
+      "firstSeenAt": "2026-04-01T02:20:58.494Z",
+      "lastSeenAt": "2026-04-01T02:21:09.000Z",
+      "identityResolution": "uuid_direct",
+      "hasAmbiguousName": false
+    }
+  ],
+  "movementEvents": [
+    {
+      "type": "joinedBefore",
+      "timestamp": "2026-04-01T02:20:58.494Z",
+      "sessionParticipantId": "participant-1794898064464-pxx9cm"
+    },
+    {
+      "type": "waitingRoomJoinedBefore",
+      "timestamp": "2026-04-01T02:20:58.494Z",
+      "sessionParticipantId": "participant-1794898064464-u23fco"
+    },
+    {
+      "type": "waitingRoomLeave",
+      "timestamp": "2026-04-01T02:21:09.000Z",
+      "sessionParticipantId": "participant-1794898064464-u23fco"
+    },
+    {
+      "type": "join",
+      "timestamp": "2026-04-01T02:21:09.000Z",
+      "sessionParticipantId": "participant-1794898064464-u23fco"
+    }
+  ],
+  "nameChangeEvents": []
+}

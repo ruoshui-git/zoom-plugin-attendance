@@ -1,0 +1,148 @@
+{
+  "fixture": "zoomsdk-recordings/direct-join-then-leave.json",
+  "mode": "generic",
+  "config": {
+    "roster": [],
+    "aliases": [],
+    "profiles": [
+      {
+        "id": "default-all",
+        "name": "System Initial Attendance Profile/系统初始考勤配制",
+        "description": "Profile that is used when no other attendance configuration is available/无其它考勤配置时使用的默认考勤配置",
+        "includedSubgroups": [],
+        "lateAfterMinutes": 10,
+        "returnWindowMinutes": 8,
+        "meetingIds": [],
+        "topicKeywords": [],
+        "specialParticipants": [],
+        "blacklist": [],
+        "groupSortOrder": [],
+        "active": true,
+        "isDefault": true
+      }
+    ]
+  },
+  "derivedRows": [
+    {
+      "entityId": "participant:participant-1794898048770-u3t4vm",
+      "matchStatus": "not-applicable",
+      "isExpected": false,
+      "hasBeenSeen": true,
+      "currentStatus": "present",
+      "wasLate": false,
+      "sessionParticipantId": "participant-1794898048770-u3t4vm",
+      "participantUUID": "BCCD4D6D-BFF6-7BB3-68FC-E4FE4A5CA916",
+      "participantUUIDs": [
+        "BCCD4D6D-BFF6-7BB3-68FC-E4FE4A5CA916"
+      ],
+      "zoomName": "Admin",
+      "zoomNames": [
+        "Admin"
+      ],
+      "role": "host",
+      "firstJoinAt": "2026-04-01T02:05:55.167Z",
+      "lastSeenAt": "2026-04-01T02:05:55.167Z",
+      "totalPresenceMinutes": 1,
+      "absenceCount": 0,
+      "isCurrentlyPresent": true,
+      "currentLocation": "meeting",
+      "sharedName": false,
+      "tags": [
+        "full_present",
+        "seen"
+      ]
+    },
+    {
+      "entityId": "participant:participant-1794898049804-cxhvzd",
+      "matchStatus": "not-applicable",
+      "isExpected": false,
+      "hasBeenSeen": true,
+      "currentStatus": "leftEarly",
+      "wasLate": false,
+      "sessionParticipantId": "participant-1794898049804-cxhvzd",
+      "participantUUID": "BC552E72-53CF-69A5-1C45-99938E8A98AE",
+      "participantUUIDs": [
+        "BC552E72-53CF-69A5-1C45-99938E8A98AE"
+      ],
+      "zoomName": "Liam Bennett",
+      "zoomNames": [
+        "Liam Bennett"
+      ],
+      "role": "attendee",
+      "firstJoinAt": "2026-04-01T02:06:26.000Z",
+      "lastSeenAt": "2026-04-01T02:06:44.000Z",
+      "totalPresenceMinutes": 0,
+      "absenceCount": 1,
+      "isCurrentlyPresent": false,
+      "sharedName": false,
+      "tags": [
+        "left_early",
+        "seen"
+      ]
+    }
+  ],
+  "summary": {
+    "seen": 2,
+    "fullPresent": 1,
+    "late": 0,
+    "returned": 0,
+    "leftEarly": 1,
+    "absent": 0,
+    "ignored": 0,
+    "total": 2
+  },
+  "sessionParticipants": [
+    {
+      "sessionParticipantId": "participant-1794898048770-u3t4vm",
+      "currentParticipantUUID": "BCCD4D6D-BFF6-7BB3-68FC-E4FE4A5CA916",
+      "participantUUIDs": [
+        "BCCD4D6D-BFF6-7BB3-68FC-E4FE4A5CA916"
+      ],
+      "currentScreenName": "Admin",
+      "screenNames": [
+        "Admin"
+      ],
+      "role": "host",
+      "currentLocation": "meeting",
+      "firstSeenAt": "2026-04-01T02:05:55.167Z",
+      "lastSeenAt": "2026-04-01T02:06:44.000Z",
+      "identityResolution": "uuid_direct",
+      "hasAmbiguousName": false
+    },
+    {
+      "sessionParticipantId": "participant-1794898049804-cxhvzd",
+      "currentParticipantUUID": "BC552E72-53CF-69A5-1C45-99938E8A98AE",
+      "participantUUIDs": [
+        "BC552E72-53CF-69A5-1C45-99938E8A98AE"
+      ],
+      "currentScreenName": "Liam Bennett",
+      "screenNames": [
+        "Liam Bennett"
+      ],
+      "role": "attendee",
+      "currentLocation": "meeting",
+      "firstSeenAt": "2026-04-01T02:06:26.000Z",
+      "lastSeenAt": "2026-04-01T02:06:26.000Z",
+      "identityResolution": "new_identity",
+      "hasAmbiguousName": false
+    }
+  ],
+  "movementEvents": [
+    {
+      "type": "joinedBefore",
+      "timestamp": "2026-04-01T02:05:55.167Z",
+      "sessionParticipantId": "participant-1794898048770-u3t4vm"
+    },
+    {
+      "type": "join",
+      "timestamp": "2026-04-01T02:06:26.000Z",
+      "sessionParticipantId": "participant-1794898049804-cxhvzd"
+    },
+    {
+      "type": "leave",
+      "timestamp": "2026-04-01T02:06:44.000Z",
+      "sessionParticipantId": "participant-1794898049804-cxhvzd"
+    }
+  ],
+  "nameChangeEvents": []
+}

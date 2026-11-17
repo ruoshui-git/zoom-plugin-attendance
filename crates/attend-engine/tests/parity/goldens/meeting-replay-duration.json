@@ -1,0 +1,107 @@
+{
+  "fixture": "fixtures/meeting-replay-duration.json",
+  "mode": "generic",
+  "config": {
+    "roster": [],
+    "aliases": [],
+    "profiles": [
+      {
+        "id": "default-all",
+        "name": "System Initial Attendance Profile/系统初始考勤配制",
+        "description": "Profile that is used when no other attendance configuration is available/无其它考勤配置时使用的默认考勤配置",
+        "includedSubgroups": [],
+        "lateAfterMinutes": 10,
+        "returnWindowMinutes": 8,
+        "meetingIds": [],
+        "topicKeywords": [],
+        "specialParticipants": [],
+        "blacklist": [],
+        "groupSortOrder": [],
+        "active": true,
+        "isDefault": true
+      }
+    ]
+  },
+  "derivedRows": [
+    {
+      "entityId": "participant:participant-1794897980913-62qok4",
+      "matchStatus": "not-applicable",
+      "isExpected": false,
+      "hasBeenSeen": true,
+      "currentStatus": "leftEarly",
+      "wasLate": false,
+      "sessionParticipantId": "participant-1794897980913-62qok4",
+      "participantUUID": "participant-group-a",
+      "participantUUIDs": [
+        "participant-group-a"
+      ],
+      "zoomName": "刘志远 赵美玲",
+      "zoomNames": [
+        "刘志远 赵美玲"
+      ],
+      "role": "attendee",
+      "firstJoinAt": "1970-01-01T00:01:40.000Z",
+      "lastSeenAt": "1970-01-01T00:04:40.000Z",
+      "totalPresenceMinutes": 3,
+      "absenceCount": 1,
+      "isCurrentlyPresent": false,
+      "sharedName": true,
+      "tags": [
+        "left_early",
+        "seen"
+      ]
+    }
+  ],
+  "summary": {
+    "seen": 1,
+    "fullPresent": 0,
+    "late": 0,
+    "returned": 0,
+    "leftEarly": 1,
+    "absent": 0,
+    "ignored": 0,
+    "total": 1
+  },
+  "sessionParticipants": [
+    {
+      "sessionParticipantId": "participant-1794897980913-62qok4",
+      "currentParticipantUUID": "participant-group-a",
+      "participantUUIDs": [
+        "participant-group-a"
+      ],
+      "currentScreenName": "刘志远 赵美玲",
+      "screenNames": [
+        "刘志远 赵美玲"
+      ],
+      "role": "attendee",
+      "currentLocation": "meeting",
+      "firstSeenAt": "1970-01-01T00:01:40.000Z",
+      "lastSeenAt": "1970-01-01T00:01:40.000Z",
+      "identityResolution": "new_identity",
+      "hasAmbiguousName": false
+    }
+  ],
+  "movementEvents": [
+    {
+      "type": "waitingRoomJoinFromOutside",
+      "timestamp": "1970-01-01T00:01:40.000Z",
+      "sessionParticipantId": "participant-1794897980913-62qok4"
+    },
+    {
+      "type": "waitingRoomLeave",
+      "timestamp": "1970-01-01T00:02:40.000Z",
+      "sessionParticipantId": "participant-1794897980913-62qok4"
+    },
+    {
+      "type": "join",
+      "timestamp": "1970-01-01T00:02:40.000Z",
+      "sessionParticipantId": "participant-1794897980913-62qok4"
+    },
+    {
+      "type": "leave",
+      "timestamp": "1970-01-01T00:04:40.000Z",
+      "sessionParticipantId": "participant-1794897980913-62qok4"
+    }
+  ],
+  "nameChangeEvents": []
+}

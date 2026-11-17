@@ -1,0 +1,102 @@
+{
+  "fixture": "fixtures/meeting-replay-admit.json",
+  "mode": "generic",
+  "config": {
+    "roster": [],
+    "aliases": [],
+    "profiles": [
+      {
+        "id": "default-all",
+        "name": "System Initial Attendance Profile/系统初始考勤配制",
+        "description": "Profile that is used when no other attendance configuration is available/无其它考勤配置时使用的默认考勤配置",
+        "includedSubgroups": [],
+        "lateAfterMinutes": 10,
+        "returnWindowMinutes": 8,
+        "meetingIds": [],
+        "topicKeywords": [],
+        "specialParticipants": [],
+        "blacklist": [],
+        "groupSortOrder": [],
+        "active": true,
+        "isDefault": true
+      }
+    ]
+  },
+  "derivedRows": [
+    {
+      "entityId": "participant:participant-1794897979343-kuohh8",
+      "matchStatus": "not-applicable",
+      "isExpected": false,
+      "hasBeenSeen": true,
+      "currentStatus": "leftEarly",
+      "wasLate": false,
+      "sessionParticipantId": "participant-1794897979343-kuohh8",
+      "participantUUID": "participant-mason",
+      "participantUUIDs": [
+        "participant-mason"
+      ],
+      "zoomName": "Mason Lee",
+      "zoomNames": [
+        "Mason Lee"
+      ],
+      "role": "attendee",
+      "firstJoinAt": "1970-01-01T00:01:40.000Z",
+      "lastSeenAt": "1970-01-01T00:02:40.000Z",
+      "totalPresenceMinutes": 1,
+      "absenceCount": 0,
+      "isCurrentlyPresent": false,
+      "sharedName": false,
+      "tags": [
+        "left_early",
+        "seen"
+      ]
+    }
+  ],
+  "summary": {
+    "seen": 1,
+    "fullPresent": 0,
+    "late": 0,
+    "returned": 0,
+    "leftEarly": 1,
+    "absent": 0,
+    "ignored": 0,
+    "total": 1
+  },
+  "sessionParticipants": [
+    {
+      "sessionParticipantId": "participant-1794897979343-kuohh8",
+      "currentParticipantUUID": "participant-mason",
+      "participantUUIDs": [
+        "participant-mason"
+      ],
+      "currentScreenName": "Mason Lee",
+      "screenNames": [
+        "Mason Lee"
+      ],
+      "role": "attendee",
+      "currentLocation": "meeting",
+      "firstSeenAt": "1970-01-01T00:01:40.000Z",
+      "lastSeenAt": "1970-01-01T00:01:40.000Z",
+      "identityResolution": "new_identity",
+      "hasAmbiguousName": false
+    }
+  ],
+  "movementEvents": [
+    {
+      "type": "waitingRoomJoinFromOutside",
+      "timestamp": "1970-01-01T00:01:40.000Z",
+      "sessionParticipantId": "participant-1794897979343-kuohh8"
+    },
+    {
+      "type": "waitingRoomLeave",
+      "timestamp": "1970-01-01T00:02:40.000Z",
+      "sessionParticipantId": "participant-1794897979343-kuohh8"
+    },
+    {
+      "type": "join",
+      "timestamp": "1970-01-01T00:02:40.000Z",
+      "sessionParticipantId": "participant-1794897979343-kuohh8"
+    }
+  ],
+  "nameChangeEvents": []
+}

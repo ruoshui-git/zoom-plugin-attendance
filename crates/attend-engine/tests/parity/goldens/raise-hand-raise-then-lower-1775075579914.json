@@ -1,0 +1,93 @@
+{
+  "fixture": "zoomsdk-recordings-1/raise-hand-raise-then-lower-1775075579914.json",
+  "mode": "generic",
+  "config": {
+    "roster": [],
+    "aliases": [],
+    "profiles": [
+      {
+        "id": "default-all",
+        "name": "System Initial Attendance Profile/系统初始考勤配制",
+        "description": "Profile that is used when no other attendance configuration is available/无其它考勤配置时使用的默认考勤配置",
+        "includedSubgroups": [],
+        "lateAfterMinutes": 10,
+        "returnWindowMinutes": 8,
+        "meetingIds": [],
+        "topicKeywords": [],
+        "specialParticipants": [],
+        "blacklist": [],
+        "groupSortOrder": [],
+        "active": true,
+        "isDefault": true
+      }
+    ]
+  },
+  "derivedRows": [
+    {
+      "entityId": "participant:participant-1794898026822-bzw0z5",
+      "matchStatus": "not-applicable",
+      "isExpected": false,
+      "hasBeenSeen": true,
+      "currentStatus": "present",
+      "wasLate": false,
+      "sessionParticipantId": "participant-1794898026822-bzw0z5",
+      "participantUUID": "F86D1AD0-33C7-62FE-8C3D-1D3B6FCA6275",
+      "participantUUIDs": [
+        "F86D1AD0-33C7-62FE-8C3D-1D3B6FCA6275"
+      ],
+      "zoomName": "Admin",
+      "zoomNames": [
+        "Admin"
+      ],
+      "role": "host",
+      "firstJoinAt": "2026-04-01T20:32:59.915Z",
+      "lastSeenAt": "2026-04-01T20:32:59.915Z",
+      "totalPresenceMinutes": 0,
+      "absenceCount": 0,
+      "isCurrentlyPresent": true,
+      "currentLocation": "meeting",
+      "sharedName": false,
+      "tags": [
+        "full_present",
+        "seen"
+      ]
+    }
+  ],
+  "summary": {
+    "seen": 1,
+    "fullPresent": 1,
+    "late": 0,
+    "returned": 0,
+    "leftEarly": 0,
+    "absent": 0,
+    "ignored": 0,
+    "total": 1
+  },
+  "sessionParticipants": [
+    {
+      "sessionParticipantId": "participant-1794898026822-bzw0z5",
+      "currentParticipantUUID": "F86D1AD0-33C7-62FE-8C3D-1D3B6FCA6275",
+      "participantUUIDs": [
+        "F86D1AD0-33C7-62FE-8C3D-1D3B6FCA6275"
+      ],
+      "currentScreenName": "Admin",
+      "screenNames": [
+        "Admin"
+      ],
+      "role": "host",
+      "currentLocation": "meeting",
+      "firstSeenAt": "2026-04-01T20:32:59.915Z",
+      "lastSeenAt": "2026-04-01T20:32:59.915Z",
+      "identityResolution": "new_identity",
+      "hasAmbiguousName": false
+    }
+  ],
+  "movementEvents": [
+    {
+      "type": "joinedBefore",
+      "timestamp": "2026-04-01T20:32:59.915Z",
+      "sessionParticipantId": "participant-1794898026822-bzw0z5"
+    }
+  ],
+  "nameChangeEvents": []
+}
