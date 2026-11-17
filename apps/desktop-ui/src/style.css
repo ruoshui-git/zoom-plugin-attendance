@@ -66,3 +66,5 @@ nav.activity-tabs button{width:auto;flex:0 0 auto}
 .slide-panel textarea{min-height:76px}
 aside nav button{white-space:nowrap;font-size:12px}
 aside nav button span{flex:none}
+
+.live-profile{display:grid;grid-template-columns:minmax(210px,1fr) minmax(250px,1.5fr);gap:14px 18px;align-items:end}.live-profile>label{display:grid;gap:6px;min-width:0}.live-profile>label select{min-width:0;width:100%}.live-profile>.muted{align-self:center}.live-profile .override-form{grid-column:1/-1}@media(max-width:760px){.live-profile{grid-template-columns:1fr}.live-profile .override-form{grid-column:auto}}
