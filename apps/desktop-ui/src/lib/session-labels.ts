@@ -37,6 +37,7 @@ const liveStatusLabels: Record<LiveStatus, { zh: string; en: string }> = {
   returnedAfterLongAbsence: { zh: '返回', en: 'Returned' },
   guest: { zh: '来宾', en: 'Guest' },
   unmatched: { zh: '未匹配', en: 'Unmatched' },
+  waitingRoomOnly: { zh: '仅等候室', en: 'Waiting room only' },
 };
 
 const matchStatusLabels: Record<MatchStatus, { zh: string; en: string }> = {

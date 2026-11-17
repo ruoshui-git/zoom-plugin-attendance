@@ -64,7 +64,9 @@ export type LiveStatus =
   | 'leftEarly'
   | 'returnedAfterLongAbsence'
   | 'guest'
-  | 'unmatched';
+  | 'unmatched'
+  // Desktop deviation: waited in the waiting room but was never admitted.
+  | 'waitingRoomOnly';
 
 export type ParticipantIdentityResolution =
   | 'new_identity'

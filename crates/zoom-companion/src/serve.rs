@@ -8,7 +8,9 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use crate::record::{EngineRecordProvider, RecordProvider, StubRecordProvider};
+use crate::record::{EngineRecordProvider, RecordProvider};
+#[cfg(test)]
+use crate::record::StubRecordProvider;
 use attend_store::Store;
 use axum::{
     extract::{
@@ -2148,11 +2150,17 @@ async fn api_record(
         .get_state(&id)
         .map(|x| x.1)
         .unwrap_or(json!({"mode":"generic"}));
-    Json(
-        a.provider
-            .build_record(&meeting, &vals, &docs, &state, now()),
-    )
-    .into_response()
+    match a.provider.try_build_record(&meeting, &vals, &docs, &state, now()) {
+        Ok(record) => Json(record).into_response(),
+        Err(error) => {
+            log::error!("record {id}: attendance engine failed: {error}");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error":"engine_failed","message":error})),
+            )
+                .into_response()
+        }
+    }
 }
 fn stored_event(id: &str, e: &attend_store::EventRow) -> Value {
     let mut v = json!({"seq":e.seq,"at":e.at,"instanceId":id,"kind":e.kind});
@@ -2259,7 +2267,8 @@ async fn api_export_records(State(a): State<App>, headers: HeaderMap) -> Respons
             .unwrap_or(json!({"mode":"generic"}));
         let record = a
             .provider
-            .build_record(&meeting, &events, &config, &state, now());
+            .try_build_record(&meeting, &events, &config, &state, now())
+            .unwrap_or_else(|error| json!({"error":"engine_failed","message":error}));
         records.push(json!({"meeting":meeting,"events":events,"record":record,"state":state}));
     }
     Json(json!({"version":3,"exportedAt":now(),"records":records})).into_response()

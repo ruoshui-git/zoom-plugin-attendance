@@ -146,8 +146,14 @@ impl RecordProvider for EngineRecordProvider {
     ) -> Result<Value, String> {
         let started_ms = meeting["startedAt"].as_u64().unwrap_or(now);
         let started_at = iso(started_ms);
+        // An ended record is derived at its end time (AttendFlow derives finalized
+        // sessions at endedAt); a live one at `now`.
+        let ended_ms = meeting["endedAt"].as_u64();
+        let reference_ms = ended_ms.map_or(now, |end| end.min(now)).max(started_ms);
         let meta = MeetingMeta {
-            meeting_id: meeting["instanceId"]
+            // AttendFlow profile auto-selection matches profile.meetingIds against the
+            // Zoom meeting number, not our instance id.
+            meeting_id: meeting["meetingNumber"]
                 .as_str()
                 .unwrap_or_default()
                 .to_string(),
@@ -179,12 +185,24 @@ impl RecordProvider for EngineRecordProvider {
             engine_config,
             engine_state,
             EngineOptions::default(),
-            &iso(now),
+            &iso(reference_ms),
         )
         .map_err(|error| error.to_string())?;
-        let duration_minutes = (now.saturating_sub(started_ms) as f64 / 60_000.0).max(0.0);
+        let duration_minutes = (reference_ms.saturating_sub(started_ms) as f64 / 60_000.0).max(0.0);
         let mut rows = serde_json::to_value(&record.rows).map_err(|error| error.to_string())?;
         if let Some(rows) = rows.as_array_mut() {
+            for row in rows.iter_mut() {
+                // Desktop deviation (waiting-room time is not attendance): someone who
+                // only ever waited and was never admitted is not "unmatched"; label it.
+                let never_in_meeting = !row["hasBeenSeen"].as_bool().unwrap_or(false)
+                    && row["firstJoinAt"].is_null();
+                let waited = row["waitingRoomMinutes"].as_f64().unwrap_or(0.0) > 0.0
+                    || !row["firstWaitingRoomAt"].is_null();
+                if never_in_meeting && waited && row["currentStatus"] != "missing" {
+                    row["currentStatus"] = json!("waitingRoomOnly");
+                    row["tags"] = json!(["waiting_room_only"]);
+                }
+            }
             for row in rows {
                 let minutes = row["totalPresenceMinutes"].as_u64().unwrap_or(0);
                 row["score"] = json!(
@@ -285,4 +303,47 @@ mod tests {
             .unwrap_err();
         assert!(error.starts_with("invalid attendance config:"));
     }
+
+    #[test]
+    fn ended_record_derives_at_end_and_labels_never_admitted_waiters() {
+        let instance = "pz-1-1000";
+        let start = 1_794_893_640_000_u64;
+        let user = |id: u64, name: &str, waiting: bool, host: bool| {
+            json!({"userId":id,"name":name,"waitingRoom":waiting,"host":host})
+        };
+        let ev = |seq: u64, at: u64, action: &str, users: Vec<Value>| {
+            json!({"seq":seq,"kind":"users","action":action,"instanceId":instance,"at":at,"users":users})
+        };
+        let events = vec![
+            ev(1, start, "sync_all", vec![user(1, "Host", false, true)]),
+            // Waits 5 minutes and is never admitted.
+            ev(2, start + 60_000, "add", vec![user(2, "Waiter", true, false)]),
+            // Admitted guest: left(waiting id) + add(new id) within 100 ms.
+            ev(3, start + 120_000, "add", vec![user(3, "Guest", true, false)]),
+            ev(4, start + 180_000, "left", vec![user(3, "Guest", true, false)]),
+            ev(5, start + 180_050, "add", vec![user(4, "Guest", false, false)]),
+            ev(6, start + 360_000, "left", vec![user(2, "Waiter", true, false)]),
+        ];
+        let ended = start + 10 * 60_000;
+        let meeting = json!({"instanceId":instance,"meetingNumber":"1","topic":"T","startedAt":start,
+            "endedAt":ended,"endReason":"companion_offline","isHost":true});
+        // `now` is long after the end: derivation must still stop at endedAt.
+        let now = ended + 5 * 3_600_000;
+        let record = EngineRecordProvider
+            .try_build_record(&meeting, &events, &json!({}), &json!({"mode":"generic"}), now)
+            .unwrap();
+        let rows = record["rows"].as_array().unwrap();
+        let row = |name: &str| {
+            rows.iter()
+                .find(|r| r["zoomName"] == name)
+                .unwrap_or_else(|| panic!("no row for {name}: {rows:?}"))
+        };
+        assert_eq!(rows.iter().filter(|r| r["zoomName"] == "Guest").count(), 1, "admitted guest is one person");
+        assert_eq!(row("Host")["totalPresenceMinutes"], json!(10), "host presence ends at endedAt");
+        assert_eq!(row("Waiter")["currentStatus"], json!("waitingRoomOnly"));
+        assert_eq!(row("Waiter")["totalPresenceMinutes"], json!(0));
+        assert!(row("Guest")["firstJoinAt"].as_str().is_some(), "guest first join is admission time");
+        assert_eq!(record["durationMinutes"].as_f64().unwrap().round(), 10.0);
+    }
+
 }
