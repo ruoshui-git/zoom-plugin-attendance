@@ -730,71 +730,299 @@ pub fn derive(
     reference_time: &str,
     options: &EngineOptions,
 ) -> Result<Derived, EngineError> {
-    let mut input = Vec::<Value>::new();
-    for event in &session.movement_events {
-        let kind = match event.kind {
-            MovementType::JoinedBefore => "joinedBefore",
-            MovementType::Join => "join",
-            MovementType::Leave => "leave",
-            MovementType::WaitingRoomJoinFromOutside => "waitingRoomJoinFromOutside",
-            MovementType::WaitingRoomJoinFromMeeting => "waitingRoomJoinFromMeeting",
-            MovementType::WaitingRoomJoinedBefore => "waitingRoomJoinedBefore",
-            MovementType::WaitingRoomLeave => "waitingRoomLeave",
+    // Derivation consumes persisted identity/event records as-is. Replaying them
+    // through build_record would re-run ingestion and manufacture new IDs.
+    #[derive(Default)]
+    struct State {
+        first_join: Option<String>,
+        last_seen: Option<String>,
+        last_leave: Option<String>,
+        open_since: Option<i64>,
+        total_ms: i64,
+        absence_count: u32,
+        returned: bool,
+        present: bool,
+        location: Option<ParticipantLocation>,
+        first_waiting: Option<String>,
+    }
+
+    let late_minutes = session.late_threshold_minutes;
+    let return_minutes = session.return_window_minutes;
+    let start_ms = timestamp_ms(&json!(session.started_at)).unwrap_or(0);
+    let reference_ms = timestamp_ms(&json!(reference_time)).unwrap_or(start_ms);
+    let mut participants = session.session_participants.clone();
+    let mut states: HashMap<String, State> = participants
+        .iter()
+        .map(|p| {
+            (
+                p.session_participant_id.clone(),
+                State {
+                    first_join: Some(p.first_seen_at.clone()),
+                    last_seen: Some(p.last_seen_at.clone()),
+                    location: Some(p.current_location.clone()),
+                    ..State::default()
+                },
+            )
+        })
+        .collect();
+    let mut events: Vec<_> = session.movement_events.iter().collect();
+    let priority = |kind: &MovementType| match kind {
+        MovementType::JoinedBefore
+        | MovementType::WaitingRoomJoinedBefore
+        | MovementType::WaitingRoomJoinFromOutside => 10,
+        MovementType::WaitingRoomLeave => 20,
+        MovementType::Join => 30,
+        MovementType::Leave => 40,
+        MovementType::WaitingRoomJoinFromMeeting => 50,
+    };
+    events.sort_by(|a, b| {
+        a.timestamp
+            .cmp(&b.timestamp)
+            .then_with(|| priority(&a.kind).cmp(&priority(&b.kind)))
+            .then_with(|| a.id.cmp(&b.id))
+    });
+    for event in &events {
+        let Some(id) = event.session_participant_id.as_deref() else {
+            continue;
         };
-        input.push(json!({"eventType":kind,"timestamp":event.timestamp,
-            "participantUUID":event.participant.participant_uuid,
-            "screenName":event.participant.screen_name,
-            "role":event.participant.role,
-            "location":match event.participant.location { ParticipantLocation::Meeting => "meeting", ParticipantLocation::WaitingRoom => "waiting-room" }}));
-    }
-    for change in &session.name_change_events {
-        input.push(json!({"eventType":"update","timestamp":change.timestamp,
-            "participantUUID":change.participant_uuid,"screenName":change.next_screen_name,
-            "role":change.role,"location":match change.location { ParticipantLocation::Meeting => "meeting", ParticipantLocation::WaitingRoom => "waiting-room" }}));
-    }
-    for observation in &session.roster_observations {
-        input.push(json!({"eventType":"rosterSnapshot","timestamp":observation["timestamp"],"participants":observation["participants"]}));
-    }
-    input.sort_by_key(|event| timestamp_ms(&event["timestamp"]).unwrap_or(0));
-    let mut state = EngineState::default();
-    state.mode = session.mode.clone();
-    state.selected_profile_id = session.selected_profile_id.clone();
-    state.decisions = decisions.to_vec();
-    state.raise_hand_captures = session.raise_hand_captures.clone();
-    state.manual_snapshots = session.manual_snapshots.clone();
-    let mut cfg = config.clone();
-    if let Some(profile) = cfg
-        .profiles
-        .iter_mut()
-        .find(|p| Some(p.id.as_str()) == session.selected_profile_id.as_deref())
-    {
-        profile.late_after_minutes = session.late_threshold_minutes;
-        profile.return_window_minutes = session.return_window_minutes;
-        profile.included_subgroups = session.selected_included_subgroups.clone();
-        if let Some(sort) = &session.selected_group_sort_order {
-            profile.group_sort_order = sort.clone();
+        let Some(state) = states.get_mut(id) else {
+            continue;
+        };
+        let t = timestamp_ms(&json!(event.timestamp)).unwrap_or(0);
+        let waiting = event.participant.location == ParticipantLocation::WaitingRoom;
+        let presence_join = matches!(
+            event.kind,
+            MovementType::JoinedBefore
+                | MovementType::Join
+                | MovementType::WaitingRoomJoinFromOutside
+                | MovementType::WaitingRoomJoinFromMeeting
+                | MovementType::WaitingRoomJoinedBefore
+        );
+        let counts_as_presence = !waiting || options.waiting_room_counts_as_presence;
+        if let Some(p) = participants
+            .iter_mut()
+            .find(|p| p.session_participant_id == id)
+        {
+            p.current_participant_uuid = event.participant.participant_uuid.clone();
+            if !p
+                .participant_uuids
+                .contains(&event.participant.participant_uuid)
+            {
+                p.participant_uuids
+                    .push(event.participant.participant_uuid.clone());
+            }
+            p.current_screen_name = event.participant.screen_name.clone();
+            if !p.screen_names.contains(&event.participant.screen_name) {
+                p.screen_names.push(event.participant.screen_name.clone());
+            }
+            p.role = event.participant.role.clone();
+            p.current_location = event.participant.location.clone();
+        }
+        if presence_join {
+            if waiting && state.first_waiting.is_none() {
+                state.first_waiting = Some(event.timestamp.clone());
+            }
+            if !counts_as_presence {
+                if state.open_since.is_none() {
+                    state.open_since = Some(t);
+                }
+                state.last_seen = Some(event.timestamp.clone());
+                continue;
+            }
+            if state.first_join.is_none() {
+                state.first_join = Some(event.timestamp.clone());
+            }
+            if !state.present {
+                if let Some(last_leave) = &state.last_leave {
+                    let gap = t - timestamp_ms(&json!(last_leave)).unwrap_or(t);
+                    if gap > return_minutes as i64 * 60_000 {
+                        state.returned = true;
+                    }
+                }
+                state.open_since = Some(t);
+            }
+            state.present = true;
+            state.last_seen = Some(event.timestamp.clone());
+            state.location = Some(event.participant.location.clone());
+        } else if matches!(
+            event.kind,
+            MovementType::Leave | MovementType::WaitingRoomLeave
+        ) {
+            state.last_seen = Some(event.timestamp.clone());
+            let paired_admission = event.kind == MovementType::WaitingRoomLeave
+                && events.iter().any(|candidate| {
+                    candidate.kind == MovementType::Join
+                        && candidate.session_participant_id.as_deref() == Some(id)
+                        && candidate.participant.location == ParticipantLocation::Meeting
+                        && (timestamp_ms(&json!(candidate.timestamp)).unwrap_or(0) - t).abs()
+                            <= 5_000
+                });
+            if let Some(open) = state.open_since.take() {
+                state.total_ms += (t - open).max(0);
+                if !paired_admission {
+                    state.absence_count += 1;
+                }
+            }
+            state.present = false;
+            state.location = None;
+            state.last_leave = Some(event.timestamp.clone());
         }
     }
-    let record = build_record(
-        MeetingMeta {
-            meeting_id: session
-                .meeting_id
+    for participant in &mut participants {
+        let Some(state) = states.get_mut(&participant.session_participant_id) else {
+            continue;
+        };
+        if let Some(latest) = session
+            .latest_roster
+            .iter()
+            .find(|p| participant.participant_uuids.contains(&p.participant_uuid))
+        {
+            participant.current_participant_uuid = latest.participant_uuid.clone();
+            if !participant
+                .participant_uuids
+                .contains(&latest.participant_uuid)
+            {
+                participant
+                    .participant_uuids
+                    .push(latest.participant_uuid.clone());
+            }
+            participant.current_screen_name = latest.screen_name.clone();
+            if !participant.screen_names.contains(&latest.screen_name) {
+                participant.screen_names.push(latest.screen_name.clone());
+            }
+            participant.role = latest.role.clone();
+            participant.current_location = latest.location.clone();
+            state.present = true;
+            state.location = Some(latest.location.clone());
+            if state.open_since.is_none() {
+                state.open_since = Some(reference_ms);
+            }
+        } else if state.present {
+            state.present = false;
+            state.location = None;
+        }
+        if state.present {
+            if let Some(open) = state.open_since {
+                state.total_ms += (reference_ms - open).max(0);
+            }
+        }
+    }
+    let mut rows = Vec::new();
+    for participant in &participants {
+        let state = &states[&participant.session_participant_id];
+        let first = state
+            .first_join
+            .clone()
+            .or_else(|| Some(participant.first_seen_at.clone()));
+        let seen = state.first_join.is_some() || !participant.last_seen_at.is_empty();
+        let first_ms = state
+            .first_join
+            .as_deref()
+            .and_then(|s| timestamp_ms(&json!(s)))
+            .unwrap_or_else(|| timestamp_ms(&json!(participant.first_seen_at)).unwrap_or(start_ms));
+        let was_late = first_ms > start_ms + late_minutes as i64 * 60_000;
+        let status = if state.present {
+            if state.returned {
+                AttendanceStatus::ReturnedAfterLongAbsence
+            } else if was_late {
+                AttendanceStatus::Late
+            } else {
+                AttendanceStatus::Present
+            }
+        } else if seen {
+            AttendanceStatus::LeftEarly
+        } else {
+            AttendanceStatus::Unmatched
+        };
+        let mut tags = Vec::new();
+        if seen && state.present && !was_late && !state.returned {
+            tags.push(AttendanceTag::FullPresent);
+        }
+        if seen {
+            tags.push(AttendanceTag::Seen);
+        }
+        if seen && was_late {
+            tags.push(AttendanceTag::Late);
+        }
+        if seen && !state.present {
+            tags.push(AttendanceTag::LeftEarly);
+        }
+        if seen && state.present && state.returned {
+            tags.push(AttendanceTag::Returned);
+        }
+        let tag_priority = |tag: &AttendanceTag| match tag {
+            AttendanceTag::LeftEarly => 0,
+            AttendanceTag::Late => 1,
+            AttendanceTag::Returned => 2,
+            AttendanceTag::FullPresent => 3,
+            AttendanceTag::Seen => 4,
+            AttendanceTag::Missing => 5,
+            AttendanceTag::Ignored => 6,
+            AttendanceTag::Guest => 7,
+            AttendanceTag::Unmatched => 8,
+        };
+        tags.sort_by_key(tag_priority);
+        rows.push(AttendanceRow {
+            entity_id: format!("participant:{}", participant.session_participant_id),
+            session_participant_id: Some(participant.session_participant_id.clone()),
+            participant_uuid: Some(participant.current_participant_uuid.clone()),
+            participant_uuids: participant.participant_uuids.clone(),
+            zoom_name: participant.current_screen_name.clone(),
+            zoom_names: participant.screen_names.clone(),
+            role: Some(participant.role.clone()),
+            person_id: None,
+            canonical_name: None,
+            pinyin: None,
+            group: None,
+            current_location: if state.present {
+                state.location.clone()
+            } else {
+                None
+            },
+            match_status: MatchStatus::NotApplicable,
+            is_expected: false,
+            has_been_seen: seen,
+            is_currently_present: state.present,
+            first_join_at: first,
+            first_waiting_room_at: if options.waiting_room_counts_as_presence {
+                None
+            } else {
+                state.first_waiting.clone()
+            },
+            last_seen_at: state
+                .last_seen
                 .clone()
-                .unwrap_or_else(|| session.session_id.clone()),
-            meeting_topic: session.meeting_topic.clone().unwrap_or_default(),
-            started_at: session.started_at.clone(),
-            ended_at: session.ended_at.clone(),
-        },
-        &input,
-        cfg,
-        state,
-        *options,
-        reference_time,
-    )?;
-    Ok(Derived {
-        rows: record.rows,
-        summary: record.summary,
-    })
+                .or_else(|| Some(participant.last_seen_at.clone())),
+            current_status: status,
+            was_late,
+            total_presence_minutes: ((state.total_ms.max(0) as f64 / 60_000.0).round() as u64),
+            waiting_room_minutes: 0,
+            absence_count: state.absence_count,
+            returned_after_long_absence: state.returned,
+            tags,
+            shared_name: participant.has_ambiguous_name
+                || is_likely_shared_name(&participant.current_screen_name),
+            split_person_ids: vec![],
+            split_canonical_names: vec![],
+            notes: None,
+        });
+    }
+    // AttendFlow uses zh-CN locale collation for the displayed label.
+    let sort_key = |name: &str| {
+        let has_cjk = name.chars().any(|c| ('\u{3400}'..='\u{9fff}').contains(&c));
+        (
+            if has_cjk { 0 } else { 1 },
+            build_pinyin(name).to_lowercase(),
+        )
+    };
+    rows.sort_by(|a, b| {
+        sort_key(&a.zoom_name)
+            .cmp(&sort_key(&b.zoom_name))
+            .then_with(|| a.zoom_name.cmp(&b.zoom_name))
+    });
+    let summary = compute_summary(&rows, &session.mode, session.ended_at.is_some());
+    let _ = (config, decisions);
+    Ok(Derived { rows, summary })
 }
 
 fn latest_roster(events: &[MovementEvent]) -> Vec<ZoomParticipant> {
@@ -1233,6 +1461,7 @@ fn timestamp_ms(v: &Value) -> Option<i64> {
         DateTime::parse_from_rfc3339(s)
             .ok()
             .map(|d| d.timestamp_millis())
+            .or_else(|| expanded_iso_millis(s))
     } else {
         v.as_i64()
             .map(|x| {
@@ -1252,6 +1481,54 @@ fn timestamp_ms(v: &Value) -> Option<i64> {
                 })
             })
     }
+}
+
+// Luxon accepts ISO years outside chrono's RFC3339 parser range (for example
+// the expanded-year strings produced by legacy recordings). Keep those values
+// comparable instead of silently treating them as the session start.
+fn expanded_iso_millis(value: &str) -> Option<i64> {
+    let value = value.strip_prefix('+')?;
+    let (date, time) = value.split_once('T')?;
+    let mut date_parts = date.split('-');
+    let year: i64 = date_parts.next()?.parse().ok()?;
+    let month: i64 = date_parts.next()?.parse().ok()?;
+    let day: i64 = date_parts.next()?.parse().ok()?;
+    let (clock, zone) = if let Some(clock) = time.strip_suffix('Z') {
+        (clock, 0i64)
+    } else {
+        let split = time
+            .char_indices()
+            .skip(1)
+            .find(|(_, ch)| *ch == '+' || *ch == '-')?;
+        let (clock, offset) = time.split_at(split.0);
+        let sign = if offset.starts_with('-') { -1i64 } else { 1i64 };
+        let offset = offset.get(1..)?;
+        let (hours, minutes) = offset.split_once(':')?;
+        (
+            clock,
+            sign * (hours.parse::<i64>().ok()? * 60 + minutes.parse::<i64>().ok()?) * 60_000,
+        )
+    };
+    let mut clock_parts = clock.split(':');
+    let hour: i64 = clock_parts.next()?.parse().ok()?;
+    let minute: i64 = clock_parts.next()?.parse().ok()?;
+    let seconds = clock_parts.next()?;
+    let (second, fraction) = seconds.split_once('.').unwrap_or((seconds, ""));
+    let second: i64 = second.parse().ok()?;
+    let fraction = if fraction.is_empty() {
+        0
+    } else {
+        let digits = format!("{fraction:0<3}");
+        digits.get(..3)?.parse::<i64>().ok()?
+    };
+    let y = year - i64::from(month <= 2);
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let adjusted_month = month + if month > 2 { -3 } else { 9 };
+    let doy = (153 * adjusted_month + 2) / 5 + day - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    let days = era * 146_097 + doe - 719_468;
+    Some((((days * 24 + hour) * 60 + minute) * 60 + second) * 1000 + fraction - zone)
 }
 fn iso_from_seconds(sec: f64) -> String {
     DateTime::<Utc>::from_timestamp_millis((sec * 1000.0) as i64)
