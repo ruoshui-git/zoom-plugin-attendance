@@ -415,6 +415,20 @@ fn participants(wait: u64, watch: u64) -> Result<()> {
         bail!("not connected to Zoom Workplace");
     }
     let inst = MeetingInstance::Default;
+    // Observed 2026-11-17: GetMeetingToolkit is null right after IPC_STATUS_CONNECTED;
+    // SYNC_ALL + MEETING_STATUS_INMEETING arrive a few hundred ms later. Wait for them.
+    let ready_by = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < ready_by {
+        if let Ok(ev) = rx.recv_timeout(Duration::from_millis(100)) {
+            println!("event: {}", describe(&ev));
+            if let Event::UserStatus { users, .. } = &ev {
+                print_users("  users", users);
+            }
+            if matches!(ev, Event::MeetingStatus { .. }) {
+                break;
+            }
+        }
+    }
     let st = session.meeting_status(inst)?;
     println!("meeting status: {}", status::meeting_status_name(st));
     match session.meeting_info(inst) {
@@ -483,6 +497,17 @@ fn lab(log_path: Option<std::path::PathBuf>, script: Option<std::path::PathBuf>,
     }
     if !(auth_ok && ipc_ok) { session.shutdown()?; bail!("did not reach AUTH_RESULT_SUCCESS + IPC_STATUS_CONNECTED"); }
     emit("connected", serde_json::json!({"message":"SDK authenticated and IPC connected"}))?;
+    // Toolkits are null for a few hundred ms after IPC_STATUS_CONNECTED; wait for the
+    // meeting status / SYNC_ALL burst (or 5 s when not in a meeting) before running commands.
+    let mut early: Vec<Event> = Vec::new();
+    let ready_by = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < ready_by {
+        if let Ok(ev) = rx.recv_timeout(Duration::from_millis(100)) {
+            let is_status = matches!(ev, Event::MeetingStatus { .. });
+            early.push(ev);
+            if is_status { break; }
+        }
+    }
 
     let (line_tx, line_rx) = mpsc::channel::<Option<String>>();
     if let Some(lines) = script_lines {
@@ -501,19 +526,17 @@ fn lab(log_path: Option<std::path::PathBuf>, script: Option<std::path::PathBuf>,
     let mut poll_every: Option<Duration> = None;
     let mut next_poll = Instant::now();
     let mut done = false;
+    let mut sleep_until: Option<(Instant, u64)> = None;
     while !done {
-        match rx.try_recv() {
-            Ok(ev) => {
-                emit("event", lab_event_payload(&ev)?)?;
-                if let Event::UserStatus { action, users, .. } = &ev {
-                    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-                    for u in users {
-                        if *action == 1 || *action == 2 { ledger.entry(u.user_id).and_modify(|v| {v.0=u.name.clone();v.2=None;}).or_insert((u.name.clone(), now.clone(), None)); }
-                        if *action == 3 { let e = ledger.entry(u.user_id).or_insert((u.name.clone(), now.clone(), None)); e.0=u.name.clone(); e.2=Some(now.clone()); }
-                    }
+        for ev in early.drain(..).chain(std::iter::from_fn(|| rx.try_recv().ok())) {
+            emit("event", lab_event_payload(&ev)?)?;
+            if let Event::UserStatus { action, users, .. } = &ev {
+                let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+                for u in users {
+                    if *action == 1 || *action == 2 { ledger.entry(u.user_id).and_modify(|v| {v.0=u.name.clone();v.2=None;}).or_insert((u.name.clone(), now.clone(), None)); }
+                    if *action == 3 { let e = ledger.entry(u.user_id).or_insert((u.name.clone(), now.clone(), None)); e.0=u.name.clone(); e.2=Some(now.clone()); }
                 }
             }
-            Err(mpsc::TryRecvError::Disconnected) => {}, Err(mpsc::TryRecvError::Empty) => {}
         }
         if poll_every.is_some() && Instant::now() >= next_poll {
             match session.participants(inst) { Ok(users) => { let current: BTreeMap<_,_> = users.iter().map(|u|(u.user_id,u.name.clone())).collect();
@@ -524,6 +547,11 @@ fn lab(log_path: Option<std::path::PathBuf>, script: Option<std::path::PathBuf>,
             }, Err(e)=>{emit("command_result",serde_json::json!({"command":"poll","error":e.to_string()}))?;} }
             next_poll = Instant::now() + poll_every.unwrap();
         }
+        if let Some((until, secs)) = sleep_until {
+            if Instant::now() < until { std::thread::sleep(Duration::from_millis(20)); continue; }
+            sleep_until = None;
+            emit("command_result", serde_json::json!({"command":"sleep","result":{"slept_seconds":secs}}))?;
+        }
         match line_rx.recv_timeout(Duration::from_millis(50)) {
             Ok(None) => done = true,
             Ok(Some(line)) => {
@@ -532,7 +560,7 @@ fn lab(log_path: Option<std::path::PathBuf>, script: Option<std::path::PathBuf>,
                 let safe_line=if cmd=="join" && args.len()>=2 {format!("join {} <redacted-password> {}",args[0],args[2..].join(" "))}else{line.to_owned()};
                 emit("command",serde_json::json!({"line":safe_line}))?;
                 let res: Result<serde_json::Value> = (|| { Ok(match cmd {
-                    "help" => "status info me list attendees spotlit waiting user <id> role <id> roles start <meetingNumber> join <meetingNumber> <password> <displayName...> makehost <id> reclaim cohost <id> uncohost <id> unread leave end poll <seconds> sleep <seconds> note <text> quit".into(),
+                    "help" => "status info me list attendees spotlit waiting user <id> role <id> roles start <meetingNumber> join <meetingNumber> <password> <displayName...> makehost <id> reclaim cohost <id> uncohost <id> admit <id> admitall wr [on|off] unread leave end poll <seconds> sleep <seconds> note <text> quit".into(),
                     "status" => format!("{}",status::meeting_status_name(session.meeting_status(inst)?)).into(),
                     "info" => serde_json::to_value(session.meeting_info(inst)?)?,
                     "me" => serde_json::to_value(session.myself(inst)?)?,
@@ -540,17 +568,20 @@ fn lab(log_path: Option<std::path::PathBuf>, script: Option<std::path::PathBuf>,
                     "attendees" => serde_json::to_value(session.attendees(inst)?)?,
                     "spotlit" => serde_json::to_value(session.spotlighted(inst)?)?,
                     "waiting" => serde_json::to_value(session.waiting_room(inst)?)?,
-                    "user" => serde_json::to_value(session.user(inst, parse_id(&args)?)?)?,
-                    "role" => {session.user_role(inst,parse_id(&args)?)?; serde_json::json!({"message":"role request submitted"})},
+                    "user" => serde_json::to_value(session.user(inst, resolve_id(&session,inst,&args)?)?)?,
+                    "role" => {session.user_role(inst,resolve_id(&session,inst,&args)?)?; serde_json::json!({"message":"role request submitted"})},
                     "roles" => {for u in session.participants(inst)? {session.user_role(inst,u.user_id)?;} serde_json::json!({"message":"role requests submitted"})},
                     "start" => {session.start_meeting(args.first().context("missing meeting number")?.parse()?,true,true)?; serde_json::json!({"message":"start request submitted"})},
                     "join" => {if args.len()<3 {anyhow::bail!("usage: join <meetingNumber> <password> <displayName...>")} session.join_meeting(args[2..].join(" "),args[0].parse()?,args[1].into())?; serde_json::json!({"message":"join request submitted"})},
-                    "makehost" => {session.make_host(inst,parse_id(&args)?)?;serde_json::json!({"message":"request submitted"})}, "reclaim"=>{session.reclaim_host(inst)?;serde_json::json!({"message":"request submitted"})},
-                    "cohost"=>{session.assign_cohost(inst,parse_id(&args)?)?;serde_json::json!({"message":"request submitted"})}, "uncohost"=>{session.revoke_cohost(inst,parse_id(&args)?)?;serde_json::json!({"message":"request submitted"})},
-                    "unread"=>{session.unread_chat_count(inst)?;serde_json::json!({"message":"request submitted"})}, "leave"=>{session.leave_meeting(inst)?;serde_json::json!({"message":"request submitted"})}, "end"=>{session.end_meeting(inst)?;serde_json::json!({"message":"request submitted"})},
+                    "makehost" => {session.make_host(inst,resolve_id(&session,inst,&args)?)?;serde_json::json!({"message":"request submitted"})}, "reclaim"=>{session.reclaim_host(inst)?;serde_json::json!({"message":"request submitted"})},
+                    "cohost"=>{session.assign_cohost(inst,resolve_id(&session,inst,&args)?)?;serde_json::json!({"message":"request submitted"})}, "uncohost"=>{session.revoke_cohost(inst,resolve_id(&session,inst,&args)?)?;serde_json::json!({"message":"request submitted"})},
+                    "unread"=>{session.unread_chat_count(inst)?;serde_json::json!({"message":"request submitted"})},
+                    "admit"=>{session.admit(inst,resolve_id(&session,inst,&args)?)?;serde_json::json!({"message":"request submitted"})},
+                    "admitall"=>{session.admit_all(inst)?;serde_json::json!({"message":"request submitted"})},
+                    "wr"=>{match args.first().copied() { Some("on")=>session.enable_waiting_room(inst,true)?, Some("off")=>session.enable_waiting_room(inst,false)?, _=>session.is_waiting_room_on(inst)? } serde_json::json!({"message":"request submitted"})}, "leave"=>{session.leave_meeting(inst)?;serde_json::json!({"message":"request submitted"})}, "end"=>{session.end_meeting(inst)?;serde_json::json!({"message":"request submitted"})},
                     "poll"=>{let n:u64=args.first().context("missing seconds")?.parse()?; poll_every=if n==0{None}else{Some(Duration::from_secs(n))};next_poll=Instant::now();serde_json::json!({"poll_seconds":n})},
                     "note"=>{let text=line.strip_prefix("note").unwrap_or("").trim(); emit("note",serde_json::json!({"text":text}))?; serde_json::json!({"text":text})},
-                    "quit"=>{done=true;serde_json::json!({"message":"quitting"})}, "sleep"=>{let secs:u64=args.first().context("missing seconds")?.parse()?; let until=Instant::now()+Duration::from_secs(secs);while Instant::now()<until {if let Ok(ev)=rx.recv_timeout(Duration::from_millis(100)){emit("event",lab_event_payload(&ev)?)?;}} serde_json::json!({"slept_seconds":secs})},
+                    "quit"=>{done=true;serde_json::json!({"message":"quitting"})}, "sleep"=>{let secs:u64=args.first().context("missing seconds")?.parse()?; sleep_until=Some((Instant::now()+Duration::from_secs(secs),secs)); serde_json::json!({"sleeping_seconds":secs})},
                     _=>anyhow::bail!("unknown command: {cmd}")
                 }) })();
                 match res {Ok(output)=>emit("command_result",serde_json::json!({"command":cmd,"result":output}))?,Err(e)=>emit("command_result",serde_json::json!({"command":cmd,"error":e.to_string()}))?}
@@ -566,6 +597,21 @@ fn lab(log_path: Option<std::path::PathBuf>, script: Option<std::path::PathBuf>,
 }
 
 fn parse_id(args: &[&str]) -> Result<u32> { Ok(args.first().context("missing user id")?.parse()?) }
+
+/// Resolves `<id>` or `@Display Name` (exact match; participants first, then waiting room).
+fn resolve_id(session: &Session, inst: MeetingInstance, args: &[&str]) -> Result<u32> {
+    let first = *args.first().context("missing user id or @name")?;
+    let Some(rest) = first.strip_prefix('@') else { return parse_id(args) };
+    let name = std::iter::once(rest).chain(args[1..].iter().copied()).collect::<Vec<_>>().join(" ");
+    let mut pool = session.participants(inst).unwrap_or_default();
+    pool.extend(session.waiting_room(inst).unwrap_or_default());
+    let hits: Vec<_> = pool.iter().filter(|u| u.name == name).map(|u| u.user_id).collect();
+    match hits.as_slice() {
+        [id] => Ok(*id),
+        [] => bail!("no participant named {name:?}"),
+        many => Ok(*many.iter().max().unwrap()), // newest id wins (ids grow monotonically)
+    }
+}
 
 fn lab_event_payload(ev: &Event) -> Result<serde_json::Value> {
     let mut value = serde_json::to_value(ev)?;

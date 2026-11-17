@@ -24,7 +24,7 @@ WrongUsage, InvalidArgument, InternalError, NoPermission, RateLimitReached,
 OperationTimeout, VersionIncompatible. `ZMToolSuiteMeetingInstance`:
 None=0, **Default=1**, GreenRoom=2, NewBO=3.
 
-## Empirical observations (2026-11-17, Zoom Workplace 7.2.5, not in a meeting)
+## Handshake observations (2026-11-17, Zoom Workplace 7.2.5, not in a meeting)
 
 - `InitZMToolSuite` → `StartToolSuiteAuth` → listener: `AUTH_RESULT_SUCCESS` then
   `IPC_STATUS_CONNECTED` within ~1 s, delivered on the initialising thread (message pump).
@@ -32,6 +32,46 @@ None=0, **Default=1**, GreenRoom=2, NewBO=3.
 - `meeting::GetMeetingToolkit(Default)` returns **null when not in a meeting** (bridge reports
   `SdkRejected`). Expect toolkits to become available after `MEETING_STATUS_INMEETING`.
 - Token from the PKCE **public client** with only `plugin_sdk:read:connection_meta` is sufficient for the handshake.
+
+## In-meeting observations (2026-11-17, Zoom Workplace 7.2.5, SDK 7.2.0.3001)
+
+Host runs: owner's PMI (free account, waiting room on). **Non-host** runs: a
+meeting on another account where the owner is a plain participant. Guests were
+web-client browsers (`tools/guest-bot`). Raw logs: `lab` JSONL.
+
+**Verdict for the attendance question: a non-host attendee's companion gets the
+full participant list and live join/leave events.**
+
+| Observation | Host | Non-host |
+|---|---|---|
+| `SYNC_ALL` on connect contains every participant | yes | **yes** (4/4 incl. CJK + emoji names) |
+| `GetParticipantsList` complete | yes | **yes** |
+| `ADD_USER` latency after guest clicks Join | ~1 s | ~1 s |
+| `LEFT_USER` latency after a graceful Leave | — | **~50 ms** |
+| `LEFT_USER` after a killed client (no Leave) | 1–3 min | ~3 min (server timeout; user stays listed until then) |
+| `UPDATE_USER` on mute/video changes | yes | yes |
+| `GetUserRoleByUserID(self)` | — | `success`, role **None** (not Attendee) |
+| `GetAttendeeList` / `GetSpotlightedUserList` (normal meeting) | — | empty |
+| `GetWaitingRoomUserList` / `IsWaitingRoomFeatureOn` | — | empty / false (room had no waiting room) |
+| `GetUnreadChatCount` | — | works (0) |
+
+Behaviour to design around:
+- **Toolkits are null for a few hundred ms after `IPC_STATUS_CONNECTED`.** The
+  `SYNC_ALL` + `MEETING_STATUS_INMEETING` burst follows; query only after it
+  (`participants` and `lab` now wait for it, max 5 s).
+- **User ids are not stable**: rejoin -> new id; waiting-room admission ->
+  `ADD_USER(waiting=1)`, `LEFT_USER`, `ADD_USER(new id, waiting=0)`. Key
+  attendance on display name + time, not `iUserID`.
+- Waiting-room users are delivered to the **host** with `IN_WAITING_ROOM`
+  set; they are not admitted participants.
+- Run **one** SDK client process per Zoom Workplace; overlapping companion
+  processes produced missing events.
+- Zoom Workplace must be signed in as the OAuth user, else
+  `IPC_STATUS_CONNECT_TIMEOUT` (not an auth error).
+- Not yet verified: webinars (attendee visibility), breakout rooms, focus
+  mode, large meetings (100+), `OnUnreadChatCountChange` on incoming chat,
+  `AdmitToMeeting` / `MakeHost` live, session continuity across leave/rejoin
+  of a meeting while the companion keeps running.
 
 ## Participant-related surface (for the attendance question)
 
@@ -70,9 +110,11 @@ Bridge already exposes: `Session::participants`, `myself`, `meeting_info`,
   before forwarding through the existing callback path.
 - `OnUnreadChatCountChange` and `OnChatWindowStatusChange` remain observable as
   `Other` events (count/state is carried in `value` or `code`).
-- Toolkit methods are exposed without a documented role gate in these headers.
-  `GetWaitingRoomUserList` and host/cohost mutations are likely privilege
-  restricted; verify with the owner-controlled test host/attendee experiments.
+- Waiting room: `AdmitToMeeting`, `AdmitAllUserToMeeting`,
+  `EnableWaitingRoomFeature`, `IsWaitingRoomFeatureOn` (lab: `admit <id>`,
+  `admitall`, `wr [on|off]`).
+- Toolkit methods are exposed without a documented role gate in these headers;
+  host-only mutations are not yet verified live (see In-meeting observations).
 
 ## Chat surface
 

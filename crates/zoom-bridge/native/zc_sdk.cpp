@@ -450,3 +450,31 @@ extern "C" int32_t zc_get_unread_chat_count(int32_t instance) {
     return ct && ct->GetUnreadChatCount([](const GetUnreadChatCountResult &r) { try { Async("GetUnreadChatCount", r, r.uCount); } catch (...) {} }) ? ZC_OK : ZC_ERR_SDK_REJECTED;
     ZC_GUARD_END
 }
+extern "C" int32_t zc_admit_user(int32_t instance, uint32_t id) {
+    ZC_GUARD_BEGIN
+    if (!g_inited) return ZC_ERR_WRONG_STATE;
+    auto *wt = meeting::GetWaitingRoomToolkit(Inst(instance));
+    return wt && wt->AdmitToMeeting(id, [](const BaseResult &r) { try { Async("AdmitToMeeting", r); } catch (...) {} }) ? ZC_OK : ZC_ERR_SDK_REJECTED;
+    ZC_GUARD_END
+}
+extern "C" int32_t zc_admit_all(int32_t instance) {
+    ZC_GUARD_BEGIN
+    if (!g_inited) return ZC_ERR_WRONG_STATE;
+    auto *wt = meeting::GetWaitingRoomToolkit(Inst(instance));
+    return wt && wt->AdmitAllUserToMeeting([](const BaseResult &r) { try { Async("AdmitAllUserToMeeting", r); } catch (...) {} }) ? ZC_OK : ZC_ERR_SDK_REJECTED;
+    ZC_GUARD_END
+}
+extern "C" int32_t zc_enable_waiting_room(int32_t instance, int32_t enable) {
+    ZC_GUARD_BEGIN
+    if (!g_inited) return ZC_ERR_WRONG_STATE;
+    auto *wt = meeting::GetWaitingRoomToolkit(Inst(instance));
+    return wt && wt->EnableWaitingRoomFeature(enable != 0, [](const BaseResult &r) { try { Async("EnableWaitingRoomFeature", r); } catch (...) {} }) ? ZC_OK : ZC_ERR_SDK_REJECTED;
+    ZC_GUARD_END
+}
+extern "C" int32_t zc_is_waiting_room_on(int32_t instance) {
+    ZC_GUARD_BEGIN
+    if (!g_inited) return ZC_ERR_WRONG_STATE;
+    auto *wt = meeting::GetWaitingRoomToolkit(Inst(instance));
+    return wt && wt->IsWaitingRoomFeatureOn([](const BoolValueResult &r) { try { Async("IsWaitingRoomFeatureOn", r, r.bValue ? 1 : 0); } catch (...) {} }) ? ZC_OK : ZC_ERR_SDK_REJECTED;
+    ZC_GUARD_END
+}

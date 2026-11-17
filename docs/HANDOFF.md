@@ -1,9 +1,20 @@
-# Handoff — Zoom Plugin SDK bootstrap (for the next Fable session)
+# Handoff — Zoom Plugin SDK companion
 
-Bootstrap completed 2026-11-17. Repo: `C:\Users\Ruoshui\code\zoom-plugin-attendance`
-(git, branch `main`). Read with: [SETUP.md](SETUP.md) (versions, Marketplace
-config), [ARCHITECTURE.md](ARCHITECTURE.md) (interop rules),
-[SDK-NOTES.md](SDK-NOTES.md) (API inventory + observations).
+Repo: `C:\Users\Ruoshui\code\zoom-plugin-attendance` (git, branch `main`).
+Read with: [SETUP.md](SETUP.md) (versions, Marketplace config),
+[ARCHITECTURE.md](ARCHITECTURE.md) (interop rules),
+[SDK-NOTES.md](SDK-NOTES.md) (API inventory + **in-meeting observations**).
+
+## 0. Status (2026-11-17, second session)
+
+**Go/no-go answered: GO.** In live meetings, a non-host attendee's companion
+received the full participant list (`SYNC_ALL`, `GetParticipantsList`) and
+live `ADD/LEFT/UPDATE_USER` events. That is the capability the Zoom Apps
+route (AttendFlow) lacks without host/co-host. Details, latencies and design
+caveats (unstable user ids, ~3 min ghost after killed clients, toolkit null
+right after connect) are in SDK-NOTES "In-meeting observations".
+Next: design the tracker (name-keyed sessions, ghost-tolerant leave times,
+reconnect/meeting-change handling) and close the unverified items listed there.
 
 ## 1. What was installed
 
@@ -33,8 +44,7 @@ Nothing else (no second VS, no v142, no vcpkg, no extra CMake).
 | `pwsh -NoProfile -File scripts\verify.ps1 -Connect` | all steps PASS |
 | Repo hygiene | no SDK binaries / credentials tracked |
 
-**Not verified:** anything inside a meeting. No meeting was joined; no participant data was collected.
-`GetMeetingToolkit` returns null outside a meeting.
+In-meeting results (second session) are in SDK-NOTES "In-meeting observations".
 
 ## 4. What still needs the owner
 
@@ -110,10 +120,26 @@ $env:ZOOM_PLUGIN_SDK_DIR = 'C:\path\to\zoom-plugin-sdk-windows-7.2.0.3001\x64'
 
 Commands include `status`, `info`, `me`, `list`, `attendees`, `spotlit`,
 `waiting`, `user <id>`, `role <id>`, `roles`, `start`, `join`, host/cohost
-operations, `unread`, `leave`, `end`, `poll <seconds>`, `note <text>`, `sleep
-<seconds>`, `help`, and `quit`. Poll output records added, removed, and renamed
+operations, `admit <id>`, `admitall`, `wr [on|off]`, `unread`, `leave`, `end`,
+`poll <seconds>`, `note <text>`, `sleep <seconds>` (non-blocking: events, ledger
+and polls continue), `help`, and `quit`. Poll output records added, removed, and renamed
 user IDs with the full current snapshot.
 
 Debugging: VS Code launch configs "zoom-companion connect/doctor (MSVC debugger)"
 (`cppvsdbg`), `RUST_LOG=debug`. Adapter source: `crates/zoom-bridge/native/zc_sdk.cpp`
 (add new SDK calls there + `zc_bridge.h` + `src/ffi.rs` + a `Session` command).
+
+### Guest participants for experiments
+
+`tools/guest-bot` joins web-client guests (Playwright + installed Chrome).
+Zoom's reCAPTCHA bot check blocks fresh automated profiles; the bot uses one
+persistent profile per guest name, a warm-up page view, human-paced input,
+and retries with backoff when "Automated bots aren't allowed" appears.
+
+```powershell
+cd tools\guest-bot; pnpm install
+$env:GRACEFUL = '1'                                   # click Leave instead of killing the browser
+$env:JOIN_BASE = 'https://us06web.zoom.us/wc/join/'   # match the meeting's zone
+node guests.mjs <meetingId> <passcode> "TestGuest-A@0@60" "测试-B@20@90"   # name@startDelay@stay (s)
+```
+

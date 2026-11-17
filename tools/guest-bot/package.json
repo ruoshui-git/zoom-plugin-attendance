@@ -1,0 +1,9 @@
+{
+  "name": "zoom-guest-bot",
+  "private": true,
+  "type": "module",
+  "description": "Web-client guest participants for zoom-companion lab experiments (test meetings only)",
+  "dependencies": {
+    "playwright": "1.58.2"
+  }
+}

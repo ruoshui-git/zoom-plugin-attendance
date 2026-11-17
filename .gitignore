@@ -23,3 +23,8 @@
 *.suo
 Thumbs.db
 .DS_Store
+
+# Guest bot (tools/guest-bot)
+/tools/guest-bot/node_modules/
+/tools/guest-bot/guest-profiles/
+/tools/guest-bot/*.png

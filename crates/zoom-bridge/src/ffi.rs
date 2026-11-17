@@ -101,6 +101,10 @@ extern "C" {
     pub fn zc_assign_cohost(instance: i32, user_id: u32) -> i32;
     pub fn zc_revoke_cohost(instance: i32, user_id: u32) -> i32;
     pub fn zc_get_unread_chat_count(instance: i32) -> i32;
+    pub fn zc_admit_user(instance: i32, user_id: u32) -> i32;
+    pub fn zc_admit_all(instance: i32) -> i32;
+    pub fn zc_enable_waiting_room(instance: i32, enable: i32) -> i32;
+    pub fn zc_is_waiting_room_on(instance: i32) -> i32;
 
     pub fn zc_selftest_utf8_roundtrip(
         input: *const c_char,
