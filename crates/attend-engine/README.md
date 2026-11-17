@@ -10,7 +10,8 @@ AttendFlow roster/profile/alias and record-shaped values can be deserialized dir
   `<instanceId>:<userId>` participant UUIDs and preserves waiting-room location.
 - `adapt_zoom_apps_events` maps AttendFlow recording fixture events into the same stream.
 - `adapt_bridge_events` / `adapt_zoom_apps_events` normalize source events. `build_record`
-  currently combines ingestion and derivation for legacy callers.
+  ingests them into an AttendFlow-shaped `SessionRecord`, then calls `derive`; it does
+  not implement statuses, tags, minutes, or summaries itself.
 - `derive(&SessionRecord, &EngineConfig, decisions, reference_time, &EngineOptions)` derives
   rows and summary directly from a persisted SessionRecord. It preserves stored participant
   IDs and uses the explicit reference time for deterministic live-session calculations.
@@ -43,8 +44,9 @@ gates are `cargo test -p attend-engine --test derivation_parity` and
 `cargo test -p attend-engine --test derivation_roster_parity`. Together they compare
 all 56 generic records and all 448 roster variants against AttendFlow's captured
 rows in order and summaries. Roster parity includes candidate matching, decisions,
-split fan-out, profile scope, missing rows, tags, and roster summary rules. The full
-upstream test port and complete companion scenario suite remain separate work. No
+split fan-out, profile scope, missing rows, tags, and roster summary rules. The
+companion scenario suite exercises admission, rejoin identity, duplicate names,
+renames, waiting-room movement, snapshots, guests, hands, and instance end. No
 mismatches are allow-listed. See `docs/PARITY.md`.
 
 `tests/parity/pinyin-goldens.json` contains 3,500 consecutive CJK characters starting
@@ -65,23 +67,24 @@ tracked upstream files.
 
 Bridge streams use Plugin SDK semantics: IDs are instance-scoped and change on rejoin;
 admission is a waiting-room leave followed by an in-meeting add; renames are updates
-with the same ID; periodic/manual snapshots arrive as `users sync_all`. The current
-scenario tests exercise the rows marked Tested below. The remaining named cases are
-required follow-up coverage and are not yet part of the Rust suite.
+with the same ID; periodic/manual snapshots arrive as `users sync_all`. Owner mode
+applies only the waiting-room and instance-end deviations described above.
 
 | AttendFlow fixture scenario | Companion stream expectation | Coverage |
 |---|---|---|
 | Admit from waiting room | `add(waiting)` → `left(waiting)` → `add(meeting,new ID)`; one identity | Tested |
-| Direct join/leave | One session participant and a left row | Partial |
-| Duplicate display names | Simultaneous same-name IDs remain distinct and ambiguous | Tested |
+| Direct join then leave | One participant, first join and left-early status | Tested |
+| Direct join and stay | Present row with first join and elapsed minutes | Tested |
+| Duplicate display names | Both IDs present; leave, rejoin and rename preserve identities | Tested |
 | Leave then rejoin same name | New ID stitches to the inactive identity | Tested |
-| Repeated rejoin | Each changed ID joins the same inactive identity | Not yet tested |
-| Rename while present / after rejoin / in waiting room | `update` retains ID, changes name, creates no movement | Partial |
-| Move to waiting room and back | Old meeting ID leaves; waiting ID admitted under same identity | Not yet tested |
+| Repeated rejoin | Each changed ID joins the same inactive identity | Tested |
+| Rename while present / after rejoin / in waiting room | `update` retains ID, changes name, creates no movement | Tested |
+| Move to waiting room and back | Old meeting ID leaves; waiting ID admitted under same identity | Tested |
 | Waiting-room leave without admit | No first meeting join or presence minutes | Tested |
-| Burst joins/leaves | All IDs and exits survive a burst before snapshot | Partial |
-| Guests | Unmatched generic attendance remains visible | Not yet tested |
-| Many participants | Snapshot and event stream preserve each identity | Partial |
+| Burst joins/leaves | All IDs and exits survive a burst before snapshot | Tested |
+| Guests and roster matches | Alias-matched and unmatched guests remain separately visible | Tested |
+| Many participants | Snapshot and event stream preserve each identity | Tested |
 | Meeting end with active participants | Later events do not continue the ended instance | Tested |
-| Manual snapshot | `sync_all` replaces the live roster without inventing joins | Partial |
-| Raise hand | Raise/lower entries follow the participant UUID | Partial |
+| Manual snapshot | `sync_all` replaces the live roster without inventing joins | Tested |
+| Raise/lower hand | Entries follow the participant UUID | Tested |
+| Non-host view | No waiting-room events; direct add starts presence at admission | Tested |

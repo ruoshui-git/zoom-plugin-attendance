@@ -235,3 +235,173 @@ fn companion_burst_sync_snapshot_and_hand_events_keep_roster_state() {
     assert_eq!(record.raise_hand_entries.len(), 1);
     assert_eq!(record.raise_hand_entries[0].action, "raise");
 }
+
+#[test]
+fn companion_edge_scenarios_cover_presence_identity_roster_and_owner_policy() {
+    let instance = "scenario-matrix";
+    let base = 1_794_893_640_000_i64;
+    let add = |user_id, name: &str, waiting_room: bool| json!({"userId":user_id,"name":name,"waitingRoom":waiting_room});
+    let events = vec![
+        json!({"kind":"users","action":"add","instanceId":instance,"at":base,"users":[add(1,"Direct",false),add(2,"Stay",false),add(3,"Twin",false),add(4,"Twin",false)]}),
+        json!({"kind":"users","action":"left","instanceId":instance,"at":base+180_000,"users":[add(1,"Direct",false),add(3,"Twin",false)]}),
+        json!({"kind":"users","action":"add","instanceId":instance,"at":base+181_000,"users":[add(5,"Twin",false)]}),
+        json!({"kind":"users","action":"update","instanceId":instance,"at":base+182_000,"users":[add(5,"Twin Renamed",false)]}),
+        json!({"kind":"users","action":"left","instanceId":instance,"at":base+240_000,"users":[add(4,"Twin",false)]}),
+        json!({"kind":"users","action":"add","instanceId":instance,"at":base+241_000,"users":[add(6,"Twin",false)]}),
+        json!({"kind":"users","action":"update","instanceId":instance,"at":base+242_000,"users":[add(6,"Twin After Rejoin",false)]}),
+        json!({"kind":"users","action":"add","instanceId":instance,"at":base+243_000,"users":[add(7,"Waiting Rename",true)]}),
+        json!({"kind":"users","action":"update","instanceId":instance,"at":base+244_000,"users":[add(7,"Waiting Renamed",true)]}),
+        json!({"kind":"users","action":"left","instanceId":instance,"at":base+300_000,"users":[add(7,"Waiting Renamed",true)]}),
+        json!({"kind":"users","action":"add","instanceId":instance,"at":base+360_000,"users":[add(8,"Mover",false)]}),
+        json!({"kind":"users","action":"left","instanceId":instance,"at":base+420_000,"users":[add(8,"Mover",false)]}),
+        json!({"kind":"users","action":"add","instanceId":instance,"at":base+420_100,"users":[add(9,"Mover",true)]}),
+        json!({"kind":"users","action":"left","instanceId":instance,"at":base+480_000,"users":[add(9,"Mover",true)]}),
+        json!({"kind":"users","action":"add","instanceId":instance,"at":base+480_050,"users":[add(10,"Mover",false)]}),
+        json!({"kind":"users","action":"sync_all","instanceId":instance,"at":base+540_000,"users":[add(2,"Stay",false),add(5,"Twin Renamed",false),add(6,"Twin After Rejoin",false),add(10,"Mover",false)]}),
+        json!({"kind":"hand","instanceId":instance,"at":base+541_000,"userId":10,"raised":true}),
+        json!({"kind":"hand","instanceId":instance,"at":base+542_000,"userId":10,"raised":false}),
+    ];
+    let record = derive_companion(&events, EngineOptions::default());
+    assert_eq!(
+        record.rows.len(),
+        6,
+        "expected unique identities after joins/rejoins"
+    );
+    let named = |name: &str| {
+        record
+            .rows
+            .iter()
+            .find(|row| row.zoom_name == name)
+            .unwrap()
+    };
+    assert_eq!(
+        named("Direct").current_status,
+        attend_engine::AttendanceStatus::LeftEarly
+    );
+    assert_eq!(
+        named("Stay").current_status,
+        attend_engine::AttendanceStatus::Present
+    );
+    assert_eq!(
+        named("Stay").first_join_at.as_deref(),
+        Some("2026-11-17T05:34:00.000Z")
+    );
+    assert!(
+        record
+            .rows
+            .iter()
+            .filter(|row| row.zoom_name.contains("Twin"))
+            .count()
+            >= 2
+    );
+    assert!(
+        record.name_change_events.len() >= 3,
+        "renames while present and after rejoin are logged"
+    );
+    assert_eq!(record.raise_hand_entries.len(), 2);
+    let waiting = named("Waiting Renamed");
+    assert_eq!(waiting.first_join_at, None);
+    assert!(waiting.first_waiting_room_at.is_some());
+    assert!(waiting.waiting_room_minutes >= 1);
+    let mover = named("Mover");
+    assert_eq!(
+        mover.current_location,
+        Some(attend_engine::ParticipantLocation::Meeting)
+    );
+    assert!(mover.total_presence_minutes >= 2);
+
+    let roster = EngineConfig {
+        roster: vec![attend_engine::RosterPerson {
+            person_id: 42,
+            canonical_name: "Known Guest".into(),
+            pinyin: String::new(),
+            group: "class".into(),
+            active: true,
+            created_at: String::new(),
+            updated_at: String::new(),
+        }],
+        aliases: vec![attend_engine::AliasMapping {
+            id: None,
+            zoom_name: "Guest Alias".into(),
+            person_id: 42,
+            notes: String::new(),
+            last_used_at: None,
+        }],
+        profiles: vec![],
+    };
+    let matched = build_record(
+        MeetingMeta { meeting_id: instance.into(), meeting_topic: String::new(), started_at: "2026-11-17T05:34:00.000Z".into(), ended_at: None },
+        &adapt_bridge_events(&[json!({"kind":"users","action":"add","instanceId":instance,"at":base,"users":[add(77,"Guest Alias",false),add(78,"Unmatched Guest",false)]})]).unwrap(),
+        roster,
+        EngineState { mode: attend_engine::SessionMode::Roster, ..EngineState::default() },
+        EngineOptions::default(),
+        "2026-11-17T05:39:00.000Z",
+    ).unwrap();
+    assert!(matched.rows.iter().any(|row| row.person_id == Some(42)));
+    assert!(matched
+        .rows
+        .iter()
+        .any(|row| row.zoom_name == "Unmatched Guest"));
+}
+
+#[test]
+fn companion_late_leave_many_participants_and_non_host_streams() {
+    let instance = "scenario-scale";
+    let base = 1_794_893_640_000_i64;
+    let late_events = [
+        json!({"kind":"users","action":"add","instanceId":instance,"at":base+13*60_000,"users":[{"userId":1,"name":"Late Guest"}]}),
+        json!({"kind":"users","action":"left","instanceId":instance,"at":base+16*60_000,"users":[{"userId":1,"name":"Late Guest"}]}),
+    ];
+    let late = build_record(
+        MeetingMeta {
+            meeting_id: instance.into(),
+            meeting_topic: String::new(),
+            started_at: "2026-11-17T05:34:00.000Z".into(),
+            ended_at: None,
+        },
+        &adapt_bridge_events(&late_events).unwrap(),
+        EngineConfig::default(),
+        EngineState::default(),
+        EngineOptions::default(),
+        "2026-11-17T05:50:00.000Z",
+    )
+    .unwrap();
+    assert_eq!(late.rows.len(), 1);
+    assert_eq!(
+        late.rows[0].first_join_at.as_deref(),
+        Some("2026-11-17T05:47:00.000Z")
+    );
+    assert_eq!(late.rows[0].total_presence_minutes, 3);
+    assert!(late.rows[0].was_late);
+    assert!(late.rows[0]
+        .tags
+        .contains(&attend_engine::AttendanceTag::Late));
+
+    let users: Vec<Value> = (0..80)
+        .map(|id| json!({"userId":id+100,"name":format!("Participant {id}"),"waitingRoom":false}))
+        .collect();
+    let many = derive_companion(
+        &[
+            json!({"kind":"users","action":"sync_all","instanceId":instance,"at":base,"users":users}),
+        ],
+        EngineOptions::default(),
+    );
+    assert_eq!(many.participants.len(), 80);
+    assert_eq!(many.rows.len(), 80);
+
+    // A non-host SDK view has no waiting-room lifecycle at all. The user's first
+    // observed in-meeting add is their actual admission/presence start.
+    let non_host = derive_companion(
+        &[
+            json!({"kind":"users","action":"add","instanceId":instance,"at":base,"users":[{"userId":9,"name":"Direct Admission"}]}),
+        ],
+        EngineOptions::default(),
+    );
+    assert_eq!(non_host.rows.len(), 1);
+    assert_eq!(non_host.rows[0].waiting_room_minutes, 0);
+    assert_eq!(
+        non_host.rows[0].first_join_at.as_deref(),
+        Some("2026-11-17T05:34:00.000Z")
+    );
+    assert_eq!(non_host.rows[0].total_presence_minutes, 0);
+}

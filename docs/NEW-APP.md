@@ -42,11 +42,11 @@ Decisions:
   capture and P3 features (auto-admit roster matches, alerts, scheduled exports) need
   matching/identity in the backend; one engine, one source of truth. Its boundary is
   `ingest` (bridge events → SessionRecord) then `derive(SessionRecord, config, decisions,
-  reference_time, options) → { rows, summary }`. The app receives the companion event
-  stream directly; it does not reproduce Zoom-Apps batches, debounced flushes, or roster
-  polls. Therefore exact AttendFlow derivation is the hard gate. Zoom-Apps ingestion
-  parity remains an ignored informational metric; bridge ingestion is covered by an
-  explicit companion scenario suite. Current derivation parity work is in progress.
+  reference_time, options) → { rows, summary }`. `build_record` creates the complete
+  AttendFlow-shaped SessionRecord and calls this single derivation path. The app receives
+  companion events directly; it does not reproduce Zoom-Apps batches, debounced flushes,
+  or roster polls. Generic derivation parity covers 56 recordings and roster parity
+  covers 448 variants. Bridge ingestion behavior is covered by the scenario suite.
 - **UI: Svelte in a WebView2 window** (owner decision): dense bilingual data UI, good CJK
   input/rendering, AttendFlow screens adaptable; presentation only (no engine in the UI).
 - **Waiting-room time is NOT attendance** (owner decision): non-hosts cannot see the
@@ -94,11 +94,10 @@ Decisions:
 - `apps/desktop-ui` is a Svelte 5/Vite presentation-only client. Live record changes
   arrive as `record_updated`; the client refetches the record. Generic/roster mode is
   persisted in per-meeting state; language selection is stored in local UI settings.
-- The companion defines `RecordProvider`; `StubRecordProvider` currently derives
-  generic participant rows from stored `users` events, with no roster matching. It
-  returns AttendFlow camelCase `AttendanceRow` fields and summary keys, including
-  `waitingRoomMinutes`. Replace it with the `attend-engine` implementation when that
-  crate is ready; no attendance calculations belong in the UI.
+- The companion uses `EngineRecordProvider` to adapt stored bridge events, config, and
+  record state into `attend-engine`. It returns the AttendFlow camelCase row fields,
+  summary keys, waiting-room values, mode, score, and duration. Provider errors surface
+  through the API; attendance calculations stay in the engine.
 - `serve --fake` seeds two demo participants in an isolated temp database and JSONL
   folder. It does not read or write the normal `%LOCALAPPDATA%` store and never starts
   an SDK session.

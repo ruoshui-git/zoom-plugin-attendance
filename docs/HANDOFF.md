@@ -156,9 +156,10 @@ does not touch the normal application database or start an SDK session.
 SQLite data lives at `%LOCALAPPDATA%\zoom-companion\data.db`; the existing
 `%LOCALAPPDATA%\zoom-companion\meetings\*.jsonl` files remain the append-only
 event backup and are imported idempotently when the server starts. Config docs
-and meeting states are revisioned. The current companion record implementation is
-the explicit stub provider; roster matching and AttendFlow parity await
-`crates\attend-engine`.
+and meeting states are revisioned. The desktop record endpoint now uses
+`EngineRecordProvider` backed by `crates\attend-engine`; the stub remains available
+for tests. Ingestion produces an AttendFlow-shaped SessionRecord and derives rows
+and summary through the same engine path as the parity fixtures.
 
 ### In-meeting experiment console
 
