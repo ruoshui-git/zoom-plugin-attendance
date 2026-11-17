@@ -11,6 +11,7 @@
 mod config;
 mod serve;
 mod record;
+mod record_export;
 
 use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;

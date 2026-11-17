@@ -32,12 +32,33 @@ Source: AttendFlow `main` @ 405abd5 (inventory 2026-11-17). Phase column: P1 / P
 | Profile auto-selection: meetingIds exact → topic keyword → default → first active | guessMeetingProfile | P1 | ✓ |
 | Profile fields: name, description, included subgroups (`*`), late, return, meetingIds, topic keywords, group sort order, active; default profile `default-all` (locked, factory reset 10 / 8) | MeetingProfileWorkspace | P2 | ✓: table, filters/sort, editor, bulk actions, wildcard checks/help, import preview/commit, selected live profile + overrides |
 | isExpected via included subgroups; out-of-scope ⚠ | engine | P1 | ✓: wildcard profile scope covered in roster parity goldens |
-| Manual snapshots (capture current list) | ManualAttendanceTab | P2 | not implemented |
-| Raise-hand entries + captures (dedup raise/lower) | RaiseHandPanel | P2 (better: SDK gives raised flag at connect) | partial: entries; capture/dedup not complete |
+| Manual snapshots (capture current list) | ManualAttendanceTab | P2 | ✓: live and record tabs; timestamped participant, location and match status snapshots persisted in revisioned meeting state; newest snapshot expanded |
+| Raise-hand entries + captures (dedup raise/lower) | RaiseHandPanel | P2 (better: SDK gives raised flag at connect) | ✓: current raised users, searchable raise/lower log with transition dedup, startup snapshot raises, persisted capture; capture disabled when empty |
 | **Deliberate deviation:** waiting-room time is shown separately and is NOT presence (owner 2026-11-17); AttendFlow counts it. Engine flag reproduces AttendFlow for the parity harness | applyJoinLikeEvent | P1 | ✓: option and separate row fields |
 | **Deliberate deviation:** no new record after a meeting ends (AttendFlow phantom-session bug) | Meeting.svelte effect | P1 | ✓: ignores subsequent events |
 
 ## Parity run status (2026-11-17)
+
+Desktop record detail and live activity tabs were added on 2026-11-17. Record
+exports are served from Rust (`zoom-companion/src/record_export.rs`): version-3
+session bundle, localized summary CSV with trailing waiting-room minutes, and
+manual-record CSV. CSV output includes UTF-8 BOM, AttendFlow column order, and
+score/group/name ordering. Export writes `exportedAt` and clears `needsExport` in
+revisioned state. Rust export/state tests and UI filter/sort/event/hand tests cover
+these additions; attendance derivation remains unchanged.
+
+### Desktop implementation checklist
+
+- [x] Record detail header, overview cards, local Generic/Roster attendance view,
+  filters, search, sort, score grades, and read-only Name Matching tab.
+- [x] Attendance Settings, Name Changes, Entry/Exit, Raise Hand, and Manual
+  Attendance Records tabs; matching activity tabs are available in live view.
+- [x] Manual snapshots and raise-hand captures persist in meeting state; initial
+  raised-hand flags are included and repeated raise/lower events are deduplicated.
+- [x] Rust per-record JSON, summary CSV, manual-record CSV, export-all downloads,
+  localized column headers, UTF-8 BOM, sorting, and exported status updates.
+- [x] Rust state/export coverage and UI filter/sort/event/hand helper tests pass;
+  `scripts/test.ps1`, `pnpm check`, `pnpm test --run`, and `pnpm build` pass.
 
 The 56 generated outputs contain a full SessionRecord, exact reference time,
 generic rows/summary, and eight roster variants (two example-config languages and

@@ -418,9 +418,14 @@ impl Tracker {
             Event::Other { name, value, .. }
                 if name == "OnUserRaisedHand" || name == "OnUserLowerHand" =>
             {
+                let id = value as u32;
+                let raised = name == "OnUserRaisedHand";
+                if let Some(user) = self.users.iter_mut().find(|user| user.user_id == id) {
+                    user.raised_hand = raised;
+                }
                 if let Some(v) = self.emit(
                     "hand",
-                    json!({"userId":value as u32,"raised":name=="OnUserRaisedHand"}),
+                    json!({"userId":id,"raised":raised}),
                 ) {
                     out.push(v)
                 }
@@ -755,6 +760,7 @@ pub fn run(
             )
             .route("/api/meetings/:id/events", get(api_events))
             .route("/api/meetings/:id/record", get(api_record))
+            .route("/api/meetings/:id/export", get(api_record_export))
             .route(
                 "/api/meetings/:id/state",
                 get(api_get_state).put(api_put_state),
@@ -2281,7 +2287,7 @@ async fn api_meetings(State(a): State<App>, headers: HeaderMap) -> Response {
     if let Some(r) = api_origin(&a, &headers) {
         return r;
     }
-    match a.store.meetings(){Ok(rows)=>Json(rows.iter().map(|m|json!({"instanceId":m.instance_id,"meetingNumber":m.meeting_number,"topic":m.topic,"startedAt":m.started_at,"endedAt":m.ended_at,"endReason":m.end_reason,"isHost":m.is_host,"lastSeq":m.last_seq})).collect::<Vec<_>>()).into_response(),Err(e)=>api_error(e)}
+    match a.store.meetings(){Ok(rows)=>Json(rows.iter().map(|m|{let meta=a.store.meeting(&m.instance_id).ok().flatten().unwrap_or(Value::Null);let (_,state)=a.store.get_state(&m.instance_id).unwrap_or((0,Value::Null));json!({"instanceId":m.instance_id,"meetingNumber":m.meeting_number,"topic":m.topic,"startedAt":m.started_at,"endedAt":m.ended_at,"endReason":m.end_reason,"isHost":m.is_host,"lastSeq":m.last_seq,"source":meta["source"],"exportedAt":state["exportedAt"],"needsExport":state["needsExport"]})}).collect::<Vec<_>>()).into_response(),Err(e)=>api_error(e)}
 }
 async fn api_meeting(
     State(a): State<App>,
@@ -2352,6 +2358,36 @@ async fn api_record(
         }
     }
 }
+async fn api_record_export(
+    State(a): State<App>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+    headers: HeaderMap,
+    axum::extract::Query(query): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Response {
+    if let Some(r) = api_origin(&a, &headers) { return r; }
+    let kind=query.get("kind").map(String::as_str).unwrap_or("json");
+    if !["json","summary","manual"].contains(&kind) { return StatusCode::BAD_REQUEST.into_response(); }
+    let Some(meeting) = a.store.meeting(&id).ok().flatten() else { return StatusCode::NOT_FOUND.into_response(); };
+    let events = match a.store.events(&id) { Ok(v) => v, Err(e) => return api_error(e) };
+    let values = events.iter().map(|e| stored_event(&id,e)).collect::<Vec<_>>();
+    let config=json!({"roster":a.store.get_doc("roster").map(|x|x.1).unwrap_or(Value::Null),"aliases":a.store.get_doc("aliases").map(|x|x.1).unwrap_or(Value::Null),"profiles":a.store.get_doc("profiles").map(|x|x.1).unwrap_or(Value::Null)});
+    let (revision, mut state)=match a.store.get_state(&id){Ok(v)=>v,Err(e)=>return api_error(e)};
+    if state["raiseHandEntries"].as_array().is_none() { state["raiseHandEntries"]=json!(crate::record_export::hand_entries(&values)); }
+    let record=if meeting["source"]=="imported" { meeting["importedRecord"].clone() } else { match a.provider.try_build_record(&meeting,&values,&config,&state,now()) {Ok(v)=>v,Err(e)=>return (StatusCode::INTERNAL_SERVER_ERROR,Json(json!({"message":e}))).into_response()} };
+    let exported_at=chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis,true);
+    state["exportedAt"]=json!(exported_at); state["needsExport"]=json!(false);
+    match a.store.put_state(&id,revision,&state,now()) {
+        Ok(Ok(_)) => {},
+        Ok(Err(actual)) => return (StatusCode::CONFLICT,Json(json!({"error":"stale_revision","revision":actual}))).into_response(),
+        Err(e) => return api_error(e),
+    }
+    emit_record_updated(&a,&id);
+    let language=query.get("language").map(String::as_str).unwrap_or("en");
+    let Some(file)=crate::record_export::artifacts(&meeting,&record,&state,&values,&exported_at,language,kind).into_iter().next() else { return StatusCode::INTERNAL_SERVER_ERROR.into_response(); };
+    let mut response=(StatusCode::OK,[(axum::http::header::CONTENT_TYPE,file.content_type.to_string()),(axum::http::header::CONTENT_DISPOSITION,format!("attachment; filename=\"{}\"",file.filename))],file.bytes).into_response();
+    response.headers_mut().insert("x-exported-at",axum::http::HeaderValue::from_str(&exported_at).unwrap());
+    response
+}
 fn normalize_imported_record(item:&Value,index:usize)->Result<Value,String>{
     let session=item.get("session").unwrap_or(item);
     let is_session=item.get("session").is_some() || session.get("derivedRows").is_some();
@@ -2359,13 +2395,14 @@ fn normalize_imported_record(item:&Value,index:usize)->Result<Value,String>{
     let id=source_meeting["instanceId"].as_str().or_else(||source_meeting["sessionId"].as_str()).or_else(||session["sessionId"].as_str()).unwrap_or("");
     let number=source_meeting["meetingNumber"].as_str().or_else(||source_meeting["meetingId"].as_str()).or_else(||session["metadata"]["meetingId"].as_str()).unwrap_or("");
     let topic=source_meeting["topic"].as_str().or_else(||source_meeting["meetingTopic"].as_str()).or_else(||session["metadata"]["meetingTopic"].as_str()).unwrap_or("Imported meeting");
-    let started=source_meeting["startedAt"].as_u64().or_else(||source_meeting["startedAt"].as_str().and_then(|s|s.parse().ok())).unwrap_or_else(now);
+    let started=parse_meeting_timestamp(&source_meeting["startedAt"]).unwrap_or_else(now);
     let mut record=if is_session {json!({"rows":session["derivedRows"],"summary":session["summary"],"mode":"roster"})} else {item["record"].clone()};
     if record.is_null(){return Err("record rows are missing".into())}
     if record["rows"].is_null(){if let Some(rows)=session["derivedRows"].as_array(){record["rows"]=json!(rows)}else{return Err("derived rows are missing".into())}}
     let instance_id=if id.is_empty(){format!("imported-{}-{index}",now())}else{format!("imported-{id}")};
-    Ok(json!({"meeting":{"instanceId":instance_id,"meetingNumber":number,"topic":topic,"meetingType":0,"status":0,"statusName":"Imported","startedAt":started,"endedAt":source_meeting["endedAt"].as_u64().or(Some(started)),"endReason":"imported","isHost":false,"source":"imported","importedRecord":record},"record":record,"source":"imported"}))
+    Ok(json!({"meeting":{"instanceId":instance_id,"meetingNumber":number,"topic":topic,"meetingType":0,"status":0,"statusName":"Imported","startedAt":started,"endedAt":parse_meeting_timestamp(&source_meeting["endedAt"]).or(Some(started)),"endReason":"imported","isHost":false,"source":"imported","importedRecord":record},"record":record,"source":"imported"}))
 }
+fn parse_meeting_timestamp(value:&Value)->Option<u64>{value.as_u64().or_else(||value.as_str().and_then(|s|s.parse().ok())).or_else(||value.as_str().and_then(|s|chrono::DateTime::parse_from_rfc3339(s).ok()).map(|d|d.timestamp_millis().max(0) as u64))}
 async fn api_records_import_preview(State(a):State<App>,headers:HeaderMap,Json(body):Json<Value>)->Response{
     if let Some(r)=api_origin(&a,&headers){return r}
     let items=if let Some(v)=body.as_array(){v.clone()}else if let Some(v)=body["records"].as_array(){v.clone()}else if let Some(v)=body["sessions"].as_array(){v.clone()}else if body["version"].as_u64()==Some(3)&&body["session"].is_object(){vec![body.clone()]}else{return StatusCode::BAD_REQUEST.into_response()};
@@ -2992,6 +3029,24 @@ async fn fake_record_api_returns_attendflow_row_shape() {
     assert_eq!(value["summary"]["seen"], 1);
 }
 #[tokio::test]
+async fn record_state_captures_persist_and_export_marks_downloaded() {
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+    let store=Arc::new(Store::open(std::env::temp_dir().join(format!("zc-export-state-{}.db",now()))).unwrap());
+    let meeting=json!({"instanceId":"export-meeting","meetingNumber":"42","topic":"Export test","startedAt":1000,"isHost":false});
+    store.upsert_meeting(&meeting,None,1).unwrap();
+    let app=App{tx:broadcast::channel(8).0,tracker:Arc::new(Mutex::new(Tracker::default())),session:Arc::new(Mutex::new(None)),shutdown:Arc::new(AtomicBool::new(false)),port:47812,allowed:vec![],ui:None,log_dir:std::env::temp_dir(),store:store.clone(),provider:Arc::new(StubRecordProvider),record_updates:Arc::new(Mutex::new(Default::default()))};
+    let api=Router::new().route("/api/meetings/:id/state",get(api_get_state).put(api_put_state)).route("/api/meetings/:id/export",get(api_record_export)).with_state(app);
+    let captured=json!({"mode":"generic","manualSnapshots":[{"id":"snap-1","timestamp":"2026-11-17T00:00:00Z","participants":[{"screenName":"Ada","location":"meeting","matchStatus":"matched"}]}],"raiseHandCaptures":[{"id":"hands-1","timestamp":"2026-11-17T00:01:00Z","screenNames":["Ada"],"totalCount":1}],"raiseHandEntries":[{"participantUUID":"7","screenName":"Ada","action":"raise"}],"needsExport":true});
+    let put=api.clone().oneshot(axum::http::Request::builder().method("PUT").uri("/api/meetings/export-meeting/state").header("content-type","application/json").body(axum::body::Body::from(json!({"revision":0,"value":captured}).to_string())).unwrap()).await.unwrap();
+    assert_eq!(put.status(),StatusCode::OK);
+    let export=api.oneshot(axum::http::Request::builder().uri("/api/meetings/export-meeting/export?kind=json&language=en").body(axum::body::Body::empty()).unwrap()).await.unwrap();
+    assert_eq!(export.status(),StatusCode::OK);
+    let bundle:Value=serde_json::from_slice(&export.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(bundle["version"],3); assert_eq!(bundle["session"]["manualSnapshots"][0]["participants"][0]["screenName"],"Ada"); assert_eq!(bundle["session"]["raiseHandCaptures"][0]["totalCount"],1);
+    let (_,saved)=store.get_state("export-meeting").unwrap(); assert!(!saved["exportedAt"].is_null()); assert_eq!(saved["needsExport"],false);
+}
+#[tokio::test]
 async fn backup_import_revision_conflict_and_state_notification() {
     use tower::ServiceExt;
     let store = Arc::new(
@@ -3156,6 +3211,14 @@ fn imported_attendflow_session_keeps_derived_rows_and_marks_read_only_source() {
     assert_eq!(imported["source"],"imported");
     assert_eq!(imported["meeting"]["source"],"imported");
     assert_eq!(imported["record"]["rows"][0]["zoomName"],"Ada");
+}
+
+#[test]
+fn exported_iso_session_start_and_end_times_import_as_milliseconds() {
+    let bundle=json!({"version":3,"exportedAt":"2026-11-17T00:00:00Z","session":{"sessionId":"exported-1","meetingId":"123","meetingTopic":"Example","startedAt":"2026-11-17T00:00:01.000Z","endedAt":"2026-11-17T00:01:01.000Z","derivedRows":[]}});
+    let imported=normalize_imported_record(&bundle,0).unwrap();
+    assert_eq!(imported["meeting"]["startedAt"],1_794_873_601_000_u64);
+    assert_eq!(imported["meeting"]["endedAt"],1_794_873_661_000_u64);
 }
 
 #[test]
