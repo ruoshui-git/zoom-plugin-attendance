@@ -65,10 +65,18 @@ fn tags(row: &Value, en: bool) -> String {
                     ("left_early", false) => "早退",
                     ("returned", true) => "Returned",
                     ("returned", false) => "返回",
-                    ("missing", true) => "Missing",
+                    // AttendFlow attendance-status.ts tag table: missing is "Absent" in en.
+                    ("missing", true) => "Absent",
                     ("missing", false) => "缺席",
                     ("ignored", true) => "Ignored",
                     ("ignored", false) => "不计入",
+                    ("guest", true) => "Guest",
+                    ("guest", false) => "来宾",
+                    ("unmatched", true) => "Unmatched",
+                    ("unmatched", false) => "未匹配",
+                    // Desktop deviation: waited but was never admitted.
+                    ("waiting_room_only", true) => "Waiting room only",
+                    ("waiting_room_only", false) => "仅等候室",
                     (other, _) => other,
                 })
                 .collect::<Vec<_>>()
@@ -410,5 +418,24 @@ mod tests {
         assert_eq!(entries[0]["action"], "raise");
         assert_eq!(entries[0]["screenName"], "Ada");
         assert_eq!(entries[1]["action"], "lower");
+    }
+}
+
+#[cfg(test)]
+mod tag_label_tests {
+    use super::tags;
+    use serde_json::json;
+
+    #[test]
+    fn tag_labels_match_attendflow_table() {
+        let all = json!({"tags":["seen","full_present","late","returned","left_early","missing","ignored","guest","unmatched","waiting_room_only"]});
+        assert_eq!(
+            tags(&all, true),
+            "Seen | Full Present | Late | Returned | Left Early | Absent | Ignored | Guest | Unmatched | Waiting room only"
+        );
+        assert_eq!(
+            tags(&all, false),
+            "到过 | 全程到场 | 迟到 | 返回 | 早退 | 缺席 | 不计入 | 来宾 | 未匹配 | 仅等候室"
+        );
     }
 }
