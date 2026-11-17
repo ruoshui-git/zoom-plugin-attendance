@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, within } from '@testing-library/svelte';
-import { describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/svelte';
+import { afterEach, describe, expect, it } from 'vitest';
 import NameMatchingPanel from './NameMatchingPanel.svelte';
 
 const roster = [
@@ -8,6 +8,7 @@ const roster = [
 ];
 
 describe('NameMatchingPanel action visibility', () => {
+  afterEach(() => cleanup());
   it('shows candidate matches and More for unmatched rows, with manual controls collapsed', () => {
     render(NameMatchingPanel, { rows: [{ entityId: 'p1', sessionParticipantId: 'p1', zoomName: 'Ada Lovelace', matchStatus: 'unmatched' }], roster, decisions: [] });
     expect(screen.getByRole('button', { name: 'Match Ada Lovelace' })).toBeTruthy();
