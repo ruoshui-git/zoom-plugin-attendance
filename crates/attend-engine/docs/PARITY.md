@@ -17,6 +17,12 @@ Both comparisons intentionally start from persisted records. Replaying the event
 stream through ingestion would create new session participant identifiers and
 would not test derivation independently of SDK/repository batching.
 
+Companion ingestion now constructs that same `SessionRecord` shape and calls the
+same `derive` function. It does not calculate rows or summaries itself. The default
+owner options exclude waiting-room intervals from presence and stop event processing
+at the meeting instance end. `EngineOptions::attendflow_compat()` keeps captured
+AttendFlow behavior for the generic and roster golden gates.
+
 AttendFlow quirks represented by this port include its movement-event tie order,
 latest-roster identity refresh, rounded elapsed minutes, ±5-second waiting-room
 leave/admission pairing, status-tag priority, expanded ISO years from legacy

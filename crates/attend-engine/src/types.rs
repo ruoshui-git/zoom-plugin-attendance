@@ -376,7 +376,7 @@ pub struct Record {
 /// Persisted AttendFlow-shaped input to the derivation phase. Ingestion owns this
 /// record; derivation receives it unchanged so the desktop app never replays SDK
 /// batching semantics.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionRecord {
     #[serde(default)]
@@ -418,6 +418,10 @@ pub struct SessionRecord {
     pub late_threshold_minutes: u32,
     #[serde(default)]
     pub return_window_minutes: u32,
+    #[serde(default)]
+    pub late_overrides: std::collections::HashMap<String, bool>,
+    #[serde(default)]
+    pub return_overrides: std::collections::HashMap<String, bool>,
     #[serde(default)]
     pub session_participants: Vec<SessionParticipant>,
     #[serde(default)]

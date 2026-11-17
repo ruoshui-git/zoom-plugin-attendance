@@ -1,3 +1,6 @@
+use attend_engine::{
+    adapt_bridge_events, build_record, EngineConfig, EngineOptions, EngineState, MeetingMeta,
+};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
@@ -12,6 +15,17 @@ pub trait RecordProvider: Send + Sync {
         state: &Value,
         now: u64,
     ) -> Value;
+
+    fn try_build_record(
+        &self,
+        meeting: &Value,
+        events: &[Value],
+        config: &Value,
+        state: &Value,
+        now: u64,
+    ) -> Result<Value, String> {
+        Ok(self.build_record(meeting, events, config, state, now))
+    }
 }
 #[derive(Default)]
 pub struct StubRecordProvider;
@@ -103,5 +117,172 @@ impl RecordProvider for StubRecordProvider {
             .filter(|r| r["isCurrentlyPresent"] == true)
             .count();
         json!({"meeting":meeting,"rows":rows,"summary":{"seen":count,"fullPresent":present,"late":0,"returned":0,"leftEarly":count.saturating_sub(present),"absent":0,"ignored":0,"total":count},"durationMinutes":duration,"score":null,"mode":state["mode"].as_str().unwrap_or("generic")})
+    }
+}
+
+#[derive(Default)]
+pub struct EngineRecordProvider;
+
+impl RecordProvider for EngineRecordProvider {
+    fn build_record(
+        &self,
+        meeting: &Value,
+        events: &[Value],
+        config: &Value,
+        state: &Value,
+        now: u64,
+    ) -> Value {
+        self.try_build_record(meeting, events, config, state, now)
+            .unwrap_or_else(|error| json!({"error":error}))
+    }
+
+    fn try_build_record(
+        &self,
+        meeting: &Value,
+        events: &[Value],
+        config: &Value,
+        state: &Value,
+        now: u64,
+    ) -> Result<Value, String> {
+        let started_ms = meeting["startedAt"].as_u64().unwrap_or(now);
+        let started_at = iso(started_ms);
+        let meta = MeetingMeta {
+            meeting_id: meeting["instanceId"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string(),
+            meeting_topic: meeting["topic"].as_str().unwrap_or_default().to_string(),
+            started_at: started_at.clone(),
+            ended_at: meeting["endedAt"].as_u64().map(iso),
+        };
+        let mut normalized = adapt_bridge_events(events).map_err(|error| error.to_string())?;
+        if let Some(end) = &meta.ended_at {
+            if !normalized
+                .iter()
+                .any(|event| event["eventType"] == "instance_ended")
+            {
+                normalized.push(json!({"eventType":"instance_ended","timestamp":end}));
+            }
+        }
+        let config_value = json!({
+            "roster": config.get("roster").cloned().filter(|v| v.is_array()).unwrap_or_else(|| json!([])),
+            "aliases": config.get("aliases").cloned().filter(|v| v.is_array()).unwrap_or_else(|| json!([])),
+            "profiles": config.get("profiles").cloned().filter(|v| v.is_array()).unwrap_or_else(|| json!([])),
+        });
+        let engine_config: EngineConfig = serde_json::from_value(config_value)
+            .map_err(|error| format!("invalid attendance config: {error}"))?;
+        let engine_state: EngineState = serde_json::from_value(state.clone())
+            .map_err(|error| format!("invalid attendance state: {error}"))?;
+        let record = build_record(
+            meta,
+            &normalized,
+            engine_config,
+            engine_state,
+            EngineOptions::default(),
+            &iso(now),
+        )
+        .map_err(|error| error.to_string())?;
+        let duration_minutes = (now.saturating_sub(started_ms) as f64 / 60_000.0).max(0.0);
+        let mut rows = serde_json::to_value(&record.rows).map_err(|error| error.to_string())?;
+        if let Some(rows) = rows.as_array_mut() {
+            for row in rows {
+                let minutes = row["totalPresenceMinutes"].as_u64().unwrap_or(0);
+                row["score"] = json!(
+                    attend_engine::score(minutes, duration_minutes.round() as u64).percentage
+                );
+            }
+        }
+        Ok(json!({
+            "meeting": meeting,
+            "rows": rows,
+            "summary": record.summary,
+            "durationMinutes": duration_minutes,
+            "score": null,
+            "mode": record.mode,
+            "record": record,
+        }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{fs, path::PathBuf};
+
+    #[test]
+    fn fake_host_two_guests_produces_one_row_per_person_after_admission() {
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tools/fake/host-two-guests.jsonl");
+        let text = fs::read_to_string(path).unwrap();
+        let mut events = Vec::new();
+        let instance = "fake-host-two-guests";
+        let start = 1_794_893_640_000_u64;
+        for line in text.lines() {
+            let line: Value = serde_json::from_str(line).unwrap();
+            if line["event"] == "user_status" {
+                let action = line["action"].as_u64().unwrap_or_default();
+                let users: Vec<Value> = line["users"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .map(|user| {
+                        json!({
+                            "userId": user["user_id"],
+                            "name": user["name"],
+                            "waitingRoom": user["flags"].as_u64().unwrap_or_default() & 256 != 0,
+                            "host": user["flags"].as_u64().unwrap_or_default() & 1 != 0,
+                        })
+                    })
+                    .collect();
+                let event_action = match action {
+                    1 => "sync_all",
+                    2 => "add",
+                    3 => "left",
+                    4 => "update",
+                    _ => continue,
+                };
+                events.push(json!({
+                    "kind":"users",
+                    "action":event_action,
+                    "instanceId":instance,
+                    "at":start + events.len() as u64 * 60_000,
+                    "users":users,
+                }));
+            }
+        }
+        let provider = EngineRecordProvider;
+        let record = provider
+            .try_build_record(
+                &json!({"instanceId":instance,"meetingNumber":"1","topic":"Fake","startedAt":start,"isHost":true}),
+                &events,
+                &json!({"roster":[],"aliases":[],"profiles":[]}),
+                &json!({"mode":"generic"}),
+                start + 20 * 60_000,
+            )
+            .unwrap();
+        assert_eq!(record["rows"].as_array().unwrap().len(), 4);
+        let admitted = record["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|row| row["zoomName"] == "Waiting Guest")
+            .unwrap();
+        assert_eq!(admitted["participantUUIDs"].as_array().unwrap().len(), 2);
+        assert_eq!(admitted["firstJoinAt"], "2026-11-17T05:37:00.000Z");
+        assert_eq!(record["summary"]["total"], 4);
+    }
+
+    #[test]
+    fn engine_provider_returns_config_errors_without_panicking() {
+        let error = EngineRecordProvider
+            .try_build_record(
+                &json!({"instanceId":"i","startedAt":0}),
+                &[],
+                &json!({"roster":[{"personId":"bad"}]}),
+                &json!({"mode":"generic"}),
+                0,
+            )
+            .unwrap_err();
+        assert!(error.starts_with("invalid attendance config:"));
     }
 }

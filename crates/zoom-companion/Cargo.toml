@@ -15,6 +15,7 @@ path = "src/main.rs"
 zoom-bridge.workspace = true
 zoom-auth.workspace = true
 attend-store.workspace = true
+attend-engine = { path = "../attend-engine" }
 anyhow.workspace = true
 log.workspace = true
 env_logger.workspace = true

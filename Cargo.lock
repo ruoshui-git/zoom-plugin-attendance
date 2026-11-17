@@ -4120,6 +4120,7 @@ name = "zoom-companion"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "attend-engine",
  "attend-store",
  "axum",
  "chrono",

@@ -8,7 +8,7 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use crate::record::{RecordProvider, StubRecordProvider};
+use crate::record::{EngineRecordProvider, RecordProvider, StubRecordProvider};
 use attend_store::Store;
 use axum::{
     extract::{
@@ -657,7 +657,7 @@ pub fn run(
             allowed,
             ui,
             store: Arc::new(Store::open(data_dir.join("data.db"))?),
-            provider: Arc::new(StubRecordProvider),
+            provider: Arc::new(EngineRecordProvider),
             record_updates: Arc::new(Mutex::new(std::collections::HashMap::new())),
             log_dir,
         };

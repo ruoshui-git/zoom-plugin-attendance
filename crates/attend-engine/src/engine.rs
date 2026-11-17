@@ -48,13 +48,19 @@ pub struct EngineState {
 }
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(default)]
 pub struct EngineOptions {
     pub waiting_room_counts_as_presence: bool,
+    /// Companion sessions stop at the end of the tracked meeting instance.
+    /// AttendFlow compatibility leaves this disabled for captured golden parity.
+    #[serde(default)]
+    pub stop_at_instance_end: bool,
 }
 impl Default for EngineOptions {
     fn default() -> Self {
         Self {
             waiting_room_counts_as_presence: false,
+            stop_at_instance_end: true,
         }
     }
 }
@@ -62,6 +68,7 @@ impl EngineOptions {
     pub fn attendflow_compat() -> Self {
         Self {
             waiting_room_counts_as_presence: true,
+            stop_at_instance_end: false,
         }
     }
 }
@@ -370,7 +377,7 @@ pub fn build_record(
         let ts = event_timestamp(e);
         if ty == "instance_ended" {
             end = Some(ts);
-            ended = true;
+            ended = options.stop_at_instance_end;
             continue;
         }
         if ended {
@@ -683,25 +690,62 @@ pub fn build_record(
             participant.has_ambiguous_name = true;
         }
     }
-    let ended_at = end.clone().unwrap_or_else(|| now.into());
     let roster = observed_roster
         .as_ref()
         .map(|m| m.values().cloned().collect())
         .unwrap_or_else(|| latest_roster(&events));
-    let rows = make_rows(
-        &participants,
-        &events,
-        &config,
-        &state,
-        &groups,
-        &meta.started_at,
-        &ended_at,
-        late,
-        return_window,
-        &options,
-        observed_roster.as_ref(),
-    )?;
-    let summary = compute_summary(&rows, &state.mode, end.is_some());
+    let record_session = SessionRecord {
+        session_id: meta.meeting_id.clone(),
+        origin_session_key: meta.meeting_id.clone(),
+        record_source: "zoom-companion".into(),
+        started_at: meta.started_at.clone(),
+        ended_at: end.clone(),
+        is_active: end.is_none(),
+        mode: state.mode.clone(),
+        meeting_uuid: Some(meta.meeting_id.clone()),
+        meeting_id: Some(meta.meeting_id.clone()),
+        meeting_topic: Some(meta.meeting_topic.clone()),
+        guessed_profile_id: chosen.map(|p| p.id.clone()),
+        selected_profile_id: state.selected_profile_id.clone(),
+        selected_included_subgroups: groups,
+        late_threshold_minutes: late,
+        return_window_minutes: return_window,
+        late_overrides: state.late_overrides.clone(),
+        return_overrides: state.return_overrides.clone(),
+        session_participants: participants.clone(),
+        movement_events: events.clone(),
+        name_change_events: name_changes
+            .iter()
+            .map(|change| {
+                let movement = events.iter().rev().find(|event| {
+                    event.participant.participant_uuid == change.participant_uuid
+                        && event.timestamp <= change.timestamp
+                });
+                SessionNameChangeEvent {
+                    id: change.id.clone(),
+                    timestamp: change.timestamp.clone(),
+                    session_participant_id: change.session_participant_id.clone(),
+                    participant_uuid: change.participant_uuid.clone(),
+                    previous_screen_name: change.previous_screen_name.clone(),
+                    next_screen_name: change.next_screen_name.clone(),
+                    role: movement
+                        .map(|event| event.participant.role.clone())
+                        .unwrap_or_default(),
+                    location: movement
+                        .map(|event| event.participant.location.clone())
+                        .unwrap_or_default(),
+                    source: "bridge_update".into(),
+                }
+            })
+            .collect(),
+        latest_roster: roster.clone(),
+        manual_snapshots: state.manual_snapshots.clone(),
+        reconciliation_decisions: state.decisions.clone(),
+        raise_hand_entries: hands.clone(),
+        raise_hand_captures: state.raise_hand_captures.clone(),
+        ..SessionRecord::default()
+    };
+    let derived = derive(&record_session, &config, &state.decisions, now, &options)?;
     Ok(Record {
         meeting_id: meta.meeting_id,
         meeting_topic: meta.meeting_topic,
@@ -714,8 +758,8 @@ pub fn build_record(
         movement_events: events,
         name_change_events: name_changes,
         latest_roster: roster,
-        rows,
-        summary,
+        rows: derived.rows,
+        summary: derived.summary,
         raise_hand_entries: hands,
         raise_hand_captures: state.raise_hand_captures,
     })
@@ -745,6 +789,8 @@ pub fn derive(
         present: bool,
         location: Option<ParticipantLocation>,
         first_waiting: Option<String>,
+        waiting_since: Option<i64>,
+        waiting_total_ms: i64,
     }
 
     let late_minutes = session.late_threshold_minutes;
@@ -758,7 +804,9 @@ pub fn derive(
             (
                 p.session_participant_id.clone(),
                 State {
-                    first_join: Some(p.first_seen_at.clone()),
+                    first_join: options
+                        .waiting_room_counts_as_presence
+                        .then(|| p.first_seen_at.clone()),
                     last_seen: Some(p.last_seen_at.clone()),
                     location: Some(p.current_location.clone()),
                     ..State::default()
@@ -766,7 +814,20 @@ pub fn derive(
             )
         })
         .collect();
-    let mut events: Vec<_> = session.movement_events.iter().collect();
+    let end_cutoff = session
+        .ended_at
+        .as_deref()
+        .and_then(|ended| timestamp_ms(&json!(ended)));
+    let mut events: Vec<_> = session
+        .movement_events
+        .iter()
+        .filter(|event| {
+            !options.stop_at_instance_end
+                || end_cutoff.is_none_or(|cutoff| {
+                    timestamp_ms(&json!(event.timestamp)).unwrap_or(i64::MIN) <= cutoff
+                })
+        })
+        .collect();
     let priority = |kind: &MovementType| match kind {
         MovementType::JoinedBefore
         | MovementType::WaitingRoomJoinedBefore
@@ -824,8 +885,8 @@ pub fn derive(
                 state.first_waiting = Some(event.timestamp.clone());
             }
             if !counts_as_presence {
-                if state.open_since.is_none() {
-                    state.open_since = Some(t);
+                if state.waiting_since.is_none() {
+                    state.waiting_since = Some(t);
                 }
                 state.last_seen = Some(event.timestamp.clone());
                 continue;
@@ -834,6 +895,9 @@ pub fn derive(
                 state.first_join = Some(event.timestamp.clone());
             }
             if !state.present {
+                if let Some(waiting_since) = state.waiting_since.take() {
+                    state.waiting_total_ms += (t - waiting_since).max(0);
+                }
                 if let Some(last_leave) = &state.last_leave {
                     let gap = t - timestamp_ms(&json!(last_leave)).unwrap_or(t);
                     if gap > return_minutes as i64 * 60_000 {
@@ -858,6 +922,11 @@ pub fn derive(
                         && (timestamp_ms(&json!(candidate.timestamp)).unwrap_or(0) - t).abs()
                             <= 5_000
                 });
+            if event.kind == MovementType::WaitingRoomLeave {
+                if let Some(waiting_since) = state.waiting_since.take() {
+                    state.waiting_total_ms += (t - waiting_since).max(0);
+                }
+            }
             if let Some(open) = state.open_since.take() {
                 state.total_ms += (t - open).max(0);
                 if !paired_admission {
@@ -873,6 +942,12 @@ pub fn derive(
         let Some(state) = states.get_mut(&participant.session_participant_id) else {
             continue;
         };
+        if let Some(returned) = session
+            .return_overrides
+            .get(&participant.session_participant_id)
+        {
+            state.returned = *returned;
+        }
         if let Some(latest) = session
             .latest_roster
             .iter()
@@ -893,10 +968,20 @@ pub fn derive(
             }
             participant.role = latest.role.clone();
             participant.current_location = latest.location.clone();
-            state.present = true;
-            state.location = Some(latest.location.clone());
-            if state.open_since.is_none() {
-                state.open_since = Some(reference_ms);
+            if latest.location == ParticipantLocation::WaitingRoom
+                && !options.waiting_room_counts_as_presence
+            {
+                state.present = false;
+                state.location = None;
+                if state.waiting_since.is_none() {
+                    state.waiting_since = Some(reference_ms);
+                }
+            } else {
+                state.present = true;
+                state.location = Some(latest.location.clone());
+                if state.open_since.is_none() {
+                    state.open_since = Some(reference_ms);
+                }
             }
         } else if state.present {
             state.present = false;
@@ -907,21 +992,44 @@ pub fn derive(
                 state.total_ms += (reference_ms - open).max(0);
             }
         }
+        if let Some(waiting_since) = state.waiting_since {
+            if !options.waiting_room_counts_as_presence {
+                let cutoff = session
+                    .ended_at
+                    .as_deref()
+                    .and_then(|ended| timestamp_ms(&json!(ended)))
+                    .unwrap_or(reference_ms)
+                    .min(reference_ms);
+                state.waiting_total_ms += (cutoff - waiting_since).max(0);
+            }
+        }
     }
     let mut rows = Vec::new();
     for participant in &participants {
         let state = &states[&participant.session_participant_id];
-        let first = state
-            .first_join
-            .clone()
-            .or_else(|| Some(participant.first_seen_at.clone()));
-        let seen = state.first_join.is_some() || !participant.last_seen_at.is_empty();
+        let first = state.first_join.clone().or_else(|| {
+            options
+                .waiting_room_counts_as_presence
+                .then(|| participant.first_seen_at.clone())
+        });
+        let seen = state.first_join.is_some()
+            || (options.waiting_room_counts_as_presence && !participant.last_seen_at.is_empty());
         let first_ms = state
             .first_join
             .as_deref()
             .and_then(|s| timestamp_ms(&json!(s)))
-            .unwrap_or_else(|| timestamp_ms(&json!(participant.first_seen_at)).unwrap_or(start_ms));
-        let was_late = first_ms > start_ms + late_minutes as i64 * 60_000;
+            .unwrap_or_else(|| {
+                if options.waiting_room_counts_as_presence {
+                    timestamp_ms(&json!(participant.first_seen_at)).unwrap_or(start_ms)
+                } else {
+                    start_ms
+                }
+            });
+        let was_late = session
+            .late_overrides
+            .get(&participant.session_participant_id)
+            .copied()
+            .unwrap_or(first_ms > start_ms + late_minutes as i64 * 60_000);
         let status = if state.present {
             if state.returned {
                 AttendanceStatus::ReturnedAfterLongAbsence
@@ -997,7 +1105,11 @@ pub fn derive(
             current_status: status,
             was_late,
             total_presence_minutes: ((state.total_ms.max(0) as f64 / 60_000.0).round() as u64),
-            waiting_room_minutes: 0,
+            waiting_room_minutes: if options.waiting_room_counts_as_presence {
+                0
+            } else {
+                (state.waiting_total_ms.max(0) as f64 / 60_000.0).round() as u64
+            },
             absence_count: state.absence_count,
             returned_after_long_absence: state.returned,
             tags,
@@ -1325,340 +1437,6 @@ fn latest_roster(events: &[MovementEvent]) -> Vec<ZoomParticipant> {
     }
     m.into_values().collect()
 }
-fn make_rows(
-    ps: &[SessionParticipant],
-    ev: &[MovementEvent],
-    cfg: &EngineConfig,
-    state: &EngineState,
-    groups: &[String],
-    start: &str,
-    end: &str,
-    late_after: u32,
-    return_window: u32,
-    opts: &EngineOptions,
-    latest_roster: Option<&HashMap<String, ZoomParticipant>>,
-) -> Result<Vec<AttendanceRow>, EngineError> {
-    let end_ms = timestamp_ms(&json!(end)).unwrap_or(0);
-    let start_ms = timestamp_ms(&json!(start)).unwrap_or(end_ms);
-    let mut rows = Vec::new();
-    let mut seen_people = HashSet::new();
-    for p in ps {
-        let mut own: Vec<_> = ev
-            .iter()
-            .filter(|e| e.session_participant_id.as_deref() == Some(&p.session_participant_id))
-            .collect();
-        own.sort_by_key(|e| timestamp_ms(&json!(e.timestamp)).unwrap_or(0));
-        let mut open: Option<i64> = None;
-        let mut total = 0i64;
-        let mut waiting = 0i64;
-        let mut first = None;
-        let mut first_wait = None;
-        let mut last = None;
-        let mut absence = 0;
-        let mut long_return = false;
-        let mut currently = false;
-        for e in own {
-            let t = timestamp_ms(&json!(e.timestamp)).unwrap_or(0);
-            match e.kind {
-                MovementType::Join
-                | MovementType::JoinedBefore
-                | MovementType::WaitingRoomJoinFromMeeting => {
-                    if e.participant.location == ParticipantLocation::WaitingRoom
-                        && !opts.waiting_room_counts_as_presence
-                    {
-                        if first_wait.is_none() {
-                            first_wait = Some(e.timestamp.clone())
-                        }
-                        if open.is_none() {
-                            open = Some(t)
-                        }
-                    } else {
-                        if first.is_none() {
-                            first = Some(e.timestamp.clone())
-                        }
-                        if open.is_none() {
-                            open = Some(t)
-                        } else if !currently {
-                            let gap = (t - open.unwrap_or(t)) / 60000;
-                            if gap > return_window as i64 {
-                                long_return = true
-                            }
-                            absence += 1;
-                            open = Some(t)
-                        }
-                        currently = true;
-                    }
-                    last = Some(e.timestamp.clone());
-                }
-                MovementType::WaitingRoomJoinFromOutside
-                | MovementType::WaitingRoomJoinedBefore => {
-                    if first_wait.is_none() {
-                        first_wait = Some(e.timestamp.clone())
-                    }
-                    if opts.waiting_room_counts_as_presence {
-                        if first.is_none() {
-                            first = Some(e.timestamp.clone())
-                        }
-                        open = Some(t);
-                        currently = true;
-                    } else if open.is_none() {
-                        open = Some(t);
-                    }
-                }
-                MovementType::Leave | MovementType::WaitingRoomLeave => {
-                    if let Some(s) = open.take() {
-                        let dur = t - s;
-                        if e.participant.location == ParticipantLocation::WaitingRoom
-                            && !opts.waiting_room_counts_as_presence
-                        {
-                            waiting += dur
-                        } else {
-                            total += dur
-                        }
-                        if e.kind == MovementType::Leave && currently {
-                            absence += 1;
-                        }
-                    }
-                    currently = false;
-                    last = Some(e.timestamp.clone());
-                }
-            }
-        }
-        if let Some(s) = open {
-            let d = end_ms - s;
-            if p.current_location == ParticipantLocation::WaitingRoom
-                && !opts.waiting_room_counts_as_presence
-            {
-                waiting += d
-            } else {
-                total += d
-            }
-        }
-        if let Some(roster) = latest_roster {
-            currently = roster.contains_key(&p.current_participant_uuid);
-        }
-        let first_join = first
-            .as_deref()
-            .map(|x| timestamp_ms(&json!(x)).unwrap_or(start_ms));
-        let was_late = first_join
-            .map(|x| x - start_ms > late_after as i64 * 60000)
-            .unwrap_or(false);
-        let decision = state
-            .decisions
-            .iter()
-            .rev()
-            .find(|d| d.session_participant_id == p.session_participant_id);
-        let candidates = candidate_people(&p.current_screen_name, &cfg.roster, &cfg.aliases);
-        if candidates.len() > 1 {
-            return Err(EngineError::MultipleRosterMatches(
-                p.current_screen_name.clone(),
-            ));
-        }
-        let mut match_status = if state.mode == SessionMode::Generic {
-            MatchStatus::NotApplicable
-        } else {
-            MatchStatus::Unmatched
-        };
-        let mut person = None;
-        let mut split = Vec::new();
-        if let Some(d) = decision {
-            match d.action {
-                DecisionAction::Guest => match_status = MatchStatus::Guest,
-                DecisionAction::Match | DecisionAction::NameChangeKeepMatch => {
-                    person = cfg.roster.iter().find(|x| Some(x.person_id) == d.person_id);
-                    if person.is_some() {
-                        match_status = MatchStatus::Matched
-                    }
-                }
-                DecisionAction::Split => {
-                    split = d
-                        .split_person_ids
-                        .iter()
-                        .filter_map(|id| cfg.roster.iter().find(|x| x.person_id == *id))
-                        .collect();
-                    if split.len() > 0 {
-                        match_status = MatchStatus::Split
-                    }
-                }
-                DecisionAction::NameChangeRevertMatch => {}
-            }
-        }
-        if person.is_none() && match_status == MatchStatus::Unmatched && candidates.len() == 1 {
-            person = Some(candidates[0]);
-            match_status = MatchStatus::Matched
-        }
-        let expected = person
-            .map(|x| profile_includes_group(groups, &x.group))
-            .unwrap_or(false);
-        let status = if match_status == MatchStatus::Guest {
-            AttendanceStatus::Guest
-        } else if !first.is_some() {
-            if state.mode == SessionMode::Roster && expected {
-                AttendanceStatus::Missing
-            } else {
-                AttendanceStatus::Unmatched
-            }
-        } else if long_return && currently {
-            AttendanceStatus::ReturnedAfterLongAbsence
-        } else if currently && was_late {
-            AttendanceStatus::Late
-        } else if currently {
-            AttendanceStatus::Present
-        } else {
-            AttendanceStatus::LeftEarly
-        };
-        let counted = state.mode == SessionMode::Generic
-            || matches!(match_status, MatchStatus::Matched | MatchStatus::Split);
-        let mut tags = Vec::new();
-        if counted && first.is_some() {
-            tags.push(AttendanceTag::Seen)
-        }
-        if counted && first.is_some() && currently && !was_late && !long_return {
-            tags.push(AttendanceTag::FullPresent)
-        }
-        if counted && first.is_some() && was_late {
-            tags.push(AttendanceTag::Late)
-        }
-        if counted && first.is_some() && !currently && status == AttendanceStatus::LeftEarly {
-            tags.push(AttendanceTag::LeftEarly)
-        }
-        if counted && long_return && currently {
-            tags.push(AttendanceTag::Returned)
-        }
-        if state.mode == SessionMode::Roster && counted && status == AttendanceStatus::Missing {
-            tags.push(AttendanceTag::Missing)
-        }
-        if state.mode == SessionMode::Roster && !counted && first.is_some() {
-            tags.push(AttendanceTag::Ignored)
-        }
-        if state.mode == SessionMode::Roster && match_status == MatchStatus::Guest {
-            tags.push(AttendanceTag::Guest)
-        }
-        if state.mode == SessionMode::Roster && match_status == MatchStatus::Unmatched {
-            tags.push(AttendanceTag::Unmatched)
-        }
-        if let Some(person) = person {
-            seen_people.insert(person.person_id);
-            rows.push(AttendanceRow {
-                entity_id: format!("person-{}", person.person_id),
-                session_participant_id: Some(p.session_participant_id.clone()),
-                participant_uuid: Some(p.current_participant_uuid.clone()),
-                participant_uuids: p.participant_uuids.clone(),
-                zoom_name: p.current_screen_name.clone(),
-                zoom_names: p.screen_names.clone(),
-                role: Some(p.role.clone()),
-                person_id: Some(person.person_id),
-                canonical_name: Some(person.canonical_name.clone()),
-                pinyin: Some(person.pinyin.clone()),
-                group: Some(person.group.clone()),
-                current_location: if currently {
-                    Some(p.current_location.clone())
-                } else {
-                    None
-                },
-                match_status,
-                is_expected: expected,
-                has_been_seen: first.is_some(),
-                is_currently_present: currently,
-                first_join_at: first,
-                first_waiting_room_at: first_wait,
-                last_seen_at: last,
-                current_status: status,
-                was_late,
-                total_presence_minutes: (total.max(0) as u64 + 30000) / 60000,
-                waiting_room_minutes: (waiting.max(0) as u64 + 30000) / 60000,
-                absence_count: absence,
-                returned_after_long_absence: long_return,
-                tags,
-                shared_name: p.has_ambiguous_name || is_likely_shared_name(&p.current_screen_name),
-                split_person_ids: vec![],
-                split_canonical_names: vec![],
-                notes: None,
-            });
-        } else {
-            rows.push(AttendanceRow {
-                entity_id: p.session_participant_id.clone(),
-                session_participant_id: Some(p.session_participant_id.clone()),
-                participant_uuid: Some(p.current_participant_uuid.clone()),
-                participant_uuids: p.participant_uuids.clone(),
-                zoom_name: p.current_screen_name.clone(),
-                zoom_names: p.screen_names.clone(),
-                role: Some(p.role.clone()),
-                person_id: None,
-                canonical_name: None,
-                pinyin: None,
-                group: None,
-                current_location: if currently {
-                    Some(p.current_location.clone())
-                } else {
-                    None
-                },
-                match_status,
-                is_expected: false,
-                has_been_seen: first.is_some(),
-                is_currently_present: currently,
-                first_join_at: first,
-                first_waiting_room_at: first_wait,
-                last_seen_at: last,
-                current_status: status,
-                was_late,
-                total_presence_minutes: (total.max(0) as u64 + 30000) / 60000,
-                waiting_room_minutes: (waiting.max(0) as u64 + 30000) / 60000,
-                absence_count: absence,
-                returned_after_long_absence: long_return,
-                tags,
-                shared_name: p.has_ambiguous_name || is_likely_shared_name(&p.current_screen_name),
-                split_person_ids: split.iter().map(|x| x.person_id).collect(),
-                split_canonical_names: split.iter().map(|x| x.canonical_name.clone()).collect(),
-                notes: None,
-            });
-        }
-    }
-    if state.mode == SessionMode::Roster {
-        for person in cfg
-            .roster
-            .iter()
-            .filter(|r| r.active && !seen_people.contains(&r.person_id))
-        {
-            let expected = profile_includes_group(groups, &person.group);
-            if expected {
-                rows.push(AttendanceRow {
-                    entity_id: format!("person-{}", person.person_id),
-                    session_participant_id: None,
-                    participant_uuid: None,
-                    participant_uuids: vec![],
-                    zoom_name: person.canonical_name.clone(),
-                    zoom_names: vec![],
-                    role: None,
-                    person_id: Some(person.person_id),
-                    canonical_name: Some(person.canonical_name.clone()),
-                    pinyin: Some(person.pinyin.clone()),
-                    group: Some(person.group.clone()),
-                    current_location: None,
-                    match_status: MatchStatus::Matched,
-                    is_expected: true,
-                    has_been_seen: false,
-                    is_currently_present: false,
-                    first_join_at: None,
-                    first_waiting_room_at: None,
-                    last_seen_at: None,
-                    current_status: AttendanceStatus::Missing,
-                    was_late: false,
-                    total_presence_minutes: 0,
-                    waiting_room_minutes: 0,
-                    absence_count: 0,
-                    returned_after_long_absence: false,
-                    tags: vec![AttendanceTag::Missing],
-                    shared_name: false,
-                    split_person_ids: vec![],
-                    split_canonical_names: vec![],
-                    notes: None,
-                });
-            }
-        }
-    }
-    Ok(rows)
-}
 fn compute_summary(rows: &[AttendanceRow], mode: &SessionMode, ended: bool) -> AttendanceSummary {
     let mut s = AttendanceSummary::default();
     for r in rows {
@@ -1879,5 +1657,59 @@ mod tests {
         .unwrap();
         assert_eq!(compat.rows[0].total_presence_minutes, 4);
         assert_eq!(compat.rows[0].waiting_room_minutes, 0);
+    }
+
+    #[test]
+    fn derivation_stops_at_instance_end_only_in_companion_mode() {
+        let participant = SessionParticipant {
+            session_participant_id: "sp-1".into(),
+            current_participant_uuid: "m:1".into(),
+            participant_uuids: vec!["m:1".into()],
+            current_screen_name: "A".into(),
+            screen_names: vec!["A".into()],
+            role: "attendee".into(),
+            current_location: ParticipantLocation::Meeting,
+            first_seen_at: "2026-01-01T00:00:00.000Z".into(),
+            last_seen_at: "2026-01-01T00:02:00.000Z".into(),
+            identity_resolution: "new_identity".into(),
+            has_ambiguous_name: false,
+        };
+        let session = SessionRecord {
+            started_at: "2026-01-01T00:00:00.000Z".into(),
+            ended_at: Some("2026-01-01T00:01:00.000Z".into()),
+            session_participants: vec![participant],
+            movement_events: vec![MovementEvent {
+                id: "after-end".into(),
+                timestamp: "2026-01-01T00:02:00.000Z".into(),
+                kind: MovementType::Join,
+                session_participant_id: Some("sp-1".into()),
+                participant: ZoomParticipant {
+                    participant_uuid: "m:1".into(),
+                    screen_name: "A".into(),
+                    screen_name_pinyin: String::new(),
+                    role: "attendee".into(),
+                    location: ParticipantLocation::Meeting,
+                },
+            }],
+            ..SessionRecord::default()
+        };
+        let owner = derive(
+            &session,
+            &EngineConfig::default(),
+            &[],
+            "2026-01-01T00:03:00.000Z",
+            &EngineOptions::default(),
+        )
+        .unwrap();
+        let compat = derive(
+            &session,
+            &EngineConfig::default(),
+            &[],
+            "2026-01-01T00:03:00.000Z",
+            &EngineOptions::attendflow_compat(),
+        )
+        .unwrap();
+        assert!(!owner.rows[0].has_been_seen);
+        assert!(compat.rows[0].has_been_seen);
     }
 }
