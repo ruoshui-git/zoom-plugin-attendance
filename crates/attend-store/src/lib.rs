@@ -176,6 +176,20 @@ impl Store {
             )? != 0)
         })
     }
+    /// Remove every local record and its cascading events/states.
+    pub fn clear_records(&self) -> Result<()> {
+        self.with(|c| {
+            c.execute("DELETE FROM meetings", [])?;
+            c.execute("DELETE FROM docs", [])?;
+            Ok(())
+        })
+    }
+    /// Close records left open by a process shutdown, using the last persisted event time.
+    pub fn close_stale_meetings(&self, ended_at: u64) -> Result<usize> {
+        self.with(|c| {
+            Ok(c.execute("UPDATE meetings SET ended_at=COALESCE((SELECT MAX(events.at) FROM events WHERE events.instance_id=meetings.instance_id),?1), end_reason='companion_offline' WHERE ended_at IS NULL", [ended_at as i64])?)
+        })
+    }
     pub fn import_jsonl(&self, path: &Path) -> Result<usize> {
         let mut n = 0;
         for line in fs::read_to_string(path)?.lines() {

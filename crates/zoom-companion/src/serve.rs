@@ -662,6 +662,8 @@ pub fn run(
             log_dir,
         };
         import_logs(&app, &app.log_dir);
+        // Any still-open record belongs to a process that ended before this one started.
+        app.store.close_stale_meetings(now())?;
         if fake {
             seed_fake_meeting(&app);
         }
@@ -681,6 +683,8 @@ pub fn run(
             .route("/bridge", get(ws))
             .route("/api/config/:key", get(api_get_config).put(api_put_config))
             .route("/api/meetings", get(api_meetings))
+            .route("/api/records/export", get(api_export_records))
+            .route("/api/records/delete", post(api_delete_records))
             .route(
                 "/api/meetings/:id",
                 get(api_meeting).delete(api_delete_meeting),
@@ -692,6 +696,14 @@ pub fn run(
                 get(api_get_state).put(api_put_state),
             )
             .route("/api/import/attendflow-backup", post(api_import_backup))
+            .route(
+                "/api/backup",
+                get(api_export_backup).post(api_restore_backup),
+            )
+            .route(
+                "/api/local-data",
+                axum::routing::delete(api_clear_local_data),
+            )
             .fallback(get(root))
             .with_state(app);
         axum::serve(listener, router)
@@ -1289,12 +1301,111 @@ async fn api_put_config(
         return StatusCode::BAD_REQUEST.into_response();
     };
     let val = body.get("value").cloned().unwrap_or(Value::Null);
+    if let Some(message) = validate_config(&a, &key, &val) {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({"error":"validation_error","message":message})),
+        )
+            .into_response();
+    }
     match a.store.put_doc(&key, rev, &val, now()) {
         Ok(Ok(revision)) => Json(json!({"revision":revision,"value":val})).into_response(),
         Ok(Err(actual)) => Json(json!({"error":"stale_revision","revision":actual}))
             .into_response_with_status(StatusCode::CONFLICT),
         Err(e) => api_error(e),
     }
+}
+fn norm_config_name(value: &str) -> String {
+    value
+        .chars()
+        .filter(|c| {
+            !c.is_whitespace()
+                && !c.is_ascii_punctuation()
+                && !"，。！？；：、（）【】《》“”‘’·—…".contains(*c)
+        })
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+fn validate_config(a: &App, key: &str, value: &Value) -> Option<String> {
+    let rows = value.as_array()?;
+    if key == "roster" {
+        let mut names = std::collections::HashSet::new();
+        let mut ids = std::collections::HashSet::new();
+        for p in rows {
+            let name = p["canonicalName"]
+                .as_str()
+                .or_else(|| p["name"].as_str())
+                .unwrap_or("")
+                .trim();
+            if name.is_empty() {
+                return Some("canonical name is required".into());
+            }
+            let normalized = norm_config_name(name);
+            if !names.insert(normalized) {
+                return Some(format!("duplicate canonical name: {name}"));
+            }
+            let id = p["personId"]
+                .as_i64()
+                .or_else(|| p["id"].as_i64())
+                .unwrap_or(-1);
+            if id < 0 || !ids.insert(id) {
+                return Some(format!("invalid or duplicate roster id: {id}"));
+            }
+        }
+        let aliases = a.store.get_doc("aliases").ok()?.1;
+        for alias in aliases.as_array().into_iter().flatten() {
+            let name = alias["zoomName"]
+                .as_str()
+                .or_else(|| alias["alias"].as_str())
+                .unwrap_or("");
+            if names.contains(&norm_config_name(name)) {
+                return Some(format!("canonical name conflicts with nickname: {name}"));
+            }
+        }
+    } else if key == "aliases" {
+        let roster = a.store.get_doc("roster").ok()?.1;
+        let canonical: std::collections::HashSet<String> = roster
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|p| p["canonicalName"].as_str().or_else(|| p["name"].as_str()))
+            .map(norm_config_name)
+            .collect();
+        let mut seen = std::collections::HashSet::new();
+        for alias in rows {
+            let name = alias["zoomName"]
+                .as_str()
+                .or_else(|| alias["alias"].as_str())
+                .unwrap_or("")
+                .trim();
+            let norm = norm_config_name(name);
+            if norm.is_empty() || !seen.insert(norm.clone()) {
+                return Some(format!("nickname is empty or duplicated: {name}"));
+            }
+            if canonical.contains(&norm) {
+                return Some(format!("nickname conflicts with canonical name: {name}"));
+            }
+        }
+    } else if key == "profiles" {
+        let current = a.store.get_doc("profiles").ok()?.1;
+        if current
+            .as_array()
+            .into_iter()
+            .flatten()
+            .any(|p| p["id"] == "default-all")
+            && !rows.iter().any(|p| p["id"] == "default-all")
+        {
+            return Some("default-all profile is locked".into());
+        }
+        for p in rows {
+            if p["id"].as_str().unwrap_or("").is_empty()
+                || p["name"].as_str().unwrap_or("").trim().is_empty()
+            {
+                return Some("profile id and name are required".into());
+            }
+        }
+    }
+    None
 }
 async fn api_meetings(State(a): State<App>, headers: HeaderMap) -> Response {
     if let Some(r) = api_origin(&a, &headers) {
@@ -1440,6 +1551,149 @@ async fn api_delete_meeting(
         Err(e) => api_error(e),
     }
 }
+async fn api_export_records(State(a): State<App>, headers: HeaderMap) -> Response {
+    if let Some(r) = api_origin(&a, &headers) {
+        return r;
+    }
+    let meetings = match a.store.meetings() {
+        Ok(v) => v,
+        Err(e) => return api_error(e),
+    };
+    let mut records = Vec::new();
+    for m in meetings {
+        let Some(meeting) = a.store.meeting(&m.instance_id).ok().flatten() else {
+            continue;
+        };
+        let events = match a.store.events(&m.instance_id) {
+            Ok(v) => v,
+            Err(e) => return api_error(e),
+        };
+        let events: Vec<Value> = events
+            .iter()
+            .map(|e| stored_event(&m.instance_id, e))
+            .collect();
+        let config = json!({"roster":a.store.get_doc("roster").map(|x|x.1).unwrap_or(Value::Null),"aliases":a.store.get_doc("aliases").map(|x|x.1).unwrap_or(Value::Null),"profiles":a.store.get_doc("profiles").map(|x|x.1).unwrap_or(Value::Null),"settings":a.store.get_doc("settings").map(|x|x.1).unwrap_or(Value::Null)});
+        let state = a
+            .store
+            .get_state(&m.instance_id)
+            .map(|x| x.1)
+            .unwrap_or(json!({"mode":"generic"}));
+        let record = a
+            .provider
+            .build_record(&meeting, &events, &config, &state, now());
+        records.push(json!({"meeting":meeting,"events":events,"record":record,"state":state}));
+    }
+    Json(json!({"version":3,"exportedAt":now(),"records":records})).into_response()
+}
+async fn api_delete_records(
+    State(a): State<App>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Response {
+    if let Some(r) = api_origin(&a, &headers) {
+        return r;
+    }
+    let Some(ids) = body["instanceIds"].as_array() else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    let active = a
+        .tracker
+        .lock()
+        .unwrap()
+        .meeting
+        .as_ref()
+        .map(|m| m.instance_id.clone());
+    if ids.iter().filter_map(Value::as_str).any(|id| {
+        Some(id) == active.as_deref()
+            || a.store
+                .meeting(id)
+                .ok()
+                .flatten()
+                .is_some_and(|m| m["endedAt"].is_null())
+    }) {
+        return (
+            StatusCode::CONFLICT,
+            Json(json!({"error":"active_meeting"})),
+        )
+            .into_response();
+    }
+    let mut deleted = 0;
+    for id in ids.iter().filter_map(Value::as_str) {
+        match a.store.delete_meeting(id) {
+            Ok(true) => deleted += 1,
+            Ok(false) => {}
+            Err(e) => return api_error(e),
+        }
+    }
+    Json(json!({"deleted":deleted})).into_response()
+}
+async fn api_export_backup(State(a): State<App>, headers: HeaderMap) -> Response {
+    if let Some(r) = api_origin(&a, &headers) {
+        return r;
+    }
+    let docs = |k: &str| {
+        a.store
+            .get_doc(k)
+            .map(|x| x.1)
+            .unwrap_or(Value::Array(vec![]))
+    };
+    let meetings = match a.store.meetings() {
+        Ok(v) => v,
+        Err(e) => return api_error(e),
+    };
+    let mut records = Vec::new();
+    for m in meetings {
+        let Some(meeting) = a.store.meeting(&m.instance_id).ok().flatten() else {
+            continue;
+        };
+        let events = match a.store.events(&m.instance_id) {
+            Ok(v) => v,
+            Err(e) => return api_error(e),
+        };
+        records.push(json!({"meeting":meeting,"events":events.iter().map(|e|stored_event(&m.instance_id,e)).collect::<Vec<_>>()}));
+    }
+    Json(json!({"version":3,"exportedAt":now(),"rosterPeople":docs("roster"),"aliasMappings":docs("aliases"),"attendanceProfiles":docs("profiles"),"settings":docs("settings"),"records":records})).into_response()
+}
+async fn api_restore_backup(
+    State(a): State<App>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Response {
+    if let Some(r) = api_origin(&a, &headers) {
+        return r;
+    }
+    if body["version"].as_u64() != Some(3) && body["schemaVersion"].as_u64() != Some(3) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error":"expected AttendFlow backup v3"})),
+        )
+            .into_response();
+    }
+    if a.tracker.lock().unwrap().meeting.is_some() {
+        return (
+            StatusCode::CONFLICT,
+            Json(json!({"error":"active_meeting"})),
+        )
+            .into_response();
+    }
+    api_import_backup(State(a), headers, Json(body)).await
+}
+async fn api_clear_local_data(State(a): State<App>, headers: HeaderMap) -> Response {
+    if let Some(r) = api_origin(&a, &headers) {
+        return r;
+    }
+    if a.tracker.lock().unwrap().meeting.is_some() {
+        return (
+            StatusCode::CONFLICT,
+            Json(json!({"error":"active_meeting"})),
+        )
+            .into_response();
+    }
+    match a.store.clear_records() {
+        Ok(()) => Json(json!({"cleared":true})).into_response(),
+        Err(e) => api_error(e),
+    }
+}
 async fn api_import_backup(
     State(a): State<App>,
     headers: HeaderMap,
@@ -1462,6 +1716,7 @@ async fn api_import_backup(
         ("roster", "rosterPeople"),
         ("aliases", "aliasMappings"),
         ("profiles", "attendanceProfiles"),
+        ("settings", "settings"),
     ];
     let mut counts = serde_json::Map::new();
     for (key, field) in entries {
@@ -1653,6 +1908,12 @@ async fn backup_import_revision_conflict_and_state_notification() {
     };
     let api = Router::new()
         .route("/api/import/attendflow-backup", post(api_import_backup))
+        .route(
+            "/api/backup",
+            get(api_export_backup).post(api_restore_backup),
+        )
+        .route("/api/records/export", get(api_export_records))
+        .route("/api/records/delete", post(api_delete_records))
         .route("/api/config/:key", get(api_get_config).put(api_put_config))
         .route(
             "/api/meetings/:id",
@@ -1684,6 +1945,28 @@ async fn backup_import_revision_conflict_and_state_notification() {
             .unwrap()
             .len(),
         1
+    );
+    let req = axum::http::Request::builder()
+        .uri("/api/backup")
+        .body(axum::body::Body::empty())
+        .unwrap();
+    let exported = api.clone().oneshot(req).await.unwrap();
+    assert_eq!(exported.status(), StatusCode::OK);
+    let req = axum::http::Request::builder()
+        .uri("/api/records/export")
+        .body(axum::body::Body::empty())
+        .unwrap();
+    let exported = api.clone().oneshot(req).await.unwrap();
+    assert_eq!(exported.status(), StatusCode::OK);
+    let req = axum::http::Request::builder()
+        .method("POST")
+        .uri("/api/records/delete")
+        .header("content-type", "application/json")
+        .body(axum::body::Body::from(r#"{"instanceIds":["m1"]}"#))
+        .unwrap();
+    assert_eq!(
+        api.clone().oneshot(req).await.unwrap().status(),
+        StatusCode::CONFLICT
     );
     let stale = json!({"revision":0,"value":[]});
     let req = axum::http::Request::builder()

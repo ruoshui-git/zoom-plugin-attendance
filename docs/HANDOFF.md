@@ -25,9 +25,13 @@ reconnect/meeting-change handling) and close the unverified items listed there.
 - Record computation still uses the **stub** `RecordProvider` (admitted guests appear twice:
   waiting-room id + meeting id; simplified statuses) until `attend-engine` passes the
   AttendFlow parity harness (currently in progress; test ignored on main).
-- Known issues for P2: instances that ended while the companion was offline stay open
-  forever (close stale instances at startup / on new instance with endReason
-  `companion_offline`); location values are raw (`waiting-room`) instead of labels.
+- P2 follow-up: startup now closes any persisted open instances at their last event time
+  with `endReason=companion_offline`; the live table localizes the two known location
+  values. More complete stale-instance recovery when a new meeting starts is still needed.
+- P2 records/config/settings work adds date-prefix record search, bulk delete with live
+  record refusal, JSON record export, v3-shaped backup export/config restore, local-data
+  clearing, and initial roster/alias/profile management UI. CSV preview workflows,
+  bulk configuration operations, complete settings persistence, and example data remain.
 
 ## 1. What was installed
 
