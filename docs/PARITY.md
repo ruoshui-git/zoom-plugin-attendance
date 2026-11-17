@@ -18,20 +18,20 @@ Source: AttendFlow `main` @ 405abd5 (inventory 2026-11-17). Phase column: P1 / P
 | Feature | AttendFlow source | Phase | Rust status |
 |---|---|---|
 | Name normalization (trim, lowercase, strip whitespace incl. U+3000, punctuation) | lib/name-utils.ts | P1 | ✓ |
-| Pinyin (tiny-pinyin, toneless) for search, sort (zh-CN collation), roster auto-fill | name-utils.ts | P1 | partial: `pinyin` crate; parity unmeasured |
+| Pinyin (tiny-pinyin, toneless) for search, sort (zh-CN collation), roster auto-fill | name-utils.ts | P1 | partial: name corpus differs on individual characters; roster row ordering matches all captured variants |
 | Identity stitching: uuid_direct → unique inactive name → unique inactive roster/alias target → new / ambiguous | session-engine.ts resolveSessionParticipantForRecord | P1 | ingestion concern; bridge admission/rejoin covered, duplicate/active-conflict parity incomplete |
 | Movement events (7 types) incl. waiting-room ones; admission pairing ±5 s | session-engine.ts | P1 | partial: bridge event stream tests; Zoom Apps replay differs |
 | Presence intervals, absenceCount, returnedAfterLongAbsence (return window), wasLate (late threshold) | buildAttendanceStates, resolveCurrentStatus | P1 | partial |
-| Statuses present / missing / late / leftEarly / returned / guest / unmatched; tags seen, full_present, late, left_early, returned, missing, ignored | lib/attendance-status.ts | P1 | partial |
-| Summary counts (generic vs roster counting rules) | computeAttendanceSummary | P1 | partial |
+| Statuses present / missing / late / leftEarly / returned / guest / unmatched; tags seen, full_present, late, left_early, returned, missing, ignored | lib/attendance-status.ts | P1 | ✓: generic and roster parity goldens |
+| Summary counts (generic vs roster counting rules) | computeAttendanceSummary | P1 | ✓: generic and roster parity goldens |
 | Score % = presence / duration, grades ≥90 / ≥75 / ≥50 / >0 / 0 | lib/attendance-score.ts | P1 | ✓ |
-| Roster matching: canonical name / pinyin / alias; >1 candidate = error | matchZoomNameToRoster | P1 | partial |
-| Decisions: match, guest, split (≥2 people), name_change_keep_match, revert | repository.ts + engine | P2 | partial: implementation present, not ported test-for-test |
-| Shared-name detection + split suggestions | isLikelySharedName, getSplitSuggestionsForZoomName | P2 | partial: detection/token parsing |
+| Roster matching: canonical name / pinyin / alias; >1 candidate = error | matchZoomNameToRoster | P1 | ✓: roster parity goldens |
+| Decisions: match, guest, split (≥2 people), name_change_keep_match, revert | repository.ts + engine | P2 | ✓: match, guest, split, keep-match precedence covered in 448 variants; revert is candidate fallback |
+| Shared-name detection + split suggestions | isLikelySharedName, getSplitSuggestionsForZoomName | P2 | partial: shared-name detection parity covered; token parsing/suggestions remain separate |
 | Name-change events + pending-rename gating | engine | P1 (log) / P2 (gating UI) | partial: log only |
 | Profile auto-selection: meetingIds exact → topic keyword → default → first active | guessMeetingProfile | P1 | ✓ |
 | Profile fields: name, description, included subgroups (`*`), late, return, meetingIds, topic keywords, group sort order, active; default profile `default-all` (locked, factory reset 10 / 8) | MeetingProfileWorkspace | P2 | partial: model and selection |
-| isExpected via included subgroups; out-of-scope ⚠ | engine | P1 | ✓ |
+| isExpected via included subgroups; out-of-scope ⚠ | engine | P1 | ✓: wildcard profile scope covered in roster parity goldens |
 | Manual snapshots (capture current list) | ManualAttendanceTab | P2 | not implemented |
 | Raise-hand entries + captures (dedup raise/lower) | RaiseHandPanel | P2 (better: SDK gives raised flag at connect) | partial: entries; capture/dedup not complete |
 | **Deliberate deviation:** waiting-room time is shown separately and is NOT presence (owner 2026-11-17); AttendFlow counts it. Engine flag reproduces AttendFlow for the parity harness | applyJoinLikeEvent | P1 | ✓: option and separate row fields |
@@ -39,11 +39,12 @@ Source: AttendFlow `main` @ 405abd5 (inventory 2026-11-17). Phase column: P1 / P
 
 ## Parity run status (2026-11-17)
 
-The 56 generated outputs now contain a full SessionRecord, exact reference time,
-generic rows/summary, and eight roster variants (two example-config languages and four
-decision actions). Rust exposes `derive(SessionRecord, config, decisions,
-reference_time, options)`. The direct hard-gate comparisons, exact field parity, full
-upstream test ports, and companion scenario catalogue are still unfinished. The Zoom
+The 56 generated outputs contain a full SessionRecord, exact reference time,
+generic rows/summary, and eight roster variants (two example-config languages and
+four decision actions). Rust exposes `derive(SessionRecord, config, decisions,
+reference_time, options)`. Generic derivation parity passes 56/56 and roster-mode
+parity passes 448/448, with exact row fields, row order, and summaries. The full
+upstream test port and companion scenario catalogue remain unfinished. The Zoom
 Apps harness remains ignored and informational at 33/56; its discrepancies include
 batch-timed roster observations and identity resolution. No failures are allow-listed.
 Per-fixture results remain listed in

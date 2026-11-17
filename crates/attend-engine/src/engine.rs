@@ -1,5 +1,6 @@
 use crate::*;
 use chrono::{DateTime, Utc};
+use pinyin::ToPinyin;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
@@ -1007,22 +1008,307 @@ pub fn derive(
             notes: None,
         });
     }
+    if session.mode == SessionMode::Roster {
+        rows = derive_roster_rows(rows, &participants, config, decisions, session)?;
+    }
     // AttendFlow uses zh-CN locale collation for the displayed label.
-    let sort_key = |name: &str| {
-        let has_cjk = name.chars().any(|c| ('\u{3400}'..='\u{9fff}').contains(&c));
-        (
-            if has_cjk { 0 } else { 1 },
-            build_pinyin(name).to_lowercase(),
-        )
-    };
     rows.sort_by(|a, b| {
-        sort_key(&a.zoom_name)
-            .cmp(&sort_key(&b.zoom_name))
-            .then_with(|| a.zoom_name.cmp(&b.zoom_name))
+        let left = a.canonical_name.as_deref().unwrap_or(&a.zoom_name);
+        let right = b.canonical_name.as_deref().unwrap_or(&b.zoom_name);
+        let left_cjk = left.chars().any(|c| ('\u{3400}'..='\u{9fff}').contains(&c));
+        let right_cjk = right
+            .chars()
+            .any(|c| ('\u{3400}'..='\u{9fff}').contains(&c));
+        (if left_cjk { 0 } else { 1 }, pinyin_sort_key(left), left).cmp(&(
+            if right_cjk { 0 } else { 1 },
+            pinyin_sort_key(right),
+            right,
+        ))
     });
     let summary = compute_summary(&rows, &session.mode, session.ended_at.is_some());
-    let _ = (config, decisions);
     Ok(Derived { rows, summary })
+}
+
+fn pinyin_sort_key(value: &str) -> Vec<String> {
+    value
+        .chars()
+        .map(|c| {
+            c.to_pinyin()
+                .map(|p| p.plain().to_lowercase())
+                .unwrap_or_else(|| c.to_lowercase().collect())
+        })
+        .collect()
+}
+
+fn normalize_group(group: &str) -> String {
+    let group = group.trim();
+    if group.is_empty() {
+        "__UNGROUPED__".into()
+    } else {
+        group.into()
+    }
+}
+
+fn derive_roster_rows(
+    generic_rows: Vec<AttendanceRow>,
+    participants: &[SessionParticipant],
+    config: &EngineConfig,
+    decisions: &[ReconciliationDecision],
+    session: &SessionRecord,
+) -> Result<Vec<AttendanceRow>, EngineError> {
+    let profile = config
+        .profiles
+        .iter()
+        .find(|p| Some(&p.id) == session.selected_profile_id.as_ref())
+        .or_else(|| config.profiles.iter().find(|p| p.is_default))
+        .or_else(|| config.profiles.first());
+    let groups = profile
+        .map(|p| p.included_subgroups.as_slice())
+        .unwrap_or(&[]);
+    let mut output = Vec::new();
+    let mut seen_people = HashSet::new();
+    for mut row in generic_rows {
+        let Some(participant) = participants.iter().find(|p| {
+            Some(p.session_participant_id.as_str()) == row.session_participant_id.as_deref()
+        }) else {
+            continue;
+        };
+        let decision = decisions
+            .iter()
+            .rev()
+            .find(|d| d.session_participant_id == participant.session_participant_id);
+        let mut status = MatchStatus::Unmatched;
+        let mut people: Vec<&RosterPerson> = Vec::new();
+        if let Some(d) = decision {
+            match d.action {
+                DecisionAction::Guest => status = MatchStatus::Guest,
+                DecisionAction::Match | DecisionAction::NameChangeKeepMatch => {
+                    if let Some(person) = config
+                        .roster
+                        .iter()
+                        .find(|p| Some(p.person_id) == d.person_id)
+                    {
+                        people.push(person);
+                        status = MatchStatus::Matched;
+                    }
+                }
+                DecisionAction::Split => {
+                    for id in &d.split_person_ids {
+                        if let Some(person) = config.roster.iter().find(|p| p.person_id == *id) {
+                            if !people.iter().any(|p| p.person_id == person.person_id) {
+                                people.push(person);
+                            }
+                        }
+                    }
+                    if !people.is_empty() {
+                        status = MatchStatus::Split;
+                    }
+                }
+                DecisionAction::NameChangeRevertMatch => {}
+            }
+        }
+        if people.is_empty() && status != MatchStatus::Guest {
+            let candidates = candidate_people(
+                &participant.current_screen_name,
+                &config.roster,
+                &config.aliases,
+            );
+            if candidates.len() > 1 {
+                return Err(EngineError::MultipleRosterMatches(
+                    participant.current_screen_name.clone(),
+                ));
+            }
+            if candidates.len() == 1 {
+                people.push(candidates[0]);
+                status = MatchStatus::Matched;
+            }
+        }
+        let is_present = row.is_currently_present;
+        let base_status =
+            if is_present && row.current_status == AttendanceStatus::ReturnedAfterLongAbsence {
+                AttendanceStatus::ReturnedAfterLongAbsence
+            } else if is_present {
+                AttendanceStatus::Present
+            } else {
+                AttendanceStatus::LeftEarly
+            };
+        let matched = status == MatchStatus::Matched;
+        let split = status == MatchStatus::Split;
+        let counted = matched || split;
+        if let Some(person) = people.first().copied().filter(|_| matched) {
+            seen_people.insert(person.person_id);
+            row.entity_id = participant.session_participant_id.clone();
+            row.person_id = Some(person.person_id);
+            row.canonical_name = Some(person.canonical_name.clone());
+            row.pinyin = Some(person.pinyin.clone());
+            row.group = Some(normalize_group(&person.group));
+            row.match_status = MatchStatus::Matched;
+            row.is_expected = profile_includes_group(groups, &normalize_group(&person.group));
+        } else if split {
+            let ids: Vec<u64> = people.iter().map(|p| p.person_id).collect();
+            let names: Vec<String> = people.iter().map(|p| p.canonical_name.clone()).collect();
+            for person in &people {
+                seen_people.insert(person.person_id);
+            }
+            let mut fanout = Vec::new();
+            for person in people {
+                let mut split_row = row.clone();
+                split_row.entity_id = format!(
+                    "{}:{}",
+                    participant.session_participant_id, person.person_id
+                );
+                split_row.person_id = Some(person.person_id);
+                split_row.canonical_name = Some(person.canonical_name.clone());
+                split_row.pinyin = Some(person.pinyin.clone());
+                split_row.group = Some(normalize_group(&person.group));
+                split_row.match_status = MatchStatus::Split;
+                split_row.is_expected =
+                    profile_includes_group(groups, &normalize_group(&person.group));
+                split_row.split_person_ids = ids.clone();
+                split_row.split_canonical_names = names.clone();
+                split_row.current_status = roster_current_status(&split_row, base_status.clone());
+                split_row.tags = roster_tags(&split_row, true);
+                fanout.push(split_row);
+            }
+            output.extend(fanout);
+            continue;
+        } else {
+            row.entity_id = if status == MatchStatus::Guest {
+                format!("guest:{}", participant.session_participant_id)
+            } else {
+                format!("participant:{}", participant.session_participant_id)
+            };
+            row.person_id = None;
+            row.canonical_name = None;
+            row.pinyin = None;
+            row.group = None;
+            row.match_status = status.clone();
+            row.is_expected = false;
+            row.split_person_ids.clear();
+            row.split_canonical_names.clear();
+        }
+        row.current_status = if status == MatchStatus::Guest {
+            AttendanceStatus::Guest
+        } else {
+            roster_current_status(&row, base_status)
+        };
+        if status == MatchStatus::Guest {
+            row.was_late = false;
+        }
+        row.tags = roster_tags(&row, counted);
+        output.push(row);
+    }
+    if profile.is_some() {
+        for person in config.roster.iter().filter(|p| p.active) {
+            let group = normalize_group(&person.group);
+            if seen_people.contains(&person.person_id) || !profile_includes_group(groups, &group) {
+                continue;
+            }
+            output.push(AttendanceRow {
+                entity_id: person.person_id.to_string(),
+                session_participant_id: None,
+                participant_uuid: None,
+                participant_uuids: vec![],
+                zoom_name: person.canonical_name.clone(),
+                zoom_names: vec![],
+                role: None,
+                person_id: Some(person.person_id),
+                canonical_name: Some(person.canonical_name.clone()),
+                pinyin: Some(person.pinyin.clone()),
+                group: Some(group),
+                current_location: None,
+                match_status: MatchStatus::Matched,
+                is_expected: true,
+                has_been_seen: false,
+                is_currently_present: false,
+                first_join_at: None,
+                first_waiting_room_at: None,
+                last_seen_at: None,
+                current_status: AttendanceStatus::Missing,
+                was_late: false,
+                total_presence_minutes: 0,
+                waiting_room_minutes: 0,
+                absence_count: 0,
+                returned_after_long_absence: false,
+                tags: vec![AttendanceTag::Missing],
+                shared_name: false,
+                split_person_ids: vec![],
+                split_canonical_names: vec![],
+                notes: None,
+            });
+        }
+    }
+    Ok(output)
+}
+
+fn roster_current_status(row: &AttendanceRow, base: AttendanceStatus) -> AttendanceStatus {
+    if row.is_expected && !row.has_been_seen {
+        AttendanceStatus::Missing
+    } else if row.is_currently_present && row.was_late {
+        AttendanceStatus::Late
+    } else if row.is_currently_present {
+        base
+    } else if row.has_been_seen {
+        AttendanceStatus::LeftEarly
+    } else {
+        AttendanceStatus::Unmatched
+    }
+}
+
+fn roster_tags(row: &AttendanceRow, counted: bool) -> Vec<AttendanceTag> {
+    let mut tags = Vec::new();
+    if counted && row.has_been_seen {
+        tags.push(AttendanceTag::Seen);
+    }
+    if counted
+        && row.has_been_seen
+        && row.is_currently_present
+        && !row.was_late
+        && row.current_status != AttendanceStatus::ReturnedAfterLongAbsence
+    {
+        tags.push(AttendanceTag::FullPresent);
+    }
+    if counted && row.has_been_seen && row.was_late {
+        tags.push(AttendanceTag::Late);
+    }
+    if counted
+        && row.has_been_seen
+        && !row.is_currently_present
+        && row.current_status == AttendanceStatus::LeftEarly
+    {
+        tags.push(AttendanceTag::LeftEarly);
+    }
+    if counted
+        && row.current_status == AttendanceStatus::ReturnedAfterLongAbsence
+        && row.is_currently_present
+    {
+        tags.push(AttendanceTag::Returned);
+    }
+    if counted && row.current_status == AttendanceStatus::Missing {
+        tags.push(AttendanceTag::Missing);
+    }
+    if !counted && row.has_been_seen {
+        tags.push(AttendanceTag::Ignored);
+    }
+    if row.match_status == MatchStatus::Guest {
+        tags.push(AttendanceTag::Guest);
+    }
+    if row.match_status == MatchStatus::Unmatched {
+        tags.push(AttendanceTag::Unmatched);
+    }
+    let priority = |tag: &AttendanceTag| match tag {
+        AttendanceTag::LeftEarly => 0,
+        AttendanceTag::Late => 1,
+        AttendanceTag::Returned => 2,
+        AttendanceTag::FullPresent => 3,
+        AttendanceTag::Seen => 4,
+        AttendanceTag::Missing => 5,
+        AttendanceTag::Ignored => 6,
+        AttendanceTag::Guest => 7,
+        AttendanceTag::Unmatched => 8,
+    };
+    tags.sort_by_key(priority);
+    tags
 }
 
 fn latest_roster(events: &[MovementEvent]) -> Vec<ZoomParticipant> {

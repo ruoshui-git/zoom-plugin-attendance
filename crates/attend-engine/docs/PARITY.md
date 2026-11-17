@@ -6,16 +6,23 @@ then calls `derive` with the recorded reference time and
 `EngineOptions::attendflow_compat()`. It compares the full row structs in order and
 the summary structs. Fixture errors report the changed row fields.
 
-The comparison intentionally starts from persisted records. Replaying the event
+The roster gate is `tests/derivation_roster_parity.rs`. For each captured record it
+recreates the generator's roster config, selected profile, and one decision for the
+first participant, then compares every roster row field and ordering plus summary.
+It covers all 448 variants (56 records × two example-config languages × four
+decision actions). The test also checks that every key present in golden rows is
+represented by the Rust row struct.
+
+Both comparisons intentionally start from persisted records. Replaying the event
 stream through ingestion would create new session participant identifiers and
-would not test derivation independently of SDK/repository batching. The extra
-roster variants embedded in goldens are not part of this test.
+would not test derivation independently of SDK/repository batching.
 
 AttendFlow quirks represented by this port include its movement-event tie order,
 latest-roster identity refresh, rounded elapsed minutes, ±5-second waiting-room
-leave/admission pairing, status-tag priority, and expanded ISO years from legacy
-recordings. The Rust engine uses the supplied reference time so active-session
-results remain deterministic.
+leave/admission pairing, status-tag priority, expanded ISO years from legacy
+recordings, guest/match/split decision precedence, split row fan-out, active-roster
+missing rows, and Chinese syllable-by-syllable row collation. The Rust engine uses
+the supplied reference time so active-session results remain deterministic.
 
 Run the crate verification with:
 
@@ -23,4 +30,4 @@ Run the crate verification with:
 cargo test -p attend-engine
 ```
 
-The Zoom-Apps replay comparison and roster-mode variants remain separate work.
+The Zoom-Apps replay comparison remains informational and separate from these gates.
