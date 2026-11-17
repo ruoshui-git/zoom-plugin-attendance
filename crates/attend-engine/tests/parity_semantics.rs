@@ -44,7 +44,6 @@ fn field_differences(expected: &Value, actual: &Value) -> Vec<String> {
 }
 
 #[test]
-#[ignore = "AttendFlow parity in progress (2/56); see tests/parity/PARITY-RESULTS.md"]
 fn every_recording_fixture_matches_attendflow_semantics() {
     let fixture_root = Path::new("tests/parity/fixtures");
     let golden_root = Path::new("tests/parity/goldens");
@@ -53,6 +52,7 @@ fn every_recording_fixture_matches_attendflow_semantics() {
     fixtures.sort();
     assert_eq!(fixtures.len(), 56);
     let mut failures = Vec::new();
+    let mut results = Vec::new();
     for path in fixtures {
         let input: Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
         let name = path.file_name().unwrap();
@@ -131,10 +131,34 @@ fn every_recording_fixture_matches_attendflow_semantics() {
                 field_differences(expected_summary, &actual_summary).join(",")
             ));
         }
+        let fixture_name = path
+            .strip_prefix(fixture_root)
+            .unwrap()
+            .to_string_lossy()
+            .replace('\\', "/");
         if !diffs.is_empty() {
-            failures.push(format!("{}: {}", path.display(), diffs.join("; ")));
+            let description = diffs.join("; ");
+            failures.push(format!("{}: {}", path.display(), description));
+            results.push((fixture_name, Some(description)));
+        } else {
+            results.push((fixture_name, None));
         }
     }
+    let pass_count = results.iter().filter(|(_, diff)| diff.is_none()).count();
+    let mut report = format!(
+        "# Fixture parity results\n\nRust Zoom-Apps adapter + `EngineOptions::attendflow_compat()` compared with generic-mode AttendFlow output goldens. **{pass_count}/56 pass; no mismatches are allow-listed.**\n\n| Fixture | Result | Exact differing fields |\n|---|---|---|\n"
+    );
+    for (fixture, diff) in &results {
+        match diff {
+            Some(diff) => report.push_str(&format!("| `{fixture}` | Fail | {diff} |\n")),
+            None => report.push_str(&format!("| `{fixture}` | Pass | — |\n")),
+        }
+    }
+    fs::write(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/parity/PARITY-RESULTS.md"),
+        report,
+    )
+    .unwrap();
     assert!(
         failures.is_empty(),
         "AttendFlow parity mismatches (not allow-listed):\n{}",
