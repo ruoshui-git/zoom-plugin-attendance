@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/zoom-bridge", "crates/zoom-auth", "crates/zoom-companion", "crates/attend-engine"]
+members = ["crates/zoom-bridge", "crates/zoom-auth", "crates/attend-engine", "crates/attend-store", "crates/zoom-companion"]
 default-members = ["crates/zoom-bridge", "crates/zoom-auth", "crates/zoom-companion"]
 
 [workspace.package]
@@ -12,6 +12,7 @@ publish = false
 [workspace.dependencies]
 zoom-bridge = { path = "crates/zoom-bridge" }
 zoom-auth = { path = "crates/zoom-auth" }
+attend-store = { path = "crates/attend-store" }
 anyhow = "1"
 thiserror = "2"
 log = "0.4"

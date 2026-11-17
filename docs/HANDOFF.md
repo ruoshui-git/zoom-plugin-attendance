@@ -121,6 +121,26 @@ JSONL and shuts down the SDK session. Per-instance logs and `current.json`
 are written to `%LOCALAPPDATA%\zoom-companion\meetings\`; a matching meeting
 can resume for 15 minutes after a process restart.
 
+### AttendFlow Desktop
+
+`scripts\build.ps1` runs `pnpm install --frozen-lockfile` and builds
+`apps\desktop-ui`, then copies it into `target\debug\ui` (or `target\release\ui`).
+`scripts\package.ps1` includes `ui\` beside the release executable. Run
+`zoom-companion app` to open the native **AttendFlow Desktop** WebView2 window;
+closing the window exits. Use `zoom-companion serve --fake --ui apps\desktop-ui\dist`
+for UI/API work that must not initialize the SDK. `pnpm dev` proxies `/api` and
+`/bridge` to `127.0.0.1:47812`; run the server with
+`--allow-origin http://localhost:5173` for that development origin.
+The fake mode seeds a two-person demo meeting in a process-specific temp folder and
+does not touch the normal application database or start an SDK session.
+
+SQLite data lives at `%LOCALAPPDATA%\zoom-companion\data.db`; the existing
+`%LOCALAPPDATA%\zoom-companion\meetings\*.jsonl` files remain the append-only
+event backup and are imported idempotently when the server starts. Config docs
+and meeting states are revisioned. The current companion record implementation is
+the explicit stub provider; roster matching and AttendFlow parity await
+`crates\attend-engine`.
+
 ### In-meeting experiment console
 
 Use `lab` only in an owner-controlled test meeting. It authenticates/attaches to

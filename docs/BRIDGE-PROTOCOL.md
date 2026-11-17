@@ -61,6 +61,36 @@ its existing session engine already consumes.
 | `state` | `meeting: Meeting \| null`, `participants: User[]` (incl. waiting-room users, flagged), `seqHead`, `at` | reply to `subscribe`, and whenever the instance changes |
 | `event` | `seq`, `at`, `instanceId`, `kind`, payload (below) | live, and replayed after `subscribe` |
 | `reply` | `id`, `ok`, `result` or `error: {code, message}` | reply to `request` |
+| `record_updated` | `instanceId` | debounced ~500 ms after a stored event or record state change; refetch `/api/meetings/:id/record` |
+
+## Desktop REST API
+
+All API routes are served by the same loopback server and apply the `/bridge` Origin
+allowlist when an `Origin` header is present. `serve --fake` starts the API/UI without
+initializing the Zoom SDK, for local UI work and integration tests.
+
+- `GET /api/config/{roster,aliases,profiles,settings}` → `{revision, value}`.
+- `PUT /api/config/{key}` with `{revision, value}` → updated `{revision, value}`;
+  stale revisions return HTTP 409 with `{error:"stale_revision",revision}`.
+- `GET /api/meetings` → newest first; each item has `instanceId`, `meetingNumber`,
+  `topic`, `startedAt`, nullable `endedAt`/`endReason`, `isHost`, and `lastSeq`.
+- `GET /api/meetings/:id` → meeting metadata; `DELETE` removes an ended meeting and
+  its events/state, while active meetings return 409.
+- `GET /api/meetings/:id/events` → ordered event objects, with payload fields at the
+  top level alongside `seq`, `at`, `instanceId`, and `kind`.
+- `GET /api/meetings/:id/record` → `{meeting, rows, summary, durationMinutes, score,
+  mode}`. Rows follow AttendFlow `AttendanceRow` camelCase fields and add
+  `waitingRoomMinutes`; summary uses `seen`, `fullPresent`, `late`, `returned`,
+  `leftEarly`, `absent`, `ignored`, and `total`.
+- `GET /api/meetings/:id/state` → `{revision,value}`. `PUT` uses the same revisioned
+  body and response as config.
+- `POST /api/import/attendflow-backup` accepts backup v3 JSON. It stores
+  `rosterPeople`, `aliasMappings`, and `attendanceProfiles` as the three config docs,
+  ignores session records, and reports imported item counts and `sessionsIgnored`.
+
+SQLite at `%LOCALAPPDATA%\\zoom-companion\\data.db` stores meeting metadata, events,
+config docs, and record state. Existing `meetings/*.jsonl` files are imported
+idempotently at startup and remain the append-only backup.
 
 Event kinds (payload fields are siblings of `kind`):
 

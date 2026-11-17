@@ -28,3 +28,6 @@ Thumbs.db
 /tools/guest-bot/node_modules/
 /tools/guest-bot/guest-profiles/
 /tools/guest-bot/*.png
+
+/apps/desktop-ui/node_modules/
+/apps/desktop-ui/dist/

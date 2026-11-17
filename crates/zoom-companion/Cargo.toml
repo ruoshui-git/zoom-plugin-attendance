@@ -14,6 +14,7 @@ path = "src/main.rs"
 [dependencies]
 zoom-bridge.workspace = true
 zoom-auth.workspace = true
+attend-store.workspace = true
 anyhow.workspace = true
 log.workspace = true
 env_logger.workspace = true
@@ -27,6 +28,10 @@ axum = { version = "0.7", features = ["ws"] }
 futures-util = "0.3"
 mime_guess = "2"
 clap = { version = "4", features = ["derive"] }
+tao = "0.30"
+wry = "0.53"
 
 [dev-dependencies]
 tokio-tungstenite = "0.24"
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"

@@ -10,6 +10,7 @@
 
 mod config;
 mod serve;
+mod record;
 
 use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
@@ -76,7 +77,10 @@ enum Cmd {
         #[arg(long)] ui: Option<std::path::PathBuf>,
         #[arg(long)] open: bool,
         #[arg(long = "allow-origin")] allow_origin: Vec<String>,
+        #[arg(long)] fake: bool,
     },
+    /// Run the native AttendFlow Desktop window with the local companion server.
+    App,
 }
 
 #[derive(Subcommand)]
@@ -138,7 +142,8 @@ fn run(cli: Cli) -> Result<()> {
         Cmd::Connect { seconds } => connect(seconds),
         Cmd::Participants { wait, watch } => participants(wait, watch),
         Cmd::Lab { log, script, exec } => lab(log, script, exec),
-        Cmd::Serve { port, ui, open, allow_origin } => serve::run(port, ui, open, allow_origin),
+        Cmd::Serve { port, ui, open, allow_origin, fake } => serve::run(port, ui, open, allow_origin, fake),
+        Cmd::App => serve::app(),
     }
 }
 

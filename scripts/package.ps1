@@ -15,4 +15,5 @@ if (Test-Path $out) { Remove-Item $out -Recurse -Force }
 New-Item -ItemType Directory -Force $out | Out-Null
 Copy-Item (Join-Path $sdk 'bin\*') $out -Recurse -Exclude 'PSDKTest.*'
 Copy-Item (Join-Path $script:RepoRoot 'target\release\zoom-companion.exe') $out
+Copy-Item (Join-Path $script:RepoRoot 'target\release\ui') (Join-Path $out 'ui') -Recurse
 Write-Host "Packaged: $out"
