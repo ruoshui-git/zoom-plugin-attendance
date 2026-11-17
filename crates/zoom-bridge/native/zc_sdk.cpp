@@ -13,6 +13,10 @@
 #include <mutex>
 
 #include "ToolSuiteProxyInterface.h"
+#include "ToolSuitePreMeetingInterface.h"
+#include "ToolSuiteParticipantsInterface.h"
+#include "ToolSuiteWaitingRoomInterface.h"
+#include "ToolSuiteChatInterface.h"
 
 using namespace ZMToolSuiteProxy;
 
@@ -207,6 +211,19 @@ ZMToolSuiteMeetingInstance Inst(int32_t i) {
     return i == 0 ? ZMToolSuiteMeetingInstance_Default : (ZMToolSuiteMeetingInstance)i;
 }
 
+int32_t CopyToolkitVector(IToolSuiteVector<ZMToolSuiteUser> *v, zc_users_fn cb, void *user) {
+    if (!v) return ZC_ERR_SDK_REJECTED;
+    zc::UserBatch batch;
+    CopyVector(v, batch);
+    cb(user, batch.Data(), batch.Size());
+    return ZC_OK;
+}
+
+void Async(const char *op, const BaseResult &r, int64_t value = 0) {
+    std::string name(op);
+    EmitSimple(ZC_EVENT_ASYNC_RESULT, (int32_t)r.error_code, value, 0, &name);
+}
+
 }  // namespace
 
 extern "C" int32_t zc_sdk_linked(void) { return 1; }
@@ -314,5 +331,122 @@ extern "C" int32_t zc_get_meeting_info(int32_t instance, zc_meeting_info_fn cb, 
     info.meeting_number_len = number.size();
     cb(user, &info);
     return ZC_OK;
+    ZC_GUARD_END
+}
+
+extern "C" int32_t zc_get_attendees(int32_t instance, zc_users_fn cb, void *user) {
+    ZC_GUARD_BEGIN
+    if (!g_inited) return ZC_ERR_WRONG_STATE;
+    if (!cb) return ZC_ERR_INVALID_ARG;
+    auto *mt = meeting::GetMeetingToolkit(Inst(instance));
+    return mt ? CopyToolkitVector(mt->GetAttendeeList(), cb, user) : ZC_ERR_SDK_REJECTED;
+    ZC_GUARD_END
+}
+extern "C" int32_t zc_get_spotlighted(int32_t instance, zc_users_fn cb, void *user) {
+    ZC_GUARD_BEGIN
+    if (!g_inited) return ZC_ERR_WRONG_STATE;
+    if (!cb) return ZC_ERR_INVALID_ARG;
+    auto *mt = meeting::GetMeetingToolkit(Inst(instance));
+    return mt ? CopyToolkitVector(mt->GetSpotlightedUserList(), cb, user) : ZC_ERR_SDK_REJECTED;
+    ZC_GUARD_END
+}
+extern "C" int32_t zc_get_waiting_room(int32_t instance, zc_users_fn cb, void *user) {
+    ZC_GUARD_BEGIN
+    if (!g_inited) return ZC_ERR_WRONG_STATE;
+    if (!cb) return ZC_ERR_INVALID_ARG;
+    auto *wt = meeting::GetWaitingRoomToolkit(Inst(instance));
+    return wt ? CopyToolkitVector(wt->GetWaitingRoomUserList(), cb, user) : ZC_ERR_SDK_REJECTED;
+    ZC_GUARD_END
+}
+extern "C" int32_t zc_get_user(int32_t instance, uint32_t user_id, zc_users_fn cb, void *user) {
+    ZC_GUARD_BEGIN
+    if (!g_inited) return ZC_ERR_WRONG_STATE;
+    if (!cb) return ZC_ERR_INVALID_ARG;
+    auto *pt = meeting::GetParticipantsToolkit(Inst(instance));
+    if (!pt) return ZC_ERR_SDK_REJECTED;
+    zc::UserBatch batch;
+    batch.Add(CopyUser(pt->GetUserByUserID(user_id)));
+    cb(user, batch.Data(), batch.Size());
+    return ZC_OK;
+    ZC_GUARD_END
+}
+extern "C" int32_t zc_start_meeting(int64_t number, int32_t no_video, int32_t no_audio) {
+    ZC_GUARD_BEGIN
+    if (!g_inited) return ZC_ERR_WRONG_STATE;
+    auto *pm = premeeting::GetPreMeetingToolkit();
+    if (!pm) return ZC_ERR_SDK_REJECTED;
+    StartMeetingParam p{}; p.meetingNumber = number; p.isNoVideo = no_video != 0; p.isNoAudio = no_audio != 0;
+    return pm->StartMeeting(p, [](const BaseResult &r) { try { Async("StartMeeting", r); } catch (...) {} }) ? ZC_OK : ZC_ERR_SDK_REJECTED;
+    ZC_GUARD_END
+}
+extern "C" int32_t zc_join_meeting(const char *name, size_t name_len, int64_t number, const char *password, size_t password_len) {
+    ZC_GUARD_BEGIN
+    if (!g_inited) return ZC_ERR_WRONG_STATE;
+    if (!name || !password) return ZC_ERR_INVALID_ARG;
+    auto *pm = premeeting::GetPreMeetingToolkit();
+    if (!pm) return ZC_ERR_SDK_REJECTED;
+    std::wstring wname = zc::Utf8ToWide(name, name_len), wpass = zc::Utf8ToWide(password, password_len);
+    JoinMeetingParam p{}; p.displayName = wname.c_str(); p.meetingNumber = number; p.password = wpass.c_str();
+    bool ok = false;
+    try { ok = pm->JoinMeeting(p, [](const BaseResult &r) { try { Async("JoinMeeting", r); } catch (...) {} }); }
+    catch (...) { zc::Wipe(wpass); throw; }
+    zc::Wipe(wpass);
+    return ok ? ZC_OK : ZC_ERR_SDK_REJECTED;
+    ZC_GUARD_END
+}
+extern "C" int32_t zc_leave_meeting(int32_t instance) {
+    ZC_GUARD_BEGIN
+    if (!g_inited) return ZC_ERR_WRONG_STATE;
+    auto *mt = meeting::GetMeetingToolkit(Inst(instance));
+    return mt && mt->LeaveMeeting([](const BaseResult &r) { try { Async("LeaveMeeting", r); } catch (...) {} }) ? ZC_OK : ZC_ERR_SDK_REJECTED;
+    ZC_GUARD_END
+}
+extern "C" int32_t zc_end_meeting(int32_t instance) {
+    ZC_GUARD_BEGIN
+    if (!g_inited) return ZC_ERR_WRONG_STATE;
+    auto *mt = meeting::GetMeetingToolkit(Inst(instance));
+    return mt && mt->EndMeeting([](const BaseResult &r) { try { Async("EndMeeting", r); } catch (...) {} }) ? ZC_OK : ZC_ERR_SDK_REJECTED;
+    ZC_GUARD_END
+}
+extern "C" int32_t zc_get_user_role(int32_t instance, uint32_t id) {
+    ZC_GUARD_BEGIN
+    if (!g_inited) return ZC_ERR_WRONG_STATE;
+    auto *pt = meeting::GetParticipantsToolkit(Inst(instance));
+    return pt && pt->GetUserRoleByUserID(id, [](const GetUserRoleByUserIDResult &r) { try { Async("GetUserRoleByUserID", r, (int64_t)r.role); } catch (...) {} }) ? ZC_OK : ZC_ERR_SDK_REJECTED;
+    ZC_GUARD_END
+}
+extern "C" int32_t zc_make_host(int32_t instance, uint32_t id) {
+    ZC_GUARD_BEGIN
+    if (!g_inited) return ZC_ERR_WRONG_STATE;
+    auto *pt = meeting::GetParticipantsToolkit(Inst(instance));
+    return pt && pt->MakeHost(id, [](const BaseResult &r) { try { Async("MakeHost", r); } catch (...) {} }) ? ZC_OK : ZC_ERR_SDK_REJECTED;
+    ZC_GUARD_END
+}
+extern "C" int32_t zc_reclaim_host(int32_t instance) {
+    ZC_GUARD_BEGIN
+    if (!g_inited) return ZC_ERR_WRONG_STATE;
+    auto *pt = meeting::GetParticipantsToolkit(Inst(instance));
+    return pt && pt->ReclaimHost([](const BaseResult &r) { try { Async("ReclaimHost", r); } catch (...) {} }) ? ZC_OK : ZC_ERR_SDK_REJECTED;
+    ZC_GUARD_END
+}
+extern "C" int32_t zc_assign_cohost(int32_t instance, uint32_t id) {
+    ZC_GUARD_BEGIN
+    if (!g_inited) return ZC_ERR_WRONG_STATE;
+    auto *pt = meeting::GetParticipantsToolkit(Inst(instance));
+    return pt && pt->AssignCoHost(id, [](const BaseResult &r) { try { Async("AssignCoHost", r); } catch (...) {} }) ? ZC_OK : ZC_ERR_SDK_REJECTED;
+    ZC_GUARD_END
+}
+extern "C" int32_t zc_revoke_cohost(int32_t instance, uint32_t id) {
+    ZC_GUARD_BEGIN
+    if (!g_inited) return ZC_ERR_WRONG_STATE;
+    auto *pt = meeting::GetParticipantsToolkit(Inst(instance));
+    return pt && pt->RevokeCoHost(id, [](const BaseResult &r) { try { Async("RevokeCoHost", r); } catch (...) {} }) ? ZC_OK : ZC_ERR_SDK_REJECTED;
+    ZC_GUARD_END
+}
+extern "C" int32_t zc_get_unread_chat_count(int32_t instance) {
+    ZC_GUARD_BEGIN
+    if (!g_inited) return ZC_ERR_WRONG_STATE;
+    auto *ct = meeting::GetChatToolkit(Inst(instance));
+    return ct && ct->GetUnreadChatCount([](const GetUnreadChatCountResult &r) { try { Async("GetUnreadChatCount", r, r.uCount); } catch (...) {} }) ? ZC_OK : ZC_ERR_SDK_REJECTED;
     ZC_GUARD_END
 }

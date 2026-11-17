@@ -22,7 +22,7 @@
 extern "C" {
 #endif
 
-#define ZC_ABI_VERSION 1u
+#define ZC_ABI_VERSION 2u
 
 /* Return codes of zc_* functions. */
 enum {
@@ -45,6 +45,7 @@ enum {
                                     value = BaseResult.error_code, users/user_count */
     ZC_EVENT_OTHER = 50,         /* any other listener callback; text = name,
                                     code/value = first scalar args          */
+    ZC_EVENT_ASYNC_RESULT = 20, /* text = operation, code = BaseResult.error_code, value = scalar */
     ZC_EVENT_SELFTEST = 999
 };
 
@@ -127,6 +128,21 @@ int32_t zc_get_participants(int32_t instance, zc_users_fn cb, void *user);
 int32_t zc_get_myself(int32_t instance, zc_users_fn cb, void *user);
 /* IMeetingToolkit::GetMeetingProperty() */
 int32_t zc_get_meeting_info(int32_t instance, zc_meeting_info_fn cb, void *user);
+int32_t zc_get_attendees(int32_t instance, zc_users_fn cb, void *user);
+int32_t zc_get_spotlighted(int32_t instance, zc_users_fn cb, void *user);
+int32_t zc_get_waiting_room(int32_t instance, zc_users_fn cb, void *user);
+int32_t zc_get_user(int32_t instance, uint32_t user_id, zc_users_fn cb, void *user);
+int32_t zc_start_meeting(int64_t number, int32_t no_video, int32_t no_audio);
+int32_t zc_join_meeting(const char *name, size_t name_len, int64_t number,
+                        const char *password, size_t password_len);
+int32_t zc_leave_meeting(int32_t instance);
+int32_t zc_end_meeting(int32_t instance);
+int32_t zc_get_user_role(int32_t instance, uint32_t user_id);
+int32_t zc_make_host(int32_t instance, uint32_t user_id);
+int32_t zc_reclaim_host(int32_t instance);
+int32_t zc_assign_cohost(int32_t instance, uint32_t user_id);
+int32_t zc_revoke_cohost(int32_t instance, uint32_t user_id);
+int32_t zc_get_unread_chat_count(int32_t instance);
 
 /* Self-tests: exercise UTF-8 <-> UTF-16 conversion and the callback path
  * without the SDK. Used by the Rust test-suite. */
@@ -134,6 +150,8 @@ int32_t zc_selftest_utf8_roundtrip(const char *in, size_t in_len,
                                    char *out, size_t out_cap, size_t *out_len);
 int32_t zc_selftest_emit(zc_event_fn cb, void *user,
                          const char *text, size_t text_len);
+int32_t zc_selftest_emit_async(zc_event_fn cb, void *user, const char *operation,
+                               size_t operation_len, int32_t code, int64_t value);
 /* Throws a C++ exception internally; must return ZC_ERR_EXCEPTION. */
 int32_t zc_selftest_throw(void);
 /* Emits a ZC_EVENT_USER_STATUS event with the given UTF-8 names (array of

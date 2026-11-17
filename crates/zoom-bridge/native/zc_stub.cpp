@@ -17,3 +17,19 @@ extern "C" int32_t zc_get_myself(int32_t, zc_users_fn, void *) { return ZC_ERR_N
 extern "C" int32_t zc_get_meeting_info(int32_t, zc_meeting_info_fn, void *) {
     return ZC_ERR_NOT_AVAILABLE;
 }
+#define ZC_STUB(name, sig) extern "C" int32_t name sig { return ZC_ERR_NOT_AVAILABLE; }
+ZC_STUB(zc_get_attendees, (int32_t, zc_users_fn, void *))
+ZC_STUB(zc_get_spotlighted, (int32_t, zc_users_fn, void *))
+ZC_STUB(zc_get_waiting_room, (int32_t, zc_users_fn, void *))
+ZC_STUB(zc_get_user, (int32_t, uint32_t, zc_users_fn, void *))
+ZC_STUB(zc_start_meeting, (int64_t, int32_t, int32_t))
+ZC_STUB(zc_join_meeting, (const char *, size_t, int64_t, const char *, size_t))
+ZC_STUB(zc_leave_meeting, (int32_t))
+ZC_STUB(zc_end_meeting, (int32_t))
+ZC_STUB(zc_get_user_role, (int32_t, uint32_t))
+ZC_STUB(zc_make_host, (int32_t, uint32_t))
+ZC_STUB(zc_reclaim_host, (int32_t))
+ZC_STUB(zc_assign_cohost, (int32_t, uint32_t))
+ZC_STUB(zc_revoke_cohost, (int32_t, uint32_t))
+ZC_STUB(zc_get_unread_chat_count, (int32_t))
+#undef ZC_STUB

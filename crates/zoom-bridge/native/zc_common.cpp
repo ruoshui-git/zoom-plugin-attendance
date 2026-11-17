@@ -37,6 +37,18 @@ extern "C" int32_t zc_selftest_emit(zc_event_fn cb, void *user, const char *text
     ZC_GUARD_END
 }
 
+extern "C" int32_t zc_selftest_emit_async(zc_event_fn cb, void *user, const char *operation,
+                                            size_t operation_len, int32_t code, int64_t value) {
+    ZC_GUARD_BEGIN
+    if (!cb) return ZC_ERR_INVALID_ARG;
+    std::string owned = zc::WideToUtf8(zc::Utf8ToWide(operation, operation_len));
+    zc_event ev{}; ev.kind = ZC_EVENT_ASYNC_RESULT; ev.code = code; ev.value = value;
+    ev.text = owned.data(); ev.text_len = owned.size(); ev.thread_id = ::GetCurrentThreadId();
+    cb(user, &ev);
+    return ZC_OK;
+    ZC_GUARD_END
+}
+
 extern "C" int32_t zc_selftest_emit_users(zc_event_fn cb, void *user, const char *const *names,
                                           const size_t *name_lens, size_t count) {
     ZC_GUARD_BEGIN

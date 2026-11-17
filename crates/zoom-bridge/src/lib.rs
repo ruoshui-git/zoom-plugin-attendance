@@ -141,6 +141,13 @@ pub mod selftest {
         rx.try_recv().map_err(|_| BridgeError::Thread("no event received".into()))
     }
 
+    pub fn async_result_roundtrip(operation: &str, code: i32, value: i64) -> Result<Event, BridgeError> {
+        let (tx, rx) = mpsc::channel::<Event>();
+        let user = &tx as *const mpsc::Sender<Event> as *mut std::ffi::c_void;
+        check(unsafe { ffi::zc_selftest_emit_async(crate::events::trampoline, user, operation.as_ptr().cast(), operation.len(), code, value) })?;
+        rx.try_recv().map_err(|_| BridgeError::Thread("no async event received".into()))
+    }
+
     /// C++ builds a USER_STATUS event (via UTF-16 copies, like SDK users).
     pub fn users_roundtrip(names: &[&str]) -> Result<Event, BridgeError> {
         let (tx, rx) = mpsc::channel::<Event>();
@@ -190,6 +197,14 @@ mod tests {
             ev,
             Event::SelfTest { code: 42, value: -7, text: "参会者 王五".into() }
         );
+    }
+
+    #[test]
+    fn async_result_event_copies_operation_and_scalars() {
+        match selftest::async_result_roundtrip("GetUserRoleByUserID", 1, 5).unwrap() {
+            Event::AsyncResult { operation, code, value, thread_id } => { assert_eq!(operation, "GetUserRoleByUserID"); assert_eq!(code, 1); assert_eq!(value, 5); assert_ne!(thread_id, 0); }
+            other => panic!("unexpected event {other:?}"),
+        }
     }
 
     #[test]

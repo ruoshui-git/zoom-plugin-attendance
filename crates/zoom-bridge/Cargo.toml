@@ -12,6 +12,7 @@ build = "build.rs"
 
 [dependencies]
 log.workspace = true
+serde.workspace = true
 thiserror.workspace = true
 windows-sys.workspace = true
 

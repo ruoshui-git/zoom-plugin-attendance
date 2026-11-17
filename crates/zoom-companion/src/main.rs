@@ -14,6 +14,8 @@ use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
 use std::sync::mpsc::RecvTimeoutError;
 use std::time::{Duration, Instant};
+use std::io::{BufRead, Write};
+use std::sync::mpsc;
 
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
@@ -60,6 +62,12 @@ enum Cmd {
         /// Keep printing user-status events for this many seconds afterwards.
         #[arg(long, default_value_t = 0)]
         watch: u64,
+    },
+    /// Interactive meeting experiment console; use only in an owner controlled test meeting.
+    Lab {
+        #[arg(long)] log: Option<std::path::PathBuf>,
+        #[arg(long)] script: Option<std::path::PathBuf>,
+        #[arg(long)] exec: Option<String>,
     },
 }
 
@@ -121,6 +129,7 @@ fn run(cli: Cli) -> Result<()> {
         Cmd::Auth { cmd } => auth(cmd),
         Cmd::Connect { seconds } => connect(seconds),
         Cmd::Participants { wait, watch } => participants(wait, watch),
+        Cmd::Lab { log, script, exec } => lab(log, script, exec),
     }
 }
 
@@ -392,9 +401,9 @@ fn print_users(label: &str, users: &[Participant]) {
     for u in users {
         let f = u.flags;
         println!(
-            "  id={:<10} host={} me={} attendee={} muted={} video={} waiting={}  {}",
+            "  id={:<10} host={} me={} attendee={} muted={} video={} spotlit={} raised={} talking={} waiting={} audio={}  {}",
             u.user_id, f.host() as u8, f.myself() as u8, f.attendee() as u8, f.audio_muted() as u8, f.video_on() as u8,
-            f.in_waiting_room() as u8, u.name
+            f.spotlighted() as u8, f.raised_hand() as u8, f.talking() as u8, f.in_waiting_room() as u8, u.audio_type, u.name
         );
     }
 }
@@ -437,4 +446,133 @@ fn participants(wait: u64, watch: u64) -> Result<()> {
     }
     session.shutdown()?;
     Ok(())
+}
+
+fn lab(log_path: Option<std::path::PathBuf>, script: Option<std::path::PathBuf>, exec: Option<String>) -> Result<()> {
+    use std::collections::BTreeMap;
+    let script_lines = script.map(|p| -> Result<Vec<String>> {
+        Ok(std::io::BufReader::new(std::fs::File::open(&p).with_context(|| format!("opening script {}", p.display()))?)
+            .lines().collect::<std::io::Result<Vec<_>>>()?)
+    }).transpose()?;
+    let path = log_path.unwrap_or_else(|| {
+        let root = std::env::var_os("LOCALAPPDATA").map(std::path::PathBuf::from).unwrap_or_else(std::env::temp_dir);
+        root.join("zoom-companion").join("lab").join(format!("lab-{}.jsonl", chrono::Utc::now().format("%Y%m%dT%H%M%S%.3fZ")))
+    });
+    if let Some(p) = path.parent() { std::fs::create_dir_all(p).context("creating lab log directory")?; }
+    let mut file = std::fs::OpenOptions::new().create(true).append(true).open(&path).with_context(|| format!("opening {}", path.display()))?;
+    println!("Lab log: {}", path.display());
+    let start = Instant::now();
+    let mut emit = |kind: &str, payload: serde_json::Value| -> Result<()> {
+        let row = serde_json::json!({"timestamp": chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true), "monotonic_ms": start.elapsed().as_millis(), "kind": kind, "payload": payload});
+        let line = serde_json::to_string(&row)?;
+        println!("{line}");
+        writeln!(file, "{line}")?;
+        file.flush()?;
+        Ok(())
+    };
+
+    let (session, rx) = start_session()?;
+    let deadline = Instant::now() + Duration::from_secs(30);
+    let (mut auth_ok, mut ipc_ok) = (false, false);
+    while Instant::now() < deadline && !(auth_ok && ipc_ok) {
+        if let Ok(ev) = rx.recv_timeout(Duration::from_millis(100)) {
+            emit("event", lab_event_payload(&ev)?)?;
+            match ev { Event::AuthResult { code, .. } => auth_ok = code == status::AUTH_RESULT_SUCCESS,
+                Event::IpcStatus { code, .. } => ipc_ok = code == status::IPC_STATUS_CONNECTED, _ => {} }
+        }
+    }
+    if !(auth_ok && ipc_ok) { session.shutdown()?; bail!("did not reach AUTH_RESULT_SUCCESS + IPC_STATUS_CONNECTED"); }
+    emit("connected", serde_json::json!({"message":"SDK authenticated and IPC connected"}))?;
+
+    let (line_tx, line_rx) = mpsc::channel::<Option<String>>();
+    if let Some(lines) = script_lines {
+        for line in lines { let _ = line_tx.send(Some(line)); }
+        let _ = line_tx.send(None);
+    } else if let Some(commands) = exec {
+        for line in commands.split(';') { let _ = line_tx.send(Some(line.trim().to_owned())); }
+        let _ = line_tx.send(None);
+    } else {
+        println!("Type help for commands; quit exits.");
+        std::thread::spawn(move || { for line in std::io::stdin().lock().lines().flatten() { if line_tx.send(Some(line)).is_err() { break; } } let _ = line_tx.send(None); });
+    }
+    let inst = MeetingInstance::Default;
+    let mut ledger: BTreeMap<u32, (String, String, Option<String>)> = BTreeMap::new();
+    let mut previous: BTreeMap<u32, String> = BTreeMap::new();
+    let mut poll_every: Option<Duration> = None;
+    let mut next_poll = Instant::now();
+    let mut done = false;
+    while !done {
+        match rx.try_recv() {
+            Ok(ev) => {
+                emit("event", lab_event_payload(&ev)?)?;
+                if let Event::UserStatus { action, users, .. } = &ev {
+                    let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+                    for u in users {
+                        if *action == 1 || *action == 2 { ledger.entry(u.user_id).and_modify(|v| {v.0=u.name.clone();v.2=None;}).or_insert((u.name.clone(), now.clone(), None)); }
+                        if *action == 3 { let e = ledger.entry(u.user_id).or_insert((u.name.clone(), now.clone(), None)); e.0=u.name.clone(); e.2=Some(now.clone()); }
+                    }
+                }
+            }
+            Err(mpsc::TryRecvError::Disconnected) => {}, Err(mpsc::TryRecvError::Empty) => {}
+        }
+        if poll_every.is_some() && Instant::now() >= next_poll {
+            match session.participants(inst) { Ok(users) => { let current: BTreeMap<_,_> = users.iter().map(|u|(u.user_id,u.name.clone())).collect();
+                let added: Vec<_> = current.iter().filter(|(id,_)| !previous.contains_key(id)).map(|(id,n)| serde_json::json!({"user_id":id,"name":n})).collect();
+                let removed: Vec<_> = previous.iter().filter(|(id,_)| !current.contains_key(id)).map(|(id,n)| serde_json::json!({"user_id":id,"name":n})).collect();
+                let renamed: Vec<_> = current.iter().filter_map(|(id,n)| previous.get(id).filter(|old| *old != n).map(|old| serde_json::json!({"user_id":id,"from":old,"to":n}))).collect();
+                emit("poll_diff", serde_json::json!({"added":added,"removed":removed,"renamed":renamed,"users":users}))?; previous=current;
+            }, Err(e)=>{emit("command_result",serde_json::json!({"command":"poll","error":e.to_string()}))?;} }
+            next_poll = Instant::now() + poll_every.unwrap();
+        }
+        match line_rx.recv_timeout(Duration::from_millis(50)) {
+            Ok(None) => done = true,
+            Ok(Some(line)) => {
+                let line=line.trim(); if line.is_empty(){continue}
+                let mut parts=line.split_whitespace(); let cmd=parts.next().unwrap_or(""); let args:Vec<_>=parts.collect();
+                let safe_line=if cmd=="join" && args.len()>=2 {format!("join {} <redacted-password> {}",args[0],args[2..].join(" "))}else{line.to_owned()};
+                emit("command",serde_json::json!({"line":safe_line}))?;
+                let res: Result<serde_json::Value> = (|| { Ok(match cmd {
+                    "help" => "status info me list attendees spotlit waiting user <id> role <id> roles start <meetingNumber> join <meetingNumber> <password> <displayName...> makehost <id> reclaim cohost <id> uncohost <id> unread leave end poll <seconds> sleep <seconds> note <text> quit".into(),
+                    "status" => format!("{}",status::meeting_status_name(session.meeting_status(inst)?)).into(),
+                    "info" => serde_json::to_value(session.meeting_info(inst)?)?,
+                    "me" => serde_json::to_value(session.myself(inst)?)?,
+                    "list" => serde_json::to_value(session.participants(inst)?)?,
+                    "attendees" => serde_json::to_value(session.attendees(inst)?)?,
+                    "spotlit" => serde_json::to_value(session.spotlighted(inst)?)?,
+                    "waiting" => serde_json::to_value(session.waiting_room(inst)?)?,
+                    "user" => serde_json::to_value(session.user(inst, parse_id(&args)?)?)?,
+                    "role" => {session.user_role(inst,parse_id(&args)?)?; serde_json::json!({"message":"role request submitted"})},
+                    "roles" => {for u in session.participants(inst)? {session.user_role(inst,u.user_id)?;} serde_json::json!({"message":"role requests submitted"})},
+                    "start" => {session.start_meeting(args.first().context("missing meeting number")?.parse()?,true,true)?; serde_json::json!({"message":"start request submitted"})},
+                    "join" => {if args.len()<3 {anyhow::bail!("usage: join <meetingNumber> <password> <displayName...>")} session.join_meeting(args[2..].join(" "),args[0].parse()?,args[1].into())?; serde_json::json!({"message":"join request submitted"})},
+                    "makehost" => {session.make_host(inst,parse_id(&args)?)?;serde_json::json!({"message":"request submitted"})}, "reclaim"=>{session.reclaim_host(inst)?;serde_json::json!({"message":"request submitted"})},
+                    "cohost"=>{session.assign_cohost(inst,parse_id(&args)?)?;serde_json::json!({"message":"request submitted"})}, "uncohost"=>{session.revoke_cohost(inst,parse_id(&args)?)?;serde_json::json!({"message":"request submitted"})},
+                    "unread"=>{session.unread_chat_count(inst)?;serde_json::json!({"message":"request submitted"})}, "leave"=>{session.leave_meeting(inst)?;serde_json::json!({"message":"request submitted"})}, "end"=>{session.end_meeting(inst)?;serde_json::json!({"message":"request submitted"})},
+                    "poll"=>{let n:u64=args.first().context("missing seconds")?.parse()?; poll_every=if n==0{None}else{Some(Duration::from_secs(n))};next_poll=Instant::now();serde_json::json!({"poll_seconds":n})},
+                    "note"=>{let text=line.strip_prefix("note").unwrap_or("").trim(); emit("note",serde_json::json!({"text":text}))?; serde_json::json!({"text":text})},
+                    "quit"=>{done=true;serde_json::json!({"message":"quitting"})}, "sleep"=>{let secs:u64=args.first().context("missing seconds")?.parse()?; let until=Instant::now()+Duration::from_secs(secs);while Instant::now()<until {if let Ok(ev)=rx.recv_timeout(Duration::from_millis(100)){emit("event",lab_event_payload(&ev)?)?;}} serde_json::json!({"slept_seconds":secs})},
+                    _=>anyhow::bail!("unknown command: {cmd}")
+                }) })();
+                match res {Ok(output)=>emit("command_result",serde_json::json!({"command":cmd,"result":output}))?,Err(e)=>emit("command_result",serde_json::json!({"command":cmd,"error":e.to_string()}))?}
+            }
+            Err(mpsc::RecvTimeoutError::Timeout)=>{}, Err(mpsc::RecvTimeoutError::Disconnected)=>done=true,
+        }
+    }
+    let rows:Vec<_>=ledger.iter().map(|(id,(name,first,left))|serde_json::json!({"user_id":id,"name":name,"first_seen":first,"left":left})).collect();
+    println!("Join/leave ledger:"); for (id,(name,first,left)) in &ledger {println!("{id:<12} {name:<32} first_seen={first} left={}",left.as_deref().unwrap_or("still present"));}
+    emit("ledger_summary",serde_json::json!({"users":rows}))?;
+    session.shutdown()?;
+    Ok(())
+}
+
+fn parse_id(args: &[&str]) -> Result<u32> { Ok(args.first().context("missing user id")?.parse()?) }
+
+fn lab_event_payload(ev: &Event) -> Result<serde_json::Value> {
+    let mut value = serde_json::to_value(ev)?;
+    if let Event::AsyncResult { operation, value: role, .. } = ev {
+        if operation == "GetUserRoleByUserID" {
+            value["role_name"] = serde_json::Value::String(status::user_role_name(*role as i32));
+        }
+    }
+    Ok(value)
 }

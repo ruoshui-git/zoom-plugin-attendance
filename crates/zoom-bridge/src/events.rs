@@ -3,11 +3,12 @@
 use std::ffi::c_void;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::mpsc::Sender;
+use serde::Serialize;
 
 use crate::ffi;
 
 /// A participant as reported by Zoom Workplace (copied; owns its data).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Participant {
     /// Meeting-scoped user id (not stable across meetings/rejoins).
     pub user_id: u32,
@@ -17,7 +18,7 @@ pub struct Participant {
     pub audio_type: i32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
 pub struct ParticipantFlags(pub u32);
 
 impl ParticipantFlags {
@@ -33,7 +34,7 @@ impl ParticipantFlags {
 }
 
 /// Meeting metadata (password / join URL are intentionally not exposed).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct MeetingInfo {
     pub error_code: i32,
     pub meeting_type: i32,
@@ -43,7 +44,8 @@ pub struct MeetingInfo {
 
 /// An event from the Zoom Plugin SDK. All data is owned (copied out of the
 /// adapter buffer inside the callback), so events can cross threads freely.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "event", rename_all = "snake_case")]
 pub enum Event {
     /// `OnAuthResult`; raw `ZMToolSuiteProxyAuthResult`.
     AuthResult { code: i32, thread_id: u32 },
@@ -54,6 +56,9 @@ pub enum Event {
     /// `OnUserStatusChanged`; `action` = raw `ZMToolSuiteUserAction`,
     /// `error_code` = raw `ZMToolSuiteProxyErrors`.
     UserStatus { action: i32, error_code: i32, instance: i32, users: Vec<Participant>, thread_id: u32 },
+    /// Completion of a documented async SDK operation. `code` is raw error_code;
+    /// `value` carries a role or count for the corresponding operation.
+    AsyncResult { operation: String, code: i32, value: i64, thread_id: u32 },
     /// Any other listener callback, identified by name (for exploration).
     Other { name: String, code: i32, value: i64, instance: i32, thread_id: u32 },
     /// Produced only by self-tests.
@@ -115,6 +120,7 @@ pub(crate) unsafe fn convert(ev: *const ffi::zc_event) -> Option<Event> {
             users: unsafe { copy_users(ev.users, ev.user_count) },
             thread_id,
         },
+        ffi::ZC_EVENT_ASYNC_RESULT => Event::AsyncResult { operation: text, code: ev.code, value: ev.value, thread_id },
         ffi::ZC_EVENT_OTHER => Event::Other {
             name: text,
             code: ev.code,

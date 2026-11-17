@@ -55,6 +55,25 @@ meeting-scoped; join/leave times must be timestamped by the companion when event
 Bridge already exposes: `Session::participants`, `myself`, `meeting_info`,
 `meeting_status`, and `Event::UserStatus` (CLI: `zoom-companion participants --watch N`).
 
+## Newly wired experiment APIs (bridge ABI 2)
+
+- `GetAttendeeList`, `GetSpotlightedUserList`, and `GetWaitingRoomUserList` are
+  synchronous SDK-owned vectors; the adapter copies each user and never frees
+  or retains the SDK vector. `GetUserByUserID` is synchronous and copied too.
+- `GetUserRoleByUserID` is asynchronous. Raw `ZMToolSuiteUserRole` values are
+  None=0, Host=1, CoHost=2, Attendee=3, Panelist=4,
+  BreakoutRoomModerator=5. Completion events use `AsyncResult` with operation,
+  raw `error_code`, and role in `value`.
+- `StartMeeting` / `JoinMeeting`, `LeaveMeeting` / `EndMeeting`, host/cohost
+  operations, and `GetUnreadChatCount` return a submission bool and complete
+  through `AsyncResult`; async lambdas copy only scalars and operation text
+  before forwarding through the existing callback path.
+- `OnUnreadChatCountChange` and `OnChatWindowStatusChange` remain observable as
+  `Other` events (count/state is carried in `value` or `code`).
+- Toolkit methods are exposed without a documented role gate in these headers.
+  `GetWaitingRoomUserList` and host/cohost mutations are likely privilege
+  restricted; verify with the owner-controlled test host/attendee experiments.
+
 ## Chat surface
 
 `IChatToolkit`: `SendChat(ZMToolSuiteChatInfo{content, userId, type}, cb)`,

@@ -92,6 +92,28 @@ pwsh -NoProfile -File .\scripts\verify.ps1 -Connect -BuildDemo
 .\scripts\package.ps1                          # dist\zoom-companion\ (exe + bin)
 ```
 
+### In-meeting experiment console
+
+Use `lab` only in an owner-controlled test meeting. It authenticates/attaches to
+Zoom Workplace, logs every event and command result as JSONL, and prints a
+join/leave ledger when exiting. Set `ZOOM_PLUGIN_SDK_DIR` to the x64 SDK root
+before building in a worktree where the ignored SDK is unavailable.
+
+```powershell
+$env:ZOOM_PLUGIN_SDK_DIR = 'C:\path\to\zoom-plugin-sdk-windows-7.2.0.3001\x64'
+.\scripts\build.ps1
+.\scripts\run.ps1 lab                         # interactive; default log under %LOCALAPPDATA%\zoom-companion\lab
+.\scripts\run.ps1 lab --log .\attendee.jsonl # choose log
+.\scripts\run.ps1 lab --script .\experiment.txt
+.\scripts\run.ps1 lab --exec 'status; list; poll 5; sleep 30; poll 0; quit'
+```
+
+Commands include `status`, `info`, `me`, `list`, `attendees`, `spotlit`,
+`waiting`, `user <id>`, `role <id>`, `roles`, `start`, `join`, host/cohost
+operations, `unread`, `leave`, `end`, `poll <seconds>`, `note <text>`, `sleep
+<seconds>`, `help`, and `quit`. Poll output records added, removed, and renamed
+user IDs with the full current snapshot.
+
 Debugging: VS Code launch configs "zoom-companion connect/doctor (MSVC debugger)"
 (`cppvsdbg`), `RUST_LOG=debug`. Adapter source: `crates/zoom-bridge/native/zc_sdk.cpp`
 (add new SDK calls there + `zc_bridge.h` + `src/ffi.rs` + a `Session` command).

@@ -44,7 +44,13 @@ enum Command {
     Participants(MeetingInstance, Reply<Vec<Participant>>),
     Myself(MeetingInstance, Reply<Participant>),
     MeetingInfo(MeetingInstance, Reply<MeetingInfo>),
+    Users(UserQuery, MeetingInstance, Reply<Vec<Participant>>),
+    Call(AsyncCall, Reply<()>),
 }
+
+#[derive(Clone, Copy)]
+enum UserQuery { Attendees, Spotlighted, WaitingRoom, One(u32) }
+enum AsyncCall { Start(i64, bool, bool), Join(String, i64, String), Leave(MeetingInstance), End(MeetingInstance), Role(MeetingInstance, u32), MakeHost(MeetingInstance, u32), Reclaim(MeetingInstance), AssignCoHost(MeetingInstance, u32), RevokeCoHost(MeetingInstance, u32), Unread(MeetingInstance) }
 
 /// A running SDK session. Dropping it uninitialises the SDK.
 pub struct Session {
@@ -118,6 +124,23 @@ impl Session {
     pub fn meeting_info(&self, inst: MeetingInstance) -> Result<MeetingInfo, BridgeError> {
         self.request(|r| Command::MeetingInfo(inst, r))
     }
+
+    pub fn attendees(&self, inst: MeetingInstance) -> Result<Vec<Participant>, BridgeError> { self.users(UserQuery::Attendees, inst) }
+    pub fn spotlighted(&self, inst: MeetingInstance) -> Result<Vec<Participant>, BridgeError> { self.users(UserQuery::Spotlighted, inst) }
+    pub fn waiting_room(&self, inst: MeetingInstance) -> Result<Vec<Participant>, BridgeError> { self.users(UserQuery::WaitingRoom, inst) }
+    pub fn user(&self, inst: MeetingInstance, id: u32) -> Result<Option<Participant>, BridgeError> { Ok(self.users(UserQuery::One(id), inst)?.into_iter().next()) }
+    fn users(&self, q: UserQuery, inst: MeetingInstance) -> Result<Vec<Participant>, BridgeError> { self.request(|r| Command::Users(q, inst, r)) }
+    fn call(&self, c: AsyncCall) -> Result<(), BridgeError> { self.request(|r| Command::Call(c, r)) }
+    pub fn start_meeting(&self, number: i64, no_video: bool, no_audio: bool) -> Result<(), BridgeError> { self.call(AsyncCall::Start(number, no_video, no_audio)) }
+    pub fn join_meeting(&self, display_name: String, number: i64, password: String) -> Result<(), BridgeError> { self.call(AsyncCall::Join(display_name, number, password)) }
+    pub fn leave_meeting(&self, inst: MeetingInstance) -> Result<(), BridgeError> { self.call(AsyncCall::Leave(inst)) }
+    pub fn end_meeting(&self, inst: MeetingInstance) -> Result<(), BridgeError> { self.call(AsyncCall::End(inst)) }
+    pub fn user_role(&self, inst: MeetingInstance, id: u32) -> Result<(), BridgeError> { self.call(AsyncCall::Role(inst, id)) }
+    pub fn make_host(&self, inst: MeetingInstance, id: u32) -> Result<(), BridgeError> { self.call(AsyncCall::MakeHost(inst, id)) }
+    pub fn reclaim_host(&self, inst: MeetingInstance) -> Result<(), BridgeError> { self.call(AsyncCall::Reclaim(inst)) }
+    pub fn assign_cohost(&self, inst: MeetingInstance, id: u32) -> Result<(), BridgeError> { self.call(AsyncCall::AssignCoHost(inst, id)) }
+    pub fn revoke_cohost(&self, inst: MeetingInstance, id: u32) -> Result<(), BridgeError> { self.call(AsyncCall::RevokeCoHost(inst, id)) }
+    pub fn unread_chat_count(&self, inst: MeetingInstance) -> Result<(), BridgeError> { self.call(AsyncCall::Unread(inst)) }
 
     /// Orderly shutdown (also performed on drop).
     pub fn shutdown(mut self) -> Result<(), BridgeError> {
@@ -252,6 +275,27 @@ fn handle(cmd: Command) {
                 ffi::zc_get_meeting_info(inst as i32, meeting_info_sink, &mut out as *mut _ as *mut c_void)
             });
             let _ = reply.send(r.and_then(|_| out.ok_or(BridgeError::SdkRejected)));
+        }
+        Command::Users(q, inst, reply) => {
+            let mut out = Vec::new();
+            let r = unsafe { match q {
+                UserQuery::Attendees => ffi::zc_get_attendees(inst as i32, users_sink, &mut out as *mut _ as *mut c_void),
+                UserQuery::Spotlighted => ffi::zc_get_spotlighted(inst as i32, users_sink, &mut out as *mut _ as *mut c_void),
+                UserQuery::WaitingRoom => ffi::zc_get_waiting_room(inst as i32, users_sink, &mut out as *mut _ as *mut c_void),
+                UserQuery::One(id) => ffi::zc_get_user(inst as i32, id, users_sink, &mut out as *mut _ as *mut c_void),
+            }};
+            let _ = reply.send(check(r).map(|_| out));
+        }
+        Command::Call(c, reply) => {
+            let r = unsafe { match c {
+                AsyncCall::Start(n, v, a) => ffi::zc_start_meeting(n, v as i32, a as i32),
+                AsyncCall::Join(name, n, pass) => ffi::zc_join_meeting(name.as_ptr().cast(), name.len(), n, pass.as_ptr().cast(), pass.len()),
+                AsyncCall::Leave(i) => ffi::zc_leave_meeting(i as i32), AsyncCall::End(i) => ffi::zc_end_meeting(i as i32),
+                AsyncCall::Role(i, id) => ffi::zc_get_user_role(i as i32, id), AsyncCall::MakeHost(i, id) => ffi::zc_make_host(i as i32, id),
+                AsyncCall::Reclaim(i) => ffi::zc_reclaim_host(i as i32), AsyncCall::AssignCoHost(i, id) => ffi::zc_assign_cohost(i as i32, id),
+                AsyncCall::RevokeCoHost(i, id) => ffi::zc_revoke_cohost(i as i32, id), AsyncCall::Unread(i) => ffi::zc_get_unread_chat_count(i as i32),
+            }};
+            let _ = reply.send(check(r));
         }
     }
 }

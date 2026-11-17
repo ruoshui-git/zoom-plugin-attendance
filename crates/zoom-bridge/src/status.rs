@@ -52,6 +52,9 @@ pub fn meeting_status_name(code: i32) -> String {
 }
 pub const MEETING_STATUS_INMEETING: i32 = 3;
 
+/// `ZMToolSuiteUserRole` (raw values from ToolSuiteProxyDef.h).
+pub fn user_role_name(code: i32) -> String { pick(&["ZMToolSuiteUserRole_None", "ZMToolSuiteUserRole_Host", "ZMToolSuiteUserRole_CoHost", "ZMToolSuiteUserRole_Attendee", "ZMToolSuiteUserRole_Panelist", "ZMToolSuiteUserRole_BreakoutRoomModerator"], code) }
+
 /// `ZMToolSuiteUserAction`
 pub fn user_action_name(code: i32) -> String {
     pick(
@@ -105,6 +108,9 @@ mod tests {
         assert_eq!(ipc_status_name(IPC_STATUS_CONNECTED), "IPC_STATUS_CONNECTED");
         assert_eq!(meeting_status_name(MEETING_STATUS_INMEETING), "MEETING_STATUS_INMEETING");
         assert_eq!(proxy_error_name(1), "kZMToolSuiteProxyErrorsSuccess");
+        assert_eq!(user_role_name(0), "ZMToolSuiteUserRole_None");
+        assert_eq!(user_role_name(5), "ZMToolSuiteUserRole_BreakoutRoomModerator");
+        assert_eq!(user_role_name(99), "UNKNOWN(99)");
         assert_eq!(auth_result_name(77), "UNKNOWN(77)");
         assert_eq!(auth_result_name(-1), "UNKNOWN(-1)");
     }
