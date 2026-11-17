@@ -16,6 +16,19 @@ right after connect) are in SDK-NOTES "In-meeting observations".
 Next: design the tracker (name-keyed sessions, ghost-tolerant leave times,
 reconnect/meeting-change handling) and close the unverified items listed there.
 
+### Desktop app status (2026-11-17, third session)
+
+- Live-verified: `zoom-companion app` opens the native "AttendFlow Desktop" WebView2
+  window; with real Zoom it captured instance start, seeded snapshot, waiting-room
+  arrivals, admits (via bridge request), graceful leaves, `record_updated`; token refresh
+  happened automatically.
+- Record computation still uses the **stub** `RecordProvider` (admitted guests appear twice:
+  waiting-room id + meeting id; simplified statuses) until `attend-engine` passes the
+  AttendFlow parity harness (currently in progress; test ignored on main).
+- Known issues for P2: instances that ended while the companion was offline stay open
+  forever (close stale instances at startup / on new instance with endReason
+  `companion_offline`); location values are raw (`waiting-room`) instead of labels.
+
 ## 1. What was installed
 
 | Item | Action |
