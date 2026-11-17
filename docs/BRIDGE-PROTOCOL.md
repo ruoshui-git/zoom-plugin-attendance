@@ -66,7 +66,8 @@ Event kinds (payload fields are siblings of `kind`):
 
 | `kind` | Payload | Source |
 |---|---|---|
-| `instance_started` | `meeting: Meeting` | first INMEETING of an instance (seq 1) |
+| `instance_started` | `meeting: Meeting` | first INMEETING of an instance (seq 1); followed by a `users sync_all` seed (`source: "snapshot"`) |
+| `instance_resumed` | `meeting: Meeting` | companion restarted and resumed the same instance (same id, seq continues); followed by a `users sync_all` seed. Not a new meeting. |
 | `users` | `action: "sync_all" \| "add" \| "left" \| "update"`, `users: User[]` | `OnUserStatusChanged` (verbatim; no inference) |
 | `hand` | `userId`, `raised: bool` | `OnUserRaisedHand` / `OnUserLowerHand` |
 | `all_hands_lowered` | — | `OnAllHandsLowered` |

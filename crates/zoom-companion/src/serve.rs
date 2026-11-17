@@ -203,7 +203,25 @@ impl Tracker {
         if resumed.is_some() {
             self.load_history(&m.instance_id);
         }
-        self.emit("instance_started", json!({"meeting":m}))
+        let kind = if resumed.is_some() { "instance_resumed" } else { "instance_started" };
+        self.emit(kind, json!({"meeting":m}))
+    }
+    /// Starts an instance and records the current participant list as a `sync_all`
+    /// seed: the SDK's own SYNC_ALL usually arrives before INMEETING (no instance yet).
+    fn start_with_snapshot(
+        &mut self,
+        number: String,
+        topic: String,
+        mt: i32,
+        st: i32,
+        me: Option<User>,
+    ) -> Vec<Value> {
+        let mut out: Vec<Value> = self.start(number, topic, mt, st, me).into_iter().collect();
+        if !out.is_empty() {
+            let users = self.users.clone();
+            out.extend(self.emit("users", json!({"action":"sync_all","users":users,"source":"snapshot"})));
+        }
+        out
     }
     fn prepare_log(&mut self, m: &Meeting) {
         if let Some(root) = self.root.as_ref() {
@@ -301,9 +319,7 @@ impl Tracker {
                                 out.push(v)
                             }
                         }
-                        if let Some(v) = self.start(num, topic, mt, st, me) {
-                            out.push(v)
-                        }
+                        out.extend(self.start_with_snapshot(num, topic, mt, st, me));
                     }
                 }
             }
@@ -630,7 +646,7 @@ pub fn run(port: u16, ui: Option<PathBuf>, open: bool, allowed: Vec<String>) -> 
 fn publish(a: &App, events: Vec<Value>) {
     let changed = events
         .iter()
-        .any(|e| e["kind"] == "instance_started" || e["kind"] == "instance_ended");
+        .any(|e| e["kind"] == "instance_started" || e["kind"] == "instance_resumed" || e["kind"] == "instance_ended");
     for e in events {
         let _ = a.tx.send(e);
     }
@@ -662,7 +678,13 @@ fn refresh_users(a: &App) {
     let g = a.session.lock().unwrap();
     let Some(s) = g.as_ref() else { return };
     if let Ok(mut ps) = s.participants(MeetingInstance::Default) {
-        ps.extend(s.waiting_room(MeetingInstance::Default).unwrap_or_default());
+        // GetParticipantsList already includes waiting-room users (flagged) for the host;
+        // merge the waiting-room list without duplicating ids.
+        for w in s.waiting_room(MeetingInstance::Default).unwrap_or_default() {
+            if !ps.iter().any(|p| p.user_id == w.user_id) {
+                ps.push(w);
+            }
+        }
         a.tracker.lock().unwrap().users = ps.iter().map(user).collect();
     }
 }
@@ -721,18 +743,39 @@ fn sdk_loop(a: App) {
                         refresh_users(&a);
                         let mut t = a.tracker.lock().unwrap();
                         if t.meeting.is_none() {
-                            let out = t.start(data.0, data.1, data.2, data.3, data.4);
+                            let out = t.start_with_snapshot(data.0, data.1, data.2, data.3, data.4);
                             drop(t);
-                            publish(&a, out.into_iter().collect());
+                            publish(&a, out);
                         }
                     }
+                    // A meeting can begin (or the toolkits become ready) after connect:
+                    // INMEETING / user activity arms a start attempt, retried once per second.
+                    let mut want_start = false;
+                    let mut last_try = std::time::Instant::now() - Duration::from_secs(5);
                     loop {
                         if a.shutdown.load(Ordering::SeqCst) {
                             break;
                         }
+                        let no_meeting = a.tracker.lock().unwrap().meeting.is_none();
+                        if no_meeting && want_start && last_try.elapsed() >= Duration::from_secs(1) {
+                            last_try = std::time::Instant::now();
+                            if let Some(d) = meeting_data(&a) {
+                                refresh_users(&a);
+                                let out = a.tracker.lock().unwrap().start_with_snapshot(d.0, d.1, d.2, d.3, d.4);
+                                publish(&a, out);
+                                want_start = false;
+                            }
+                        }
                         match rx.recv_event(Duration::from_millis(250)) {
                             Ok(e) => {
                                 let lost = matches!(&e,Event::IpcStatus{code,..} if *code!=status::IPC_STATUS_CONNECTED);
+                                match &e {
+                                    Event::MeetingStatus { code, .. } => {
+                                        want_start = *code == status::MEETING_STATUS_INMEETING;
+                                    }
+                                    Event::UserStatus { .. } if no_meeting => want_start = true,
+                                    _ => {}
+                                }
                                 let out = a.tracker.lock().unwrap().apply(e, None);
                                 publish(&a, out);
                                 if lost {

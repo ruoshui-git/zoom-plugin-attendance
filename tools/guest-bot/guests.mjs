@@ -115,9 +115,15 @@ async function guest(spec) {
     if (admitTimer) clearInterval(admitTimer);
     if (process.env.GRACEFUL) {
       try {
-        await page.locator('button[aria-label="Leave"]').first().evaluate((el) => el.click(), null, { timeout: 8000 });
-        await sleep(1000);
-        await page.locator('button:has-text("Leave Meeting")').first().evaluate((el) => el.click(), null, { timeout: 8000 });
+        const inMeeting = await page.locator('button[aria-label="Leave"]').count();
+        if (inMeeting) {
+          await page.locator('button[aria-label="Leave"]').first().evaluate((el) => el.click(), null, { timeout: 8000 });
+          await sleep(1000);
+          await page.locator('button:has-text("Leave Meeting")').first().evaluate((el) => el.click(), null, { timeout: 8000 });
+        } else {
+          // Waiting room / pre-join pages expose a plain "Leave" link or button.
+          await page.getByText(/^\s*(Leave|Salir)\s*$/).first().evaluate((el) => el.click(), null, { timeout: 8000 });
+        }
         console.log(`${ts()} [${name}] clicked Leave Meeting`);
         await sleep(3000);
       } catch (e) { console.log(`${ts()} [${name}] graceful leave failed: ${e.message.slice(0, 160)}`); }
