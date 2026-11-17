@@ -109,6 +109,7 @@ struct Tracker {
     root: Option<PathBuf>,
     file: Option<std::fs::File>,
     resume: Option<Resume>,
+    last_touch: u64,
 }
 /// A companion restart within this window of the last event resumes the same instance.
 const RESUME_WINDOW_MS: u64 = 15 * 60 * 1000;
@@ -154,6 +155,15 @@ impl Tracker {
             let _ = writeln!(f, "{}", e.wire());
             let _ = f.flush();
         }
+        self.write_current();
+        self.history.push_back(e.clone());
+        while self.history.len() > 10000 {
+            self.history.pop_front();
+        }
+        Some(e.wire())
+    }
+    /// Persists the resume point (instance, last seq, last seen = now).
+    fn write_current(&mut self) {
         if let (Some(root), Some(m)) = (&self.root, &self.meeting) {
             let current = Resume {
                 instance_id: m.instance_id.clone(),
@@ -166,12 +176,15 @@ impl Tracker {
                 root.join("current.json"),
                 serde_json::to_vec_pretty(&current).unwrap_or_default(),
             );
+            self.last_touch = now();
         }
-        self.history.push_back(e.clone());
-        while self.history.len() > 10000 {
-            self.history.pop_front();
+    }
+    /// Liveness heartbeat while a meeting is live: quiet meetings (no joins/leaves for
+    /// longer than the resume window) must stay resumable after a companion restart.
+    fn touch(&mut self) {
+        if self.meeting.is_some() && now().saturating_sub(self.last_touch) >= 30_000 {
+            self.write_current();
         }
-        Some(e.wire())
     }
     fn start(
         &mut self,
@@ -1019,7 +1032,11 @@ fn sdk_loop(a: App) {
                         if a.shutdown.load(Ordering::SeqCst) {
                             break;
                         }
-                        let no_meeting = a.tracker.lock().unwrap().meeting.is_none();
+                        let no_meeting = {
+                            let mut t = a.tracker.lock().unwrap();
+                            t.touch();
+                            t.meeting.is_none()
+                        };
                         if no_meeting && want_start && last_try.elapsed() >= Duration::from_secs(1)
                         {
                             last_try = std::time::Instant::now();
@@ -1305,6 +1322,34 @@ mod tests {
         let _ = fs::remove_dir_all(path);
     }
     #[test]
+    fn quiet_live_meeting_heartbeat_keeps_resume_point_fresh() {
+        let path = std::env::temp_dir().join(format!("zc-test-touch-{}", now()));
+        let mut t = Tracker::new(Some(path.clone()));
+        t.start("7".into(), "".into(), 1, 3, None).unwrap();
+        // Pretend the last write was long ago; a heartbeat must refresh lastSeenAt.
+        t.last_touch = 0;
+        let before = now();
+        t.touch();
+        let r: Resume =
+            serde_json::from_slice(&fs::read(path.join("current.json")).unwrap()).unwrap();
+        assert!(r.last_seen_at >= before);
+        // Throttled: an immediate second touch does not rewrite.
+        let stamp = t.last_touch;
+        t.touch();
+        assert_eq!(t.last_touch, stamp);
+        let _ = fs::remove_dir_all(path);
+    }
+    #[test]
+    fn config_writes_must_match_engine_schema() {
+        // A string personId once got stored and then broke every meeting record (500).
+        let bad = json!([{"personId":"example-1","canonicalName":"张三","pinyin":"zhangsan","group":"A","active":true}]);
+        assert!(config_schema_error("roster", &bad).unwrap().contains("invalid roster data"));
+        let good = json!([{"personId":1,"canonicalName":"张三","pinyin":"zhangsan","group":"A","active":true}]);
+        assert!(config_schema_error("roster", &good).is_none());
+        assert!(config_schema_error("aliases", &json!([{"zoomName":"小张","personId":"x"}])).is_some());
+        assert!(config_schema_error("settings", &json!({"anything":true})).is_none());
+    }
+    #[test]
     fn ended_instance_is_never_resumed() {
         let path = std::env::temp_dir().join(format!("zc-test-end-{}", now()));
         let mut t = Tracker::new(Some(path.clone()));
@@ -1494,7 +1539,21 @@ async fn api_name_pinyin(_headers: HeaderMap, Json(body): Json<Value>) -> Respon
     };
     Json(json!({"pinyin":attend_engine::build_pinyin(name)})).into_response()
 }
+/// Every stored config document must deserialize into the attendance engine's types;
+/// otherwise one malformed write (e.g. a string personId) breaks every record.
+fn config_schema_error(key: &str, value: &Value) -> Option<String> {
+    let result = match key {
+        "roster" => serde_json::from_value::<Vec<attend_engine::RosterPerson>>(value.clone()).map(|_| ()),
+        "aliases" => serde_json::from_value::<Vec<attend_engine::AliasMapping>>(value.clone()).map(|_| ()),
+        "profiles" => serde_json::from_value::<Vec<attend_engine::MeetingProfile>>(value.clone()).map(|_| ()),
+        _ => Ok(()),
+    };
+    result.err().map(|e| format!("invalid {key} data: {e}"))
+}
 fn validate_config(a: &App, key: &str, value: &Value) -> Option<String> {
+    if let Some(message) = config_schema_error(key, value) {
+        return Some(message);
+    }
     let rows = value.as_array()?;
     if key == "roster" {
         let mut names = std::collections::HashSet::new();
@@ -1644,6 +1703,7 @@ async fn api_example_data_commit(State(a):State<App>,headers:HeaderMap,Json(body
     let mut aliases=old_aliases.as_array().cloned().unwrap_or_default();aliases.extend(new_aliases.iter().cloned());
     let mut roster=old_roster.as_array().cloned().unwrap_or_default();roster.extend(new_roster.iter().cloned());
     let mut profiles=old_profiles.as_array().cloned().unwrap_or_default();for profile in new_profiles{let mut p=profile.clone();if let Some(o)=p.as_object_mut(){o.remove("specialParticipants");o.remove("blacklist");}profiles.push(p)}
+    for (key,val) in [("roster",json!(roster)),("aliases",json!(aliases)),("profiles",json!(profiles))]{if let Some(message)=config_schema_error(key,&val){return (StatusCode::UNPROCESSABLE_ENTITY,Json(json!({"message":message}))).into_response()}}
     let docs=vec![("roster".into(),rr,json!(roster)),("aliases".into(),ar,json!(aliases)),("profiles".into(),pr,json!(profiles))];
     match a.store.put_docs_atomic(&docs,now()){Ok(Ok(_))=>Json(json!({"added":{"roster":new_roster.len(),"aliases":new_aliases.len(),"profiles":new_profiles.len()}})).into_response(),Ok(Err((key,_)))=>(StatusCode::CONFLICT,Json(json!({"message":format!("{key} changed during example import; retry") }))).into_response(),Err(e)=>api_error(e)}
 }
@@ -2567,6 +2627,17 @@ async fn api_import_backup(
         ("profiles", "attendanceProfiles"),
         ("settings", "settings"),
     ];
+    // Validate every section before writing any, so a bad backup changes nothing.
+    for (key, field) in entries {
+        let val = body.get(field).cloned().unwrap_or(Value::Array(vec![]));
+        if let Some(message) = config_schema_error(key, &val) {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(json!({"error":"validation_error","message":message})),
+            )
+                .into_response();
+        }
+    }
     let mut counts = serde_json::Map::new();
     for (key, field) in entries {
         let val = body.get(field).cloned().unwrap_or(Value::Array(vec![]));
@@ -2889,7 +2960,11 @@ async fn backup_import_revision_conflict_and_state_notification() {
             get(api_get_state).put(api_put_state),
         )
         .with_state(app);
-    let backup = json!({"version":3,"rosterPeople":[{"personId":1}],"aliasMappings":[{"zoomName":"Ada"}],"attendanceProfiles":[{"id":"default"}],"sessions":[{},{}]});
+    let backup = json!({"version":3,
+        "rosterPeople":[{"personId":1,"canonicalName":"Ada Lovelace","pinyin":"ada lovelace","group":"","active":true}],
+        "aliasMappings":[{"zoomName":"Ada","personId":1,"notes":""}],
+        "attendanceProfiles":[{"id":"default","name":"Default","includedSubgroups":[],"lateAfterMinutes":10,"returnWindowMinutes":8,"meetingIds":[],"topicKeywords":[],"groupSortOrder":[],"active":true}],
+        "sessions":[{},{}]});
     let req = axum::http::Request::builder()
         .method("POST")
         .uri("/api/import/attendflow-backup")
