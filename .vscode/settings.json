@@ -1,0 +1,12 @@
+{
+  "rust-analyzer.cargo.target": "x86_64-pc-windows-msvc",
+  "rust-analyzer.check.command": "clippy",
+  "files.exclude": { "target": true },
+  "search.exclude": { "target": true, "vendor/zoom-plugin-sdk": true },
+  "C_Cpp.default.cppStandard": "c++17",
+  "C_Cpp.default.defines": ["WIN32", "UNICODE", "_UNICODE", "ZC_HAVE_SDK=1"],
+  "C_Cpp.default.includePath": [
+    "${workspaceFolder}/crates/zoom-bridge/native",
+    "${workspaceFolder}/vendor/zoom-plugin-sdk/zoom-plugin-sdk-windows-7.2.0.3001/x64/export_h"
+  ]
+}

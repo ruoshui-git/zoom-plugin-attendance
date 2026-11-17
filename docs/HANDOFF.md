@@ -1,0 +1,97 @@
+# Handoff — Zoom Plugin SDK bootstrap (for the next Fable session)
+
+Bootstrap completed 2026-11-17. Repo: `C:\Users\Ruoshui\code\zoom-plugin-attendance`
+(git, branch `main`). Read with: [SETUP.md](SETUP.md) (versions, Marketplace
+config), [ARCHITECTURE.md](ARCHITECTURE.md) (interop rules),
+[SDK-NOTES.md](SDK-NOTES.md) (API inventory + observations).
+
+## 1. What was installed
+
+| Item | Action |
+|---|---|
+| Rust 1.100 MSVC, VS 2022 Build Tools 17.14 (MSVC 14.44, WinSDK 10.0.26100), Git, Zoom Workplace 7.2.5 | already present, reused |
+| VS component **C++ ATL/MFC** | **added** (for PSDKTest). Needed Defender CFA allow-listing of the VS Installer exes (owner-approved) |
+| Zoom Plugin SDK Windows **7.2.0.3001** | downloaded by owner, extracted to git-ignored `vendor\` |
+| Marketplace | new dev **General app** (AttendFlow untouched), Use Public Client OAuth, scope `plugin_sdk:read:connection_meta`, PKCE redirect `http://127.0.0.1:47811/callback` |
+
+Nothing else (no second VS, no v142, no vcpkg, no extra CMake).
+
+## 2. What builds
+
+- Official `PSDKTest.sln` Release|x64 with toolset override v143 → `vendor\...\x64\bin\PSDKTest.exe`.
+- Rust workspace: `zoom-companion` (CLI), `zoom-bridge` (C ABI + C++ adapter linked to the real SDK, delay-loaded), `zoom-auth` (PKCE/loopback/DPAPI).
+
+## 3. What was experimentally verified (not just compiled)
+
+| Check | Result |
+|---|---|
+| PSDKTest launches, loads `zToolSuiteIPCProxy.dll` + deps | yes (closed without Init) |
+| SDK DLL Authenticode | valid, Zoom Communications, Inc. |
+| 22 unit tests (UTF-8/16 incl. Chinese/emoji, callback path, C++ exception boundary, user-list marshalling, PKCE RFC vector, loopback E2E, DPAPI) | pass |
+| OAuth PKCE login (public client, loopback, ephemeral port) | **success**; token scope `plugin_sdk:read:connection_meta`; stored DPAPI-encrypted |
+| SDK auth + IPC with running Zoom Workplace | **`AUTH_RESULT_SUCCESS` + `IPC_STATUS_CONNECTED`**, callbacks on the SDK init thread |
+| `pwsh -NoProfile -File scripts\verify.ps1 -Connect` | all steps PASS |
+| Repo hygiene | no SDK binaries / credentials tracked |
+
+**Not verified:** anything inside a meeting. No meeting was joined; no participant data was collected.
+`GetMeetingToolkit` returns null outside a meeting.
+
+## 4. What still needs the owner
+
+- A **test meeting** (owner-controlled, not a church meeting) for in-meeting experiments, ideally with a second test account to act as the non-host participant.
+- Re-login if tokens expire unrefreshable (refresh is automatic; refresh tokens last 90 days): `.\scripts\run.ps1 auth login`.
+- The OAuth user must equal the Zoom Workplace signed-in user (else `AUTH_RESULT_VERIFY_USER_FAILED`).
+
+## 5. Interfaces for the participant / chat investigation
+
+Participants (all wired through the bridge already):
+- `Session::participants(Default)` → `IMeetingToolkit::GetParticipantsList()` (sync, SDK-owned vector, copied).
+- `Session::myself`, `Session::meeting_info` (topic/number/type; password + join URL deliberately not exposed), `Session::meeting_status`.
+- `Event::UserStatus { action: SYNC_ALL|ADD_USER|LEFT_USER|UPDATE_USER, users, .. }` from `OnUserStatusChanged` → join/leave tracking.
+- Not yet wired (headers): `GetAttendeeList`, `GetSpotlightedUserList`, `GetUserByUserID`, `GetUserRoleByUserID` (async), `GetWaitingRoomUserList`.
+- User fields: id (meeting-scoped), name, host/myself/attendee/muted/video/talking/raised-hand/waiting-room, audio type. **No email or persistent id; no join time** (timestamp events yourself).
+
+Chat: **no documented API delivers incoming chat content** (only `SendChat`,
+unread count, chat-window state, privilege). Undocumented DLL exports
+(`SetConfChatCallBack` etc.) exist but are out of scope by policy.
+
+## 6. Suggested first experiments
+
+1. Owner hosts a test meeting with Zoom Workplace; run `.\scripts\run.ps1 participants --watch 120` → record whether the full list + `SYNC_ALL` arrive for the **host**.
+2. Repeat as a **plain attendee** (companion runs on the attendee's machine, attendee's own token) → the core question: is `GetParticipantsList` complete / restricted for non-hosts? Compare with what the Zoom UI participants panel shows.
+3. Join/leave a third account; confirm `ADD_USER` / `LEFT_USER` payloads and timing; check id stability across rejoin.
+4. Breakout rooms / waiting room: `MeetingInstance::NewBreakout`, `IN_WAITING_ROOM` flag.
+5. Webinar: `GetAttendeeList` as panelist vs attendee.
+6. Chat: confirm only unread-count events arrive when messages are received.
+Record all results in `docs/SDK-NOTES.md` (Empirical observations).
+
+## 7. Known limitations / problems
+
+- SDK runtime must be beside the exe (silent failure otherwise) — `scripts\build.ps1` handles it; plain `cargo build` alone does **not** sync it (use the script, or `doctor` will flag it).
+- Marketplace: plain "OAuth redirect URL" rejects loopback/localhost; only the **PKCE OAuth Redirect URL** field accepts `127.0.0.1`, and only the **public client ID** receives it. Loopback redirects may be rejected at Marketplace publishing review (dev only).
+- PSDKTest project targets v142; we override to v143 on the command line.
+- SDK is process-global: one `Session` per process.
+- `OnIPCConnectStatusChanged` error text encoding undocumented (treated as UTF-8, lossy).
+- Every bridge query has a 30 s timeout; synchronous SDK calls run on the SDK thread.
+- Cargo 1.100 uses a new build-dir layout (test exes under `target\debug\build\...`); don't rely on `OUT_DIR` ancestry.
+
+## 8. Exact commands
+
+```powershell
+cd C:\Users\Ruoshui\code\zoom-plugin-attendance
+.\scripts\setup.ps1 -CheckOnly                 # prerequisites
+.\scripts\extract-sdk.ps1                      # only after a new SDK zip
+.\scripts\build-demo.ps1 -Launch               # official sample
+.\scripts\build.ps1                            # Rust build + SDK runtime sync
+.\scripts\test.ps1                             # tests + selftest
+.\scripts\run.ps1 doctor
+.\scripts\run.ps1 auth status                  # / auth login / auth logout
+.\scripts\run.ps1 connect --seconds 20         # auth + IPC check (Zoom Workplace running)
+.\scripts\run.ps1 participants --watch 60      # ONLY in a test meeting
+pwsh -NoProfile -File .\scripts\verify.ps1 -Connect -BuildDemo
+.\scripts\package.ps1                          # dist\zoom-companion\ (exe + bin)
+```
+
+Debugging: VS Code launch configs "zoom-companion connect/doctor (MSVC debugger)"
+(`cppvsdbg`), `RUST_LOG=debug`. Adapter source: `crates/zoom-bridge/native/zc_sdk.cpp`
+(add new SDK calls there + `zc_bridge.h` + `src/ffi.rs` + a `Session` command).

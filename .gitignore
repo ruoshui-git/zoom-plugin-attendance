@@ -1,0 +1,25 @@
+# Rust build output
+/target/
+
+# Official Zoom SDK archives and extracted packages (licensed binaries; never commit)
+/vendor/downloads/*
+!/vendor/downloads/.gitkeep
+/vendor/zoom-plugin-sdk/
+
+# Packaged output
+/dist/
+
+# Secrets / local auth artifacts (tokens live in %LOCALAPPDATA%, never here)
+*.dpapi
+*.token
+.env
+.env.*
+*.pem
+*.pfx
+
+# Editors / OS
+.vs/
+*.user
+*.suo
+Thumbs.db
+.DS_Store

@@ -1,0 +1,23 @@
+[package]
+name = "zoom-companion"
+description = "Native Windows companion for Zoom Workplace via the Zoom Plugin SDK (development baseline)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+build = "build.rs"
+
+[[bin]]
+name = "zoom-companion"
+path = "src/main.rs"
+
+[dependencies]
+zoom-bridge.workspace = true
+zoom-auth.workspace = true
+anyhow.workspace = true
+log.workspace = true
+env_logger.workspace = true
+serde.workspace = true
+toml.workspace = true
+windows-sys.workspace = true
+clap = { version = "4", features = ["derive"] }

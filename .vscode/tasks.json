@@ -1,0 +1,10 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    { "label": "build", "type": "shell", "command": "./scripts/build.ps1", "group": { "kind": "build", "isDefault": true }, "problemMatcher": ["$rustc"] },
+    { "label": "test", "type": "shell", "command": "./scripts/test.ps1", "group": { "kind": "test", "isDefault": true }, "problemMatcher": ["$rustc"] },
+    { "label": "verify", "type": "shell", "command": "pwsh -NoProfile -File ./scripts/verify.ps1" },
+    { "label": "doctor", "type": "shell", "command": "./scripts/run.ps1 doctor" },
+    { "label": "build PSDKTest demo", "type": "shell", "command": "./scripts/build-demo.ps1" }
+  ]
+}

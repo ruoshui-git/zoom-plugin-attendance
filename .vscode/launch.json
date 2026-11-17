@@ -1,0 +1,26 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "zoom-companion connect (MSVC debugger)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "${workspaceFolder}/target/debug/zoom-companion.exe",
+      "args": ["connect", "--seconds", "30"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "environment": [{ "name": "RUST_LOG", "value": "debug" }]
+    },
+    {
+      "name": "zoom-companion doctor (MSVC debugger)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "${workspaceFolder}/target/debug/zoom-companion.exe",
+      "args": ["doctor"],
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal"
+    }
+  ]
+}

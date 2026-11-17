@@ -1,0 +1,19 @@
+[package]
+name = "zoom-bridge"
+description = "Thin, safe Rust wrapper over a C ABI adapter for the Zoom Plugin SDK (Windows)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+# `links` lets dependent crates read DEP_ZC_BRIDGE_* metadata from build.rs
+# (used by zoom-companion to delay-load the SDK DLL and to locate bin/).
+links = "zc_bridge"
+build = "build.rs"
+
+[dependencies]
+log.workspace = true
+thiserror.workspace = true
+windows-sys.workspace = true
+
+[build-dependencies]
+cc = "1"
