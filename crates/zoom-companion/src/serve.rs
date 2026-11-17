@@ -759,6 +759,7 @@ pub fn run(
                 "/api/meetings/:id/state",
                 get(api_get_state).put(api_put_state),
             )
+            .route("/api/meetings/:id/reconciliation", post(api_reconciliation_decision))
             .route("/api/import/attendflow-backup", post(api_import_backup))
             .route(
                 "/api/backup",
@@ -2427,6 +2428,76 @@ async fn api_put_state(
         Err(e) => api_error(e),
     }
 }
+async fn api_reconciliation_decision(
+    State(a): State<App>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Response {
+    if let Some(r) = api_origin(&a, &headers) { return r; }
+    let (Some(state_revision), Some(alias_revision), Some(mut state)) =
+        (body["revision"].as_u64(), body["aliasesRevision"].as_u64(), body.get("value").cloned())
+    else { return StatusCode::BAD_REQUEST.into_response(); };
+    let alias_result = a.store.get_doc("aliases");
+    let (actual_alias_revision, aliases) = match alias_result { Ok(v) => v, Err(e) => return api_error(e) };
+    if actual_alias_revision != alias_revision {
+        return (StatusCode::CONFLICT, Json(json!({"error":"stale_revision","key":"aliases","revision":actual_alias_revision}))).into_response();
+    }
+    let Some(rows) = aliases.as_array() else { return StatusCode::INTERNAL_SERVER_ERROR.into_response(); };
+    if state["reconciliationDecisions"].is_null() && state["decisions"].is_array() { state["reconciliationDecisions"] = state["decisions"].clone(); }
+    if state["reconciliationDecisions"].is_null() { state["reconciliationDecisions"] = json!([]); }
+    let decisions = state["reconciliationDecisions"].as_array_mut().unwrap();
+    if body["revertId"].is_string() {
+        let revert_id = body["revertId"].as_str().unwrap();
+        decisions.retain(|d| d["id"].as_str() != Some(revert_id));
+    } else {
+        let Some(decision) = body.get("decision") else { return StatusCode::BAD_REQUEST.into_response(); };
+        let parsed: attend_engine::ReconciliationDecision = match serde_json::from_value(decision.clone()) {
+            Ok(v) => v, Err(e) => return (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({"message":format!("Invalid decision: {e}")}))).into_response()
+        };
+        let zoom_name = if parsed.zoom_name_at_decision.is_empty() { &parsed.zoom_name } else { &parsed.zoom_name_at_decision };
+        let norm = norm_config_name(zoom_name);
+        let roster = a.store.get_doc("roster").map(|x| x.1).unwrap_or(json!([]));
+        let mut next_aliases = rows.clone();
+        match &parsed.action {
+            attend_engine::DecisionAction::Match | attend_engine::DecisionAction::NameChangeKeepMatch => {
+                let Some(person_id) = parsed.person_id else { return (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({"message":"A roster person is required for a match."}))).into_response(); };
+                let Some(person) = roster.as_array().into_iter().flatten().find(|p| p["personId"].as_u64() == Some(person_id)) else { return (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({"message":"The selected roster person no longer exists."}))).into_response(); };
+                let canonical = person["canonicalName"].as_str().unwrap_or("");
+                if norm_config_name(canonical) == norm {
+                    if parsed.action == attend_engine::DecisionAction::Match { return (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({"message":"A nickname must differ from the canonical name."}))).into_response(); }
+                }
+                if let Some(other) = roster.as_array().into_iter().flatten().find(|p| p["personId"].as_u64() != Some(person_id) && norm_config_name(p["canonicalName"].as_str().unwrap_or("")) == norm) {
+                    return (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({"message":format!("Nickname '{}' is already a canonical roster name.", other["canonicalName"].as_str().unwrap_or(zoom_name))}))).into_response();
+                }
+                if let Some(existing) = rows.iter().find(|a| norm_config_name(a["zoomName"].as_str().unwrap_or("")) == norm && a["personId"].as_u64() != Some(person_id)) {
+                    return (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({"message":format!("Nickname '{}' already belongs to another roster person.", existing["zoomName"].as_str().unwrap_or(zoom_name))}))).into_response();
+                }
+                next_aliases.retain(|a| norm_config_name(a["zoomName"].as_str().unwrap_or("")) != norm);
+                if norm_config_name(canonical) != norm { next_aliases.push(json!({"zoomName":zoom_name,"personId":person_id,"notes":""})); }
+            }
+            attend_engine::DecisionAction::Guest | attend_engine::DecisionAction::Split => {
+                next_aliases.retain(|a| norm_config_name(a["zoomName"].as_str().unwrap_or("")) != norm);
+            }
+            _ => {}
+        }
+        decisions.retain(|d| d["sessionParticipantId"] != parsed.session_participant_id);
+        decisions.push(json!(parsed));
+        let put = a.store.put_state_and_doc_atomic(&id, state_revision, &state, "aliases", alias_revision, &json!(next_aliases), now());
+        return match put {
+            Ok(Ok((revision, aliases_revision))) => { emit_record_updated(&a, &id); Json(json!({"revision":revision,"aliasesRevision":aliases_revision,"value":state})).into_response() },
+            Ok(Err((_, u64::MAX))) => StatusCode::NOT_FOUND.into_response(),
+            Ok(Err((key, revision))) => (StatusCode::CONFLICT, Json(json!({"error":"stale_revision","key":key,"revision":revision}))).into_response(),
+            Err(e) => api_error(e),
+        };
+    }
+    match a.store.put_state(&id, state_revision, &state, now()) {
+        Ok(Ok(revision)) => { emit_record_updated(&a, &id); Json(json!({"revision":revision,"aliasesRevision":alias_revision,"value":state})).into_response() },
+        Ok(Err(u64::MAX)) => StatusCode::NOT_FOUND.into_response(),
+        Ok(Err(actual)) => (StatusCode::CONFLICT, Json(json!({"error":"stale_revision","key":"state","revision":actual}))).into_response(),
+        Err(e) => api_error(e),
+    }
+}
 async fn api_delete_meeting(
     State(a): State<App>,
     axum::extract::Path(id): axum::extract::Path<String>,
@@ -3042,6 +3113,40 @@ async fn backup_import_revision_conflict_and_state_notification() {
         .unwrap();
     assert_eq!(update["type"], "record_updated");
     assert_eq!(update["instanceId"], "m1");
+}
+
+#[tokio::test]
+async fn reconciliation_decisions_commit_aliases_atomically_and_revert_keeps_aliases() {
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+    let store=Arc::new(Store::open(std::env::temp_dir().join(format!("zc-reconcile-{}.db",now()))).unwrap());
+    store.upsert_meeting(&json!({"instanceId":"rec-1","meetingNumber":"1","topic":"Demo","startedAt":1,"isHost":false}),None,1).unwrap();
+    store.put_doc("roster",0,&json!([
+        {"personId":1,"canonicalName":"Ada Lovelace","pinyin":"ada lovelace","active":true},
+        {"personId":2,"canonicalName":"Grace Hopper","pinyin":"grace hopper","active":true}
+    ]),now()).unwrap().unwrap();
+    store.put_doc("aliases",0,&json!([{"zoomName":"Known Nick","personId":2,"notes":""},{"zoomName":"Guest Nick","personId":1,"notes":""},{"zoomName":"Shared Nick","personId":1,"notes":""}]),now()).unwrap().unwrap();
+    let app=App{tx:broadcast::channel(8).0,tracker:Arc::new(Mutex::new(Tracker::default())),session:Arc::new(Mutex::new(None)),shutdown:Arc::new(AtomicBool::new(false)),port:47812,allowed:vec![],ui:None,log_dir:std::env::temp_dir(),store:store.clone(),provider:Arc::new(StubRecordProvider),record_updates:Arc::new(Mutex::new(Default::default()))};
+    let api=Router::new().route("/api/meetings/:id/reconciliation",post(api_reconciliation_decision)).route("/api/meetings/:id/state",get(api_get_state)).with_state(app);
+    async fn post_decision(api:&Router,body:Value)->axum::http::Response<axum::body::Body>{let req=axum::http::Request::builder().method("POST").uri("/api/meetings/rec-1/reconciliation").header("content-type","application/json").body(axum::body::Body::from(body.to_string())).unwrap();api.clone().oneshot(req).await.unwrap()}
+    let decision=|id:&str,name:&str,action:&str,person:Option<u64>|{let mut d=json!({"id":id,"sessionParticipantId":id,"zoomName":name,"zoomNameAtDecision":name,"action":action,"createdAt":"2026-11-17T00:00:00Z"});if let Some(p)=person{d["personId"]=json!(p)}d};
+    let state=json!({"mode":"roster","decisions":[]});
+    let conflict=post_decision(&api,json!({"revision":0,"aliasesRevision":1,"value":state,"decision":decision("d0","Known Nick","match",Some(1))})).await;
+    assert_eq!(conflict.status(),StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(store.get_state("rec-1").unwrap().0,0,"alias conflict must not write the decision");
+    assert_eq!(store.get_doc("aliases").unwrap().1[0]["personId"],2);
+    let matched=post_decision(&api,json!({"revision":0,"aliasesRevision":1,"value":state,"decision":decision("d1","New Nick","match",Some(1))})).await;
+    assert_eq!(matched.status(),StatusCode::OK);
+    assert_eq!(store.get_state("rec-1").unwrap().1["reconciliationDecisions"][0]["action"],"match");
+    assert!(store.get_doc("aliases").unwrap().1.as_array().unwrap().iter().any(|a|a["zoomName"]=="New Nick"&&a["personId"]==1));
+    let guest=post_decision(&api,json!({"revision":1,"aliasesRevision":2,"value":store.get_state("rec-1").unwrap().1,"decision":decision("d2","Guest Nick","guest",None)})).await;
+    assert_eq!(guest.status(),StatusCode::OK);assert!(!store.get_doc("aliases").unwrap().1.as_array().unwrap().iter().any(|a|a["zoomName"]=="Guest Nick"));
+    let split=post_decision(&api,json!({"revision":2,"aliasesRevision":3,"value":store.get_state("rec-1").unwrap().1,"decision":decision("d3","Shared Nick","split",None)})).await;
+    assert_eq!(split.status(),StatusCode::OK);assert!(!store.get_doc("aliases").unwrap().1.as_array().unwrap().iter().any(|a|a["zoomName"]=="Shared Nick"));
+    let revert=post_decision(&api,json!({"revision":3,"aliasesRevision":4,"value":store.get_state("rec-1").unwrap().1,"revertId":"d1"})).await;
+    assert_eq!(revert.status(),StatusCode::OK);let stored=store.get_state("rec-1").unwrap().1;assert!(!stored["reconciliationDecisions"].as_array().unwrap().iter().any(|d|d["id"]=="d1"));assert!(store.get_doc("aliases").unwrap().1.as_array().unwrap().iter().any(|a|a["zoomName"]=="New Nick"),"revert leaves aliases in place");
+    let stale=post_decision(&api,json!({"revision":0,"aliasesRevision":4,"value":state,"decision":decision("d4","Other Nick","guest",None)})).await;assert_eq!(stale.status(),StatusCode::CONFLICT);
+    let _=matched.into_body().collect().await.unwrap();
 }
 
 #[test]

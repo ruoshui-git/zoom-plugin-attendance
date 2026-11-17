@@ -190,6 +190,34 @@ impl Store {
     ) -> Result<Result<u64, u64>> {
         self.with(|c| { let tx=c.unchecked_transaction()?; let exists:bool=tx.query_row("SELECT EXISTS(SELECT 1 FROM meetings WHERE instance_id=?1)",[id],|r|r.get(0))?; if !exists{return Ok(Err(u64::MAX));} let actual:i64=tx.query_row("SELECT revision FROM states WHERE instance_id=?1",[id],|r|r.get(0)).optional()?.unwrap_or(0); if actual as u64!=revision{return Ok(Err(actual as u64));} let next=revision+1; tx.execute("INSERT INTO states VALUES(?1,?2,?3,?4) ON CONFLICT(instance_id) DO UPDATE SET revision=excluded.revision,json=excluded.json,updated_at=excluded.updated_at",params![id,next as i64,value.to_string(),now as i64])?; tx.commit()?; Ok(Ok(next)) })
     }
+    /// Atomically persist a meeting state update together with alias changes.
+    /// Both revisions are checked inside the same SQLite transaction.
+    pub fn put_state_and_doc_atomic(
+        &self,
+        id: &str,
+        state_revision: u64,
+        state: &Value,
+        doc_key: &str,
+        doc_revision: u64,
+        doc: &Value,
+        now: u64,
+    ) -> Result<Result<(u64, u64), (String, u64)>> {
+        self.with(|c| {
+            let tx = c.unchecked_transaction()?;
+            let exists: bool = tx.query_row("SELECT EXISTS(SELECT 1 FROM meetings WHERE instance_id=?1)", [id], |r| r.get(0))?;
+            if !exists { return Ok(Err(("meeting".into(), u64::MAX))); }
+            let actual_state: i64 = tx.query_row("SELECT revision FROM states WHERE instance_id=?1", [id], |r| r.get(0)).optional()?.unwrap_or(0);
+            if actual_state as u64 != state_revision { return Ok(Err(("state".into(), actual_state as u64))); }
+            let actual_doc: i64 = tx.query_row("SELECT revision FROM docs WHERE key=?1", [doc_key], |r| r.get(0)).optional()?.unwrap_or(0);
+            if actual_doc as u64 != doc_revision { return Ok(Err((doc_key.into(), actual_doc as u64))); }
+            let next_state = state_revision + 1;
+            let next_doc = doc_revision + 1;
+            tx.execute("INSERT INTO states(instance_id,revision,json,updated_at) VALUES(?1,?2,?3,?4) ON CONFLICT(instance_id) DO UPDATE SET revision=excluded.revision,json=excluded.json,updated_at=excluded.updated_at", params![id, next_state as i64, state.to_string(), now as i64])?;
+            tx.execute("INSERT INTO docs(key,revision,json,updated_at) VALUES(?1,?2,?3,?4) ON CONFLICT(key) DO UPDATE SET revision=excluded.revision,json=excluded.json,updated_at=excluded.updated_at", params![doc_key, next_doc as i64, doc.to_string(), now as i64])?;
+            tx.commit()?;
+            Ok(Ok((next_state, next_doc)))
+        })
+    }
     pub fn delete_meeting(&self, id: &str) -> Result<bool> {
         self.with(|c| {
             Ok(c.execute(

@@ -60,7 +60,7 @@ Per-fixture results remain listed in
 | Status table: #, name (+Zoom name, ⚠ out-of-scope, shared note), status chips, location, group, first join, last entry/exit, minutes; status-then-pinyin sort; row tints; resizable columns | P1 (core columns) / P2 (resize, chip overflow) |
 | Filters: search (name/pinyin), A→Z/Z→A, roster scope chips, group chips (counts, select all, reverse, drag reorder) | P2 |
 | Duplicate-name banner, `#XXXX` disambiguators | P2 |
-| Name Matching panel (pending / name changes / resolved; match, guest, split, keep match, revert, manual match) | P2 |
+| Name Matching panel (pending / name changes / resolved; match, guest, split, keep match, revert, manual match) | P2 | ✓: roster live panel, record summary, revisioned decisions and atomic alias effects |
 | Name Changes log (search) | P2 |
 | Settings & Info (record info, per-record profile / late / return overrides with Apply/Reset) | P2 |
 | Manual Attendance tab | P2 |
@@ -74,7 +74,7 @@ Per-fixture results remain listed in
 |---|---|
 | Home cards (records, configuration, settings), active meeting strip | P1 (minimal) / P2 |
 | Records list (topic, start, end, mode, # attended, status; date-prefix search; bulk delete/export; import with preview) | P1 (list) / P2 | partial: date-prefix search, bulk delete (active refusal), JSON export; AttendFlow session/record import preview and read-only imported rows |
-| Record detail: overview cards, auto attendance (status / name matching / settings / name changes), entry/exit, raise hand, manual records; attendance table generic/roster columns, score pills, tag/group filters, sorts | P1 (attendance table) / P2 |
+| Record detail: overview cards, auto attendance (status / name matching / settings / name changes), entry/exit, raise hand, manual records; attendance table generic/roster columns, score pills, tag/group filters, sorts | P1 (attendance table) / P2 | partial: read-only name matching summary and unresolved count |
 | Per-record exports: JSON bundle v3, summary CSV (zh/en columns), manual-records CSV; export-all | P2 |
 | Roster CRUD, bulk edit/delete, roster.csv import (zh/en headers, UTF-8/GB18030, preview, cascade) / export | P2 | implemented: Rust preview/commit/export APIs, UTF-8/BOM/GB18030 decode, bilingual CSV columns, CRUD and bulk UI, filtered selection and cascade handling |
 | Name matching (aliases) CRUD, bulk, CSV import/export with validation rules | P2 | implemented: Rust preview/commit/export APIs and validation; roster autocomplete, filters and bulk UI |

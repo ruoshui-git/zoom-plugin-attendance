@@ -106,7 +106,7 @@ fn return_default() -> u32 {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "snake_case")]
 pub enum DecisionAction {
     Match,
     Guest,

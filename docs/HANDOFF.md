@@ -194,6 +194,29 @@ Debugging: VS Code launch configs "zoom-companion connect/doctor (MSVC debugger)
 (`cppvsdbg`), `RUST_LOG=debug`. Adapter source: `crates/zoom-bridge/native/zc_sdk.cpp`
 (add new SDK calls there + `zc_bridge.h` + `src/ffi.rs` + a `Session` command).
 
+### Name matching panel implementation (2026-11-17)
+
+The roster-mode live view has a Name Matching panel with pending participant cards,
+quick candidate match / guest / shared-name actions, a searchable manual roster match,
+split-person selection, name-change decisions, resolved decision labels, and Revert.
+The matching navigation badge counts unmatched rows and undecided name-change events;
+the Ignored summary opens the panel. Record detail uses the same component read-only.
+
+Decisions are stored in revisioned meeting state as `reconciliationDecisions` using
+AttendFlow action names. `/api/meetings/:id/reconciliation` applies match alias
+upserts or guest/split alias removals in the same SQLite transaction as the state
+write. Alias validation rejects canonical-name and cross-person nickname conflicts
+before either document changes. Revert removes the decision and leaves aliases in
+place. A stale revision returns 409 for the UI's single refetch-and-retry attempt.
+The record endpoint derives rows from the updated state and emits `record_updated`.
+
+Verification: `scripts/test.ps1` passed, including roster derivation parity (448
+variants), general parity (56 records), 29 companion tests, and the companion
+self-test. The Name Matching component tests were added but `pnpm check` / `pnpm
+build` could not run in this worktree because `node_modules` is absent and the
+locked Svelte package tarball is not cached for offline installation. No SDK
+session was started.
+
 ### Guest participants for experiments
 
 `tools/guest-bot` joins web-client guests (Playwright + installed Chrome).

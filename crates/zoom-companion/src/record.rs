@@ -359,4 +359,25 @@ mod tests {
         assert_eq!(record["durationMinutes"].as_f64().unwrap().round(), 10.0);
     }
 
+    #[test]
+    fn persisted_match_and_split_decisions_rederive_roster_rows() {
+        let start=1_794_893_640_000_u64;
+        let meeting=json!({"instanceId":"reconcile-engine","meetingNumber":"1","topic":"Roster","startedAt":start,"isHost":false});
+        let events=vec![json!({"kind":"users","action":"sync_all","instanceId":"reconcile-engine","at":start,"users":[{"userId":7,"name":"Shared Zoom"}]})];
+        let config=json!({"roster":[
+            {"personId":1,"canonicalName":"Ada Lovelace","pinyin":"ada lovelace","group":"A","active":true},
+            {"personId":2,"canonicalName":"Grace Hopper","pinyin":"grace hopper","group":"B","active":true}
+        ],"aliases":[],"profiles":[]});
+        let provider=EngineRecordProvider;
+        let unmatched=provider.try_build_record(&meeting,&events,&config,&json!({"mode":"roster"}),start+60_000).unwrap();
+        assert!(unmatched["rows"].as_array().unwrap().iter().any(|r|r["matchStatus"]=="unmatched"));
+        let match_state=json!({"mode":"roster","decisions":[{"id":"d1","sessionParticipantId":"sp-1","zoomName":"Shared Zoom","zoomNameAtDecision":"Shared Zoom","action":"match","personId":1,"canonicalName":"Ada Lovelace","createdAt":"2026-11-17T00:00:00Z"}]});
+        let matched=provider.try_build_record(&meeting,&events,&config,&match_state,start+60_000).unwrap();
+        assert!(matched["rows"].as_array().unwrap().iter().any(|r|r["matchStatus"]=="matched"&&r["canonicalName"]=="Ada Lovelace"),"matched result: {}",matched["rows"]);
+        let split_state=json!({"mode":"roster","decisions":[{"id":"d2","sessionParticipantId":"sp-1","zoomName":"Shared Zoom","zoomNameAtDecision":"Shared Zoom","action":"split","splitPersonIds":[1,2],"splitCanonicalNames":["Ada Lovelace","Grace Hopper"],"createdAt":"2026-11-17T00:00:00Z"}]});
+        let split=provider.try_build_record(&meeting,&events,&config,&split_state,start+60_000).unwrap();
+        let rows=split["rows"].as_array().unwrap();
+        assert_eq!(rows.iter().filter(|r|r["matchStatus"]=="split").count(),2,"a split decision fans one participant out to both selected roster people");
+    }
+
 }

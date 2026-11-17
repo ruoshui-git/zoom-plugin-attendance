@@ -39,7 +39,7 @@ pub struct EngineState {
     pub late_overrides: HashMap<String, bool>,
     #[serde(default)]
     pub return_overrides: HashMap<String, bool>,
-    #[serde(default)]
+    #[serde(default, rename = "reconciliationDecisions", alias = "decisions")]
     pub decisions: Vec<ReconciliationDecision>,
     #[serde(default)]
     pub manual_snapshots: Vec<Value>,
