@@ -26,8 +26,10 @@ Sources checked 2026-11-18: [PKCE / public clients](https://developers.zoom.us/d
 
 Loopback is officially supported for PKCE public clients: "Use a numeric loopback
 literal (`127.0.0.1` or `[::1]`); do not use `localhost`" and "Zoom ignores only the
-port". The app binds a fresh ephemeral port for each sign-in, so the `47811` in the
-registered URL is only a placeholder.
+port". In practice the production credentials matched the port exactly ("Invalid
+redirect ... (4,700)" for any other port, 2026-11-18), so the app always uses exactly
+`http://127.0.0.1:47811/callback`. If another program holds port 47811, the app shows
+a sign-in error naming the port.
 
 ### Why a public client ("Use Public Client OAuth" justification)
 
@@ -37,7 +39,7 @@ Short version for the form field:
 > keep a client secret confidential: anything shipped in the executable can be extracted.
 > Following RFC 8252 (OAuth for native apps), it uses the public client ID with
 > Authorization Code + PKCE (S256), the system browser, and a loopback redirect
-> (http://127.0.0.1:<ephemeral port>/callback) that listens only during sign-in and checks
+> (http://127.0.0.1:47811/callback) that listens only during sign-in and checks
 > `state`. Tokens are stored encrypted with Windows DPAPI for the current user and sent only
 > to zoom.us. The only scope is plugin_sdk:read:connection_meta, used solely to authenticate
 > the Zoom Plugin SDK connection to Zoom Workplace on the same computer.
@@ -48,7 +50,7 @@ Long version (if the review asks for detail):
 > A client secret shipped inside a desktop executable cannot be kept confidential, so the
 > app uses the public client ID with Authorization Code + PKCE (S256), as recommended
 > for native apps by RFC 8252. The browser redirects to a loopback address
-> (`http://127.0.0.1:<ephemeral port>/callback`) that the app listens on only for the
+> (`http://127.0.0.1:47811/callback`) that the app listens on only for the
 > duration of the sign-in; the `state` parameter is verified. Tokens are stored on the
 > user's computer encrypted with Windows DPAPI (current user scope) and are only sent
 > to zoom.us. The token is used for a single purpose: authenticating the Zoom Plugin SDK
@@ -150,7 +152,7 @@ developer or third parties.
 meetings, on the user's computer. No analytics, no advertising, no AI training, no sale.
 
 **Token handling.** Authorization Code + PKCE (S256) with `state` validation; loopback
-redirect on 127.0.0.1 with an ephemeral port; tokens encrypted at rest with Windows
+redirect on 127.0.0.1:47811 (listening only during sign-in); tokens encrypted at rest with Windows
 DPAPI (`CryptProtectData`, current-user scope, app-specific entropy); in-memory copies
 zeroed after use; never logged. Refresh tokens are rotated and re-persisted. Sign-out
 calls `POST /oauth/revoke` and deletes the token file.

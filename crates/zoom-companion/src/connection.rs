@@ -72,6 +72,9 @@ pub struct ZoomLink {
     pub sign_out: AtomicBool,
     /// Browser sign-ins in flight; while > 0 the worker does not report `SignedOut`.
     pub login_pending: AtomicUsize,
+    /// Authorize URL of the sign-in waiting for its redirect (one at a time: the
+    /// redirect port is fixed). "Sign in" again just reopens this URL.
+    pub login_url: Mutex<Option<String>>,
 }
 
 impl Default for ZoomLink {
@@ -81,6 +84,7 @@ impl Default for ZoomLink {
             wake: AtomicBool::new(false),
             sign_out: AtomicBool::new(false),
             login_pending: AtomicUsize::new(0),
+            login_url: Mutex::new(None),
         }
     }
 }

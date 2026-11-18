@@ -25,8 +25,8 @@ pub fn parse_redirect(redirect_uri: &str) -> Result<RedirectTarget, AuthError> {
         Some("localhost") | Some("127.0.0.1") | Some("[::1]") => {}
         _ => return Err(AuthError::Config("redirect host must be localhost/127.0.0.1/[::1]".into())),
     }
-    // Zoom matches loopback redirects ignoring only the port, and recommends a
-    // fresh ephemeral port per attempt; a missing port means "ephemeral" (0).
+    // Zoom documents that loopback ports are ignored, but production credentials
+    // matched them exactly (2026-11-18): callers bind this exact port. 0 = none given.
     Ok(RedirectTarget { port: u.port().unwrap_or(0), path: u.path().to_string() })
 }
 

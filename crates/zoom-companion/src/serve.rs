@@ -1247,9 +1247,10 @@ async fn api_zoom_status(State(a): State<App>, headers: HeaderMap) -> Response {
     Json(a.link.status.lock().unwrap().wire()).into_response()
 }
 
-/// Starts the browser sign-in (PKCE, loopback) and returns at once; progress
-/// arrives as `zoom_status` messages. Several attempts may be in flight (the
-/// user closed the tab and clicked again); each has its own port and state.
+/// Starts the browser sign-in (PKCE, loopback on the registered redirect port)
+/// and returns at once; progress arrives as `zoom_status` messages. Only one
+/// sign-in can wait for its redirect at a time (the port is fixed), so clicking
+/// again while one is pending reopens the same authorize URL.
 async fn api_zoom_sign_in(State(a): State<App>, headers: HeaderMap) -> Response {
     if let Some(r) = strict_origin(&a, &headers) {
         return r;
@@ -1259,13 +1260,36 @@ async fn api_zoom_sign_in(State(a): State<App>, headers: HeaderMap) -> Response 
         Ok(_) => return (StatusCode::CONFLICT, Json(json!({"error":"not_configured"}))).into_response(),
         Err(e) => return api_error(e),
     };
+    let pending = {
+        let mut url = a.link.login_url.lock().unwrap();
+        if let Some(u) = url.as_ref() {
+            let _ = open_browser(u);
+            set_zoom(&a, ZoomStatus::new(ZoomState::SigningIn, ""));
+            return (StatusCode::ACCEPTED, Json(json!({"started":true,"reopened":true}))).into_response();
+        }
+        match zoom_auth::begin_login(&cfg.oauth()) {
+            Ok(p) => {
+                *url = Some(p.authorize_url().to_owned());
+                p
+            }
+            Err(e) => {
+                log::warn!("sign-in could not start: {e}");
+                set_zoom(&a, ZoomStatus::new(ZoomState::SignedOut, e.to_string()).with_reason("sign_in_failed"));
+                return (StatusCode::CONFLICT, Json(json!({"error":e.to_string()}))).into_response();
+            }
+        }
+    };
     a.link.login_pending.fetch_add(1, Ordering::SeqCst);
     set_zoom(&a, ZoomStatus::new(ZoomState::SigningIn, ""));
+    log::info!("opening browser for Zoom authorization (client_id={}, redirect {})", cfg.client_id, cfg.redirect_uri);
+    if let Err(e) = open_browser(pending.authorize_url()) {
+        log::warn!("{e}");
+    }
     std::thread::spawn(move || {
-        let result = zoom_auth::TokenStore::open_default().and_then(|store| {
-            zoom_auth::login_interactive(&cfg.oauth(), &store, open_browser, Duration::from_secs(300))
-        });
-        let others = a.link.login_pending.fetch_sub(1, Ordering::SeqCst) - 1;
+        let result = zoom_auth::TokenStore::open_default()
+            .and_then(|store| pending.finish(&store, Duration::from_secs(300)));
+        *a.link.login_url.lock().unwrap() = None;
+        a.link.login_pending.fetch_sub(1, Ordering::SeqCst);
         match result {
             Ok(t) if !t.has_scope(zoom_auth::PLUGIN_SDK_SCOPE) => set_zoom(
                 &a,
@@ -1277,19 +1301,12 @@ async fn api_zoom_sign_in(State(a): State<App>, headers: HeaderMap) -> Response 
             }
             Err(e) => {
                 log::warn!("sign-in failed: {e}");
-                // Another attempt may still succeed; only the last one reports failure.
-                let signed_in = zoom_auth::TokenStore::open_default()
-                    .ok()
-                    .and_then(|s| s.load().ok().flatten())
-                    .is_some();
-                if others == 0 && !signed_in {
-                    let reason = match e {
-                        zoom_auth::AuthError::Denied(_) => "sign_in_denied",
-                        zoom_auth::AuthError::Loopback(_) => "sign_in_timeout",
-                        _ => "sign_in_failed",
-                    };
-                    set_zoom(&a, ZoomStatus::new(ZoomState::SignedOut, e.to_string()).with_reason(reason));
-                }
+                let reason = match e {
+                    zoom_auth::AuthError::Denied(_) => "sign_in_denied",
+                    zoom_auth::AuthError::Loopback(_) => "sign_in_timeout",
+                    _ => "sign_in_failed",
+                };
+                set_zoom(&a, ZoomStatus::new(ZoomState::SignedOut, e.to_string()).with_reason(reason));
             }
         }
     });

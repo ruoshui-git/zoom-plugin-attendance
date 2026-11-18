@@ -34,9 +34,9 @@ Companion documents:
 ## Your steps
 
 ### Step 1: production credentials (Marketplace > AttendFlow Desktop > Production)
-- [ ] *Use Public Client OAuth*: on. Justification text: `zoom-marketplace.md` section 1.
-- [ ] PKCE OAuth Redirect URL and OAuth allow list: `http://127.0.0.1:47811/callback`.
-- [ ] Scope `plugin_sdk:read:connection_meta`; Features > Access > Plugin SDK enabled.
+- [x] *Use Public Client OAuth*: on. Justification text: `zoom-marketplace.md` section 1.
+- [x] PKCE OAuth Redirect URL and OAuth allow list: `http://127.0.0.1:47811/callback`.
+- [x] Scope `plugin_sdk:read:connection_meta`; Features > Access > Plugin SDK enabled.
 
 ### Step 2: build and test the production package yourself
 ```powershell
