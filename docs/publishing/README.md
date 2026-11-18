@@ -28,7 +28,7 @@ Companion documents:
 | Support hours/SLA | same wording as AttendFlow's support page (accepted in AttendFlow's review) |
 | Loopback redirect allowed for public clients | confirmed in Zoom's PKCE docs; no hosted redirect page needed |
 | Zoom SDK license | confirmed: see step 5 |
-| Public repo + GitHub security scans | pending owner decision (history contains your personal meeting ID and email) |
+| Public repo + GitHub security scans | done: https://github.com/ruoshui-git/zoom-plugin-attendance (history scrubbed: meeting ID replaced, author email = GitHub noreply); CodeQL default setup, Dependabot alerts + security PRs, secret scanning + push protection. CodeQL scans `main`: merge `release-prep` so the submitted code is scanned |
 | SDK connection inside MSIX | **not verified yet** (owner test, step 2) |
 
 ## Your steps
