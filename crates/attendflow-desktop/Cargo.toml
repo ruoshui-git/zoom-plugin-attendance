@@ -1,0 +1,15 @@
+[package]
+name = "attendflow-desktop"
+description = "Windowless launcher for AttendFlow Desktop (starts `zoom-companion app` without a console)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+build = "build.rs"
+
+[[bin]]
+name = "AttendFlowDesktop"
+path = "src/main.rs"
+
+[dependencies]
+windows-sys.workspace = true

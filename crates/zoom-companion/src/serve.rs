@@ -29,6 +29,9 @@ use tokio::sync::broadcast;
 use zoom_bridge::status::{self, MeetingInstance};
 use zoom_bridge::{Event, Participant, Session};
 
+use anyhow::Context;
+use crate::config::Config;
+use crate::connection::{classify_start_error, ZoomLink, ZoomState, ZoomStatus};
 use crate::{open_browser, start_session};
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -484,6 +487,7 @@ struct App {
     store: Arc<Store>,
     provider: Arc<dyn RecordProvider>,
     record_updates: Arc<Mutex<std::collections::HashMap<String, u64>>>,
+    link: Arc<ZoomLink>,
 }
 trait BridgeEventSource: Send {
     fn recv_event(&self, timeout: Duration) -> Result<Event, mpsc::RecvTimeoutError>;
@@ -578,6 +582,8 @@ async fn client(socket: WebSocket, a: App) {
                         cursor=meeting_id.map(|id|(id,seq_head));
                         subscribed=true;
                         let _=tx.send(Message::Text(snapshot.0.to_string())).await;
+                        let zoom=a.link.status.lock().unwrap().wire();
+                        let _=tx.send(Message::Text(zoom.to_string())).await;
                         for e in snapshot.1{if tx.send(Message::Text(e.to_string())).await.is_err(){return}}
                     },
                     Some("request")=>{
@@ -687,6 +693,7 @@ pub fn run(
             store: Arc::new(Store::open(data_dir.join("data.db"))?),
             provider: Arc::new(EngineRecordProvider),
             record_updates: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            link: Default::default(),
             log_dir,
         };
         let (profile_revision, profiles) = app.store.get_doc("profiles")?;
@@ -721,14 +728,19 @@ pub fn run(
         if fake {
             seed_fake_meeting(&app);
         }
+        // Bind first: if another instance already owns the port this process must not
+        // start a second SDK session (one Plugin SDK client per Zoom Workplace).
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", port))
+            .await
+            .with_context(|| format!("port {port} is in use (is AttendFlow Desktop already running?)"))?;
         let worker = app.clone();
         let stop = app.shutdown.clone();
         let worker_task = if fake {
+            set_zoom(&app, ZoomStatus::new(ZoomState::Connected, "fake meeting"));
             None
         } else {
             Some(tokio::task::spawn_blocking(move || sdk_loop(worker)))
         };
-        let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await?;
         let url = format!("http://127.0.0.1:{port}/");
         if open {
             open_browser(&url)?;
@@ -750,6 +762,9 @@ pub fn run(
             .route("/api/profiles/import/commit", post(api_profiles_import_commit))
             .route("/api/config/example-data", post(api_example_data_commit))
             .route("/api/meetings", get(api_meetings))
+            .route("/api/zoom", get(api_zoom_status))
+            .route("/api/zoom/sign-in", post(api_zoom_sign_in))
+            .route("/api/zoom/sign-out", post(api_zoom_sign_out))
             .route("/api/records/export", get(api_export_records))
             .route("/api/records/import/preview", post(api_records_import_preview))
             .route("/api/records/import/commit", post(api_records_import_commit))
@@ -776,6 +791,7 @@ pub fn run(
                 axum::routing::delete(api_clear_local_data),
             )
             .fallback(get(root))
+            .layer(axum::middleware::from_fn_with_state(app.clone(), host_guard))
             .with_state(app);
         axum::serve(listener, router)
             .with_graceful_shutdown(async move {
@@ -815,11 +831,24 @@ pub fn app() -> anyhow::Result<()> {
         std::thread::sleep(Duration::from_millis(100));
     }
     let event_loop = EventLoop::new();
+    // Icon resource 1 is embedded by build.rs (packaging/assets/app.ico).
+    let icon = {
+        use tao::platform::windows::IconExtWindows;
+        tao::window::Icon::from_resource(1, None).ok()
+    };
     let window = WindowBuilder::new()
         .with_title("AttendFlow Desktop")
+        .with_window_icon(icon)
         .with_inner_size(tao::dpi::LogicalSize::new(1280.0, 820.0))
         .build(&event_loop)?;
-    let _webview = wry::WebViewBuilder::new()
+    // WebView2 profile in LOCALAPPDATA: the default (next to the exe) is read-only
+    // when installed under Program Files or as an MSIX package.
+    let mut web_context = wry::WebContext::new(
+        std::env::var_os("LOCALAPPDATA")
+            .map(PathBuf::from)
+            .map(|d| d.join("zoom-companion").join("webview2")),
+    );
+    let _webview = wry::WebViewBuilder::new_with_web_context(&mut web_context)
         .with_url(&url)
         .with_download_started_handler(|download_url, suggested_path| {
             if !download_url.contains("/api/config/roster/export")
@@ -973,8 +1002,11 @@ fn refresh_users(a: &App) {
 }
 fn sdk_loop(a: App) {
     while !a.shutdown.load(Ordering::SeqCst) {
+        a.link.sign_out.store(false, Ordering::SeqCst);
+        let mut pause_secs = 5;
         match start_session() {
             Ok((session, rx)) => {
+                set_zoom(&a, ZoomStatus::new(ZoomState::Connecting, ""));
                 let rx = ChannelEventSource(rx);
                 *a.session.lock().unwrap() = Some(session);
                 let until = std::time::Instant::now() + Duration::from_secs(30);
@@ -983,19 +1015,58 @@ fn sdk_loop(a: App) {
                     && !(auth && ipc)
                     && !retry
                     && !a.shutdown.load(Ordering::SeqCst)
+                    && !a.link.sign_out.load(Ordering::SeqCst)
                 {
                     if let Ok(e) = rx.recv_event(Duration::from_millis(200)) {
                         match &e {
                             Event::AuthResult { code, .. } => {
                                 auth = *code == status::AUTH_RESULT_SUCCESS;
                                 if !auth {
-                                    retry = true
+                                    retry = true;
+                                    // VERIFY_USER_FAILED: Zoom Workplace is signed in as a different user.
+                                    let reason = if *code == 2 { "account_mismatch" } else { "auth_failed" };
+                                    pause_secs = 15;
+                                    // A token that is unexpired but revoked (app removed on the Zoom
+                                    // website) also fails here: if Zoom refuses a refresh, the grant is
+                                    // gone and the user has to sign in again.
+                                    let grant_gone = reason == "auth_failed"
+                                        && matches!(
+                                            zoom_auth::TokenStore::open_default()
+                                                .and_then(|s| zoom_auth::refresh_now(&s)),
+                                            Err(zoom_auth::AuthError::NotSignedIn)
+                                                | Err(zoom_auth::AuthError::TokenEndpoint { status: 400..=499, .. })
+                                        );
+                                    if grant_gone {
+                                        if let Ok(store) = zoom_auth::TokenStore::open_default() {
+                                            let _ = store.clear();
+                                        }
+                                        set_zoom(
+                                            &a,
+                                            ZoomStatus::new(ZoomState::SignedOut, status::auth_result_name(*code))
+                                                .with_reason("session_expired"),
+                                        );
+                                        pause_secs = 2;
+                                    } else {
+                                        set_zoom(
+                                            &a,
+                                            ZoomStatus::new(ZoomState::Error, status::auth_result_name(*code))
+                                                .with_reason(reason),
+                                        );
+                                    }
                                 }
                             }
                             Event::IpcStatus { code, .. } => {
                                 ipc = *code == status::IPC_STATUS_CONNECTED;
                                 if *code == 1 || *code == 3 {
-                                    retry = true
+                                    retry = true;
+                                    // CONNECT_TIMEOUT is also what Zoom Workplace answers when it is
+                                    // signed out or signed in as a different user than the token's.
+                                    set_zoom(
+                                        &a,
+                                        ZoomStatus::new(ZoomState::Error, status::ipc_status_name(*code))
+                                            .with_reason("ipc_timeout"),
+                                    );
+                                    pause_secs = 15;
                                 }
                             }
                             _ => {}
@@ -1004,7 +1075,17 @@ fn sdk_loop(a: App) {
                         publish(&a, out);
                     }
                 }
-                if auth && ipc && !retry {
+                if !(auth && ipc) && !retry && !a.link.sign_out.load(Ordering::SeqCst) {
+                    // Neither success nor an explicit failure within 30 s.
+                    let st = if crate::zoom_workplace_running() {
+                        ZoomStatus::new(ZoomState::Error, "no response from Zoom Workplace").with_reason("ipc_timeout")
+                    } else {
+                        ZoomStatus::new(ZoomState::ZoomNotRunning, "")
+                    };
+                    set_zoom(&a, st);
+                }
+                if auth && ipc && !retry && !a.link.sign_out.load(Ordering::SeqCst) {
+                    set_zoom(&a, ZoomStatus::new(ZoomState::Connected, ""));
                     // The SDK toolkits remain null just after IPC connect; let the SYNC_ALL/status burst arrive first.
                     let burst = std::time::Instant::now() + Duration::from_secs(5);
                     while std::time::Instant::now() < burst && !a.shutdown.load(Ordering::SeqCst) {
@@ -1036,7 +1117,7 @@ fn sdk_loop(a: App) {
                     let mut want_start = false;
                     let mut last_try = std::time::Instant::now() - Duration::from_secs(5);
                     loop {
-                        if a.shutdown.load(Ordering::SeqCst) {
+                        if a.shutdown.load(Ordering::SeqCst) || a.link.sign_out.load(Ordering::SeqCst) {
                             break;
                         }
                         let no_meeting = {
@@ -1071,6 +1152,8 @@ fn sdk_loop(a: App) {
                                 let out = a.tracker.lock().unwrap().apply(e, None);
                                 publish(&a, out);
                                 if lost {
+                                    set_zoom(&a, ZoomStatus::new(ZoomState::Connecting, "connection to Zoom Workplace lost"));
+                                    pause_secs = 2;
                                     break;
                                 }
                             }
@@ -1086,7 +1169,21 @@ fn sdk_loop(a: App) {
                 }
             }
             Err(e) => {
-                log::warn!("serve session unavailable: {e}");
+                // Logged at info level by set_zoom when the status changes; retries repeat every few seconds.
+                log::debug!("serve session unavailable: {e:#}");
+                let (st, clear_tokens) = classify_start_error(&e);
+                if clear_tokens {
+                    if let Ok(store) = zoom_auth::TokenStore::open_default() {
+                        let _ = store.clear();
+                    }
+                }
+                let signing_in = a.link.login_pending.load(Ordering::SeqCst) > 0;
+                if !(st.state == ZoomState::SignedOut && signing_in) {
+                    if st.state == ZoomState::Error {
+                        pause_secs = 15;
+                    }
+                    set_zoom(&a, st);
+                }
                 let event = Event::IpcStatus {
                     code: 1,
                     message: e.to_string(),
@@ -1096,8 +1193,8 @@ fn sdk_loop(a: App) {
                 publish(&a, out);
             }
         }
-        for _ in 0..50 {
-            if a.shutdown.load(Ordering::SeqCst) {
+        for _ in 0..pause_secs * 10 {
+            if a.shutdown.load(Ordering::SeqCst) || a.link.wake.swap(false, Ordering::SeqCst) {
                 break;
             }
             std::thread::sleep(Duration::from_millis(100));
@@ -1105,6 +1202,127 @@ fn sdk_loop(a: App) {
     }
     if let Some(s) = a.session.lock().unwrap().take() {
         let _ = s.shutdown();
+    }
+}
+
+/// DNS-rebinding guard: a page on another domain that resolves to 127.0.0.1 is
+/// same-origin with itself, so browsers send no Origin on its GETs; its Host
+/// header still names the attacker's domain. Requests without a Host header
+/// (non-browser clients, tests) pass; `--allow-origin` hosts (the Vite dev proxy
+/// keeps `Host: localhost:5173`) are allowed too.
+fn host_allowed(host: Option<&str>, port: u16, allowed: &[String]) -> bool {
+    match host {
+        None => true,
+        Some(h) => {
+            h == format!("127.0.0.1:{port}")
+                || h == format!("localhost:{port}")
+                || allowed.iter().any(|o| o.split_once("://").map(|(_, rest)| rest) == Some(h))
+        }
+    }
+}
+
+async fn host_guard(
+    State(a): State<App>,
+    req: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> Response {
+    let host = req.headers().get("host").and_then(|v| v.to_str().ok());
+    if !host_allowed(host, a.port, &a.allowed) {
+        return StatusCode::MISDIRECTED_REQUEST.into_response();
+    }
+    next.run(req).await
+}
+
+/// State-changing Zoom endpoints require a same-app Origin (browsers always send
+/// one on POST), so another website cannot sign the user in or out.
+fn strict_origin(a: &App, h: &HeaderMap) -> Option<Response> {
+    let o = h.get("origin").and_then(|v| v.to_str().ok());
+    (!origin_allowed(o, a.port, &a.allowed)).then(|| StatusCode::FORBIDDEN.into_response())
+}
+
+async fn api_zoom_status(State(a): State<App>, headers: HeaderMap) -> Response {
+    if let Some(r) = api_origin(&a, &headers) {
+        return r;
+    }
+    Json(a.link.status.lock().unwrap().wire()).into_response()
+}
+
+/// Starts the browser sign-in (PKCE, loopback) and returns at once; progress
+/// arrives as `zoom_status` messages. Several attempts may be in flight (the
+/// user closed the tab and clicked again); each has its own port and state.
+async fn api_zoom_sign_in(State(a): State<App>, headers: HeaderMap) -> Response {
+    if let Some(r) = strict_origin(&a, &headers) {
+        return r;
+    }
+    let cfg = match Config::load() {
+        Ok(c) if !c.client_id.is_empty() => c,
+        Ok(_) => return (StatusCode::CONFLICT, Json(json!({"error":"not_configured"}))).into_response(),
+        Err(e) => return api_error(e),
+    };
+    a.link.login_pending.fetch_add(1, Ordering::SeqCst);
+    set_zoom(&a, ZoomStatus::new(ZoomState::SigningIn, ""));
+    std::thread::spawn(move || {
+        let result = zoom_auth::TokenStore::open_default().and_then(|store| {
+            zoom_auth::login_interactive(&cfg.oauth(), &store, open_browser, Duration::from_secs(300))
+        });
+        let others = a.link.login_pending.fetch_sub(1, Ordering::SeqCst) - 1;
+        match result {
+            Ok(t) if !t.has_scope(zoom_auth::PLUGIN_SDK_SCOPE) => set_zoom(
+                &a,
+                ZoomStatus::new(ZoomState::Error, format!("granted scopes: {}", t.scope)).with_reason("missing_scope"),
+            ),
+            Ok(_) => {
+                set_zoom(&a, ZoomStatus::new(ZoomState::Connecting, ""));
+                a.link.wake.store(true, Ordering::SeqCst);
+            }
+            Err(e) => {
+                log::warn!("sign-in failed: {e}");
+                // Another attempt may still succeed; only the last one reports failure.
+                let signed_in = zoom_auth::TokenStore::open_default()
+                    .ok()
+                    .and_then(|s| s.load().ok().flatten())
+                    .is_some();
+                if others == 0 && !signed_in {
+                    let reason = match e {
+                        zoom_auth::AuthError::Denied(_) => "sign_in_denied",
+                        zoom_auth::AuthError::Loopback(_) => "sign_in_timeout",
+                        _ => "sign_in_failed",
+                    };
+                    set_zoom(&a, ZoomStatus::new(ZoomState::SignedOut, e.to_string()).with_reason(reason));
+                }
+            }
+        }
+    });
+    (StatusCode::ACCEPTED, Json(json!({"started":true}))).into_response()
+}
+
+/// Revokes the grant at Zoom (removing the app from the user's Zoom "Added apps"),
+/// deletes the local tokens and drops the SDK session. Attendance data is kept.
+async fn api_zoom_sign_out(State(a): State<App>, headers: HeaderMap) -> Response {
+    if let Some(r) = strict_origin(&a, &headers) {
+        return r;
+    }
+    a.link.sign_out.store(true, Ordering::SeqCst);
+    let res = tokio::task::spawn_blocking(|| {
+        zoom_auth::TokenStore::open_default().and_then(|store| zoom_auth::sign_out(&store))
+    })
+    .await;
+    set_zoom(&a, ZoomStatus::new(ZoomState::SignedOut, ""));
+    a.link.wake.store(true, Ordering::SeqCst);
+    match res {
+        Ok(Ok(revoked)) => Json(json!({"revoked":revoked})).into_response(),
+        Ok(Err(e)) => api_error(e),
+        Err(e) => api_error(e),
+    }
+}
+
+/// Updates the Zoom connection status and pushes it to the UI when it changed.
+fn set_zoom(a: &App, st: ZoomStatus) {
+    let mut cur = a.link.status.lock().unwrap();
+    if *cur != st {
+        log::info!("zoom status: {} {} {}", st.state.as_str(), st.reason, st.detail);
+        let _ = a.tx.send(st.wire());
+        *cur = st;
     }
 }
 
@@ -1116,6 +1334,17 @@ mod tests {
         fn recv_event(&self, timeout: Duration) -> Result<Event, mpsc::RecvTimeoutError> {
             self.0.recv_timeout(timeout)
         }
+    }
+    #[test]
+    fn host_guard_blocks_rebinding() {
+        assert!(host_allowed(Some("127.0.0.1:47812"), 47812, &[]));
+        assert!(host_allowed(Some("localhost:47812"), 47812, &[]));
+        assert!(host_allowed(None, 47812, &[]));
+        assert!(!host_allowed(Some("evil.test:47812"), 47812, &[]));
+        assert!(!host_allowed(Some("127.0.0.1:1"), 47812, &[]));
+        let dev = ["http://localhost:5173".to_string()];
+        assert!(host_allowed(Some("localhost:5173"), 47812, &dev));
+        assert!(!host_allowed(Some("localhost:5174"), 47812, &dev));
     }
     #[test]
     fn origin_whitelist() {
@@ -1396,6 +1625,7 @@ mod tests {
             ),
             provider: Arc::new(StubRecordProvider),
             record_updates: Arc::new(Mutex::new(std::collections::HashMap::new())),
+            link: Default::default(),
         };
         let router = Router::new()
             .route("/bridge", get(ws))
@@ -1432,6 +1662,15 @@ mod tests {
             .into_text()
             .unwrap()
             .contains("state"));
+        // The subscribe snapshot also carries the current Zoom connection status.
+        assert!(ws
+            .next()
+            .await
+            .unwrap()
+            .unwrap()
+            .into_text()
+            .unwrap()
+            .contains("\"type\":\"zoom_status\""));
         let (fake_tx, fake_rx) = mpsc::channel();
         fake_tx
             .send(Event::IpcStatus {
@@ -2780,6 +3019,7 @@ async fn roster_csv_preview_api_decodes_and_returns_commit_plan() {
         store: store.clone(),
         provider: Arc::new(StubRecordProvider),
         record_updates: Arc::new(Mutex::new(Default::default())),
+        link: Default::default(),
     };
     let api = Router::new()
         .route(
@@ -2840,6 +3080,7 @@ async fn alias_csv_preview_resolves_canonical_name_and_commits_atomically() {
         store: store.clone(),
         provider: Arc::new(StubRecordProvider),
         record_updates: Arc::new(Mutex::new(Default::default())),
+        link: Default::default(),
     };
     let api = Router::new()
         .route(
@@ -3008,6 +3249,7 @@ async fn fake_record_api_returns_attendflow_row_shape() {
         store,
         provider: Arc::new(StubRecordProvider),
         record_updates: Arc::new(Mutex::new(Default::default())),
+        link: Default::default(),
     };
     let api = Router::new()
         .route("/api/meetings/:id/record", get(api_record))
@@ -3035,7 +3277,7 @@ async fn record_state_captures_persist_and_export_marks_downloaded() {
     let store=Arc::new(Store::open(std::env::temp_dir().join(format!("zc-export-state-{}.db",now()))).unwrap());
     let meeting=json!({"instanceId":"export-meeting","meetingNumber":"42","topic":"Export test","startedAt":1000,"isHost":false});
     store.upsert_meeting(&meeting,None,1).unwrap();
-    let app=App{tx:broadcast::channel(8).0,tracker:Arc::new(Mutex::new(Tracker::default())),session:Arc::new(Mutex::new(None)),shutdown:Arc::new(AtomicBool::new(false)),port:47812,allowed:vec![],ui:None,log_dir:std::env::temp_dir(),store:store.clone(),provider:Arc::new(StubRecordProvider),record_updates:Arc::new(Mutex::new(Default::default()))};
+    let app=App{tx:broadcast::channel(8).0,tracker:Arc::new(Mutex::new(Tracker::default())),session:Arc::new(Mutex::new(None)),shutdown:Arc::new(AtomicBool::new(false)),port:47812,allowed:vec![],ui:None,log_dir:std::env::temp_dir(),store:store.clone(),provider:Arc::new(StubRecordProvider),record_updates:Arc::new(Mutex::new(Default::default())),link:Default::default()};
     let api=Router::new().route("/api/meetings/:id/state",get(api_get_state).put(api_put_state)).route("/api/meetings/:id/export",get(api_record_export)).with_state(app);
     let captured=json!({"mode":"generic","manualSnapshots":[{"id":"snap-1","timestamp":"2026-11-17T00:00:00Z","participants":[{"screenName":"Ada","location":"meeting","matchStatus":"matched"}]}],"raiseHandCaptures":[{"id":"hands-1","timestamp":"2026-11-17T00:01:00Z","screenNames":["Ada"],"totalCount":1}],"raiseHandEntries":[{"participantUUID":"7","screenName":"Ada","action":"raise"}],"needsExport":true});
     let put=api.clone().oneshot(axum::http::Request::builder().method("PUT").uri("/api/meetings/export-meeting/state").header("content-type","application/json").body(axum::body::Body::from(json!({"revision":0,"value":captured}).to_string())).unwrap()).await.unwrap();
@@ -3067,6 +3309,7 @@ async fn backup_import_revision_conflict_and_state_notification() {
         store: store.clone(),
         provider: Arc::new(StubRecordProvider),
         record_updates: Arc::new(Mutex::new(Default::default())),
+        link: Default::default(),
     };
     let api = Router::new()
         .route("/api/import/attendflow-backup", post(api_import_backup))
@@ -3181,7 +3424,7 @@ async fn reconciliation_decisions_commit_aliases_atomically_and_revert_keeps_ali
         {"personId":2,"canonicalName":"Grace Hopper","pinyin":"grace hopper","active":true}
     ]),now()).unwrap().unwrap();
     store.put_doc("aliases",0,&json!([{"zoomName":"Known Nick","personId":2,"notes":""},{"zoomName":"Guest Nick","personId":1,"notes":""},{"zoomName":"Shared Nick","personId":1,"notes":""}]),now()).unwrap().unwrap();
-    let app=App{tx:broadcast::channel(8).0,tracker:Arc::new(Mutex::new(Tracker::default())),session:Arc::new(Mutex::new(None)),shutdown:Arc::new(AtomicBool::new(false)),port:47812,allowed:vec![],ui:None,log_dir:std::env::temp_dir(),store:store.clone(),provider:Arc::new(StubRecordProvider),record_updates:Arc::new(Mutex::new(Default::default()))};
+    let app=App{tx:broadcast::channel(8).0,tracker:Arc::new(Mutex::new(Tracker::default())),session:Arc::new(Mutex::new(None)),shutdown:Arc::new(AtomicBool::new(false)),port:47812,allowed:vec![],ui:None,log_dir:std::env::temp_dir(),store:store.clone(),provider:Arc::new(StubRecordProvider),record_updates:Arc::new(Mutex::new(Default::default())),link:Default::default()};
     let api=Router::new().route("/api/meetings/:id/reconciliation",post(api_reconciliation_decision)).route("/api/meetings/:id/state",get(api_get_state)).with_state(app);
     async fn post_decision(api:&Router,body:Value)->axum::http::Response<axum::body::Body>{let req=axum::http::Request::builder().method("POST").uri("/api/meetings/rec-1/reconciliation").header("content-type","application/json").body(axum::body::Body::from(body.to_string())).unwrap();api.clone().oneshot(req).await.unwrap()}
     let decision=|id:&str,name:&str,action:&str,person:Option<u64>|{let mut d=json!({"id":id,"sessionParticipantId":id,"zoomName":name,"zoomNameAtDecision":name,"action":action,"createdAt":"2026-11-17T00:00:00Z"});if let Some(p)=person{d["personId"]=json!(p)}d};
@@ -3226,7 +3469,7 @@ fn profile_validation_rejects_bad_wildcards_thresholds_and_default_removal() {
     let store=Arc::new(Store::open(std::env::temp_dir().join(format!("zc-profile-validation-{}.db",now()))).unwrap());
     let factory=json!([{"id":"default-all","name":"All participants","includedSubgroups":[],"lateAfterMinutes":10,"returnWindowMinutes":8,"meetingIds":[],"topicKeywords":[],"groupSortOrder":[],"active":true}]);
     store.put_doc("profiles",0,&factory,now()).unwrap().unwrap();
-    let app=App{tx:broadcast::channel(2).0,tracker:Arc::new(Mutex::new(Tracker::default())),session:Arc::new(Mutex::new(None)),shutdown:Arc::new(AtomicBool::new(false)),port:47812,allowed:vec![],ui:None,log_dir:std::env::temp_dir(),store,provider:Arc::new(StubRecordProvider),record_updates:Arc::new(Mutex::new(Default::default()))};
+    let app=App{tx:broadcast::channel(2).0,tracker:Arc::new(Mutex::new(Tracker::default())),session:Arc::new(Mutex::new(None)),shutdown:Arc::new(AtomicBool::new(false)),port:47812,allowed:vec![],ui:None,log_dir:std::env::temp_dir(),store,provider:Arc::new(StubRecordProvider),record_updates:Arc::new(Mutex::new(Default::default())),link:Default::default()};
     assert!(validate_config(&app,"profiles",&json!([])).unwrap().contains("required"));
     let mut renamed=factory.clone();renamed[0]["name"]=json!("Renamed");
     assert!(validate_config(&app,"profiles",&renamed).unwrap().contains("name is locked"));
@@ -3240,7 +3483,7 @@ fn profile_validation_rejects_bad_wildcards_thresholds_and_default_removal() {
 async fn example_data_conflict_aborts_all_three_config_documents() {
     let store=Arc::new(Store::open(std::env::temp_dir().join(format!("zc-example-conflict-{}.db",now()))).unwrap());
     let original=json!([{"personId":1,"canonicalName":"Existing"}]);store.put_doc("roster",0,&original,now()).unwrap().unwrap();
-    let app=App{tx:broadcast::channel(2).0,tracker:Arc::new(Mutex::new(Tracker::default())),session:Arc::new(Mutex::new(None)),shutdown:Arc::new(AtomicBool::new(false)),port:47812,allowed:vec![],ui:None,log_dir:std::env::temp_dir(),store:store.clone(),provider:Arc::new(StubRecordProvider),record_updates:Arc::new(Mutex::new(Default::default()))};
+    let app=App{tx:broadcast::channel(2).0,tracker:Arc::new(Mutex::new(Tracker::default())),session:Arc::new(Mutex::new(None)),shutdown:Arc::new(AtomicBool::new(false)),port:47812,allowed:vec![],ui:None,log_dir:std::env::temp_dir(),store:store.clone(),provider:Arc::new(StubRecordProvider),record_updates:Arc::new(Mutex::new(Default::default())),link:Default::default()};
     let body=json!({"roster":[{"personId":2,"canonicalName":"Existing"}],"aliases":[{"zoomName":"Alias","personId":2}],"profiles":[{"id":"example-one","name":"Example"}]});
     let response=api_example_data_commit(State(app),HeaderMap::new(),Json(body)).await;
     assert_eq!(response.status(),StatusCode::CONFLICT);
@@ -3254,7 +3497,7 @@ async fn profile_json_import_preview_and_commit_upsert_by_id() {
     use http_body_util::BodyExt; use tower::ServiceExt;
     let store=Arc::new(Store::open(std::env::temp_dir().join(format!("zc-profile-import-{}.db",now()))).unwrap());
     let factory=json!([{"id":"default-all","name":"All participants","includedSubgroups":[],"lateAfterMinutes":10,"returnWindowMinutes":8,"meetingIds":[],"topicKeywords":[],"groupSortOrder":[],"active":true}]);store.put_doc("profiles",0,&factory,now()).unwrap().unwrap();
-    let app=App{tx:broadcast::channel(2).0,tracker:Arc::new(Mutex::new(Tracker::default())),session:Arc::new(Mutex::new(None)),shutdown:Arc::new(AtomicBool::new(false)),port:47812,allowed:vec![],ui:None,log_dir:std::env::temp_dir(),store:store.clone(),provider:Arc::new(StubRecordProvider),record_updates:Arc::new(Mutex::new(Default::default()))};
+    let app=App{tx:broadcast::channel(2).0,tracker:Arc::new(Mutex::new(Tracker::default())),session:Arc::new(Mutex::new(None)),shutdown:Arc::new(AtomicBool::new(false)),port:47812,allowed:vec![],ui:None,log_dir:std::env::temp_dir(),store:store.clone(),provider:Arc::new(StubRecordProvider),record_updates:Arc::new(Mutex::new(Default::default())),link:Default::default()};
     let api=Router::new().route("/api/profiles/import/preview",post(api_profiles_import_preview)).route("/api/profiles/import/commit",post(api_profiles_import_commit)).with_state(app);
     let incoming=json!({"profiles":[{"id":"p1","name":"Profile one","description":"x","includedSubgroups":["Team-*"],"lateAfterMinutes":5,"returnWindowMinutes":6,"meetingIds":[],"topicKeywords":[],"groupSortOrder":[],"active":true,"blacklist":["ignored"]}]});
     let req=axum::http::Request::builder().method("POST").uri("/api/profiles/import/preview").header("content-type","application/json").body(axum::body::Body::from(incoming.to_string())).unwrap();
@@ -3268,11 +3511,58 @@ async fn profile_json_import_preview_and_commit_upsert_by_id() {
 async fn attendflow_record_import_preview_then_commit_stores_derived_rows() {
     use http_body_util::BodyExt; use tower::ServiceExt;
     let store=Arc::new(Store::open(std::env::temp_dir().join(format!("zc-record-import-{}.db",now()))).unwrap());
-    let app=App{tx:broadcast::channel(2).0,tracker:Arc::new(Mutex::new(Tracker::default())),session:Arc::new(Mutex::new(None)),shutdown:Arc::new(AtomicBool::new(false)),port:47812,allowed:vec![],ui:None,log_dir:std::env::temp_dir(),store:store.clone(),provider:Arc::new(StubRecordProvider),record_updates:Arc::new(Mutex::new(Default::default()))};
+    let app=App{tx:broadcast::channel(2).0,tracker:Arc::new(Mutex::new(Tracker::default())),session:Arc::new(Mutex::new(None)),shutdown:Arc::new(AtomicBool::new(false)),port:47812,allowed:vec![],ui:None,log_dir:std::env::temp_dir(),store:store.clone(),provider:Arc::new(StubRecordProvider),record_updates:Arc::new(Mutex::new(Default::default())),link:Default::default()};
     let api=Router::new().route("/api/records/import/preview",post(api_records_import_preview)).route("/api/records/import/commit",post(api_records_import_commit)).route("/api/meetings/:id/record",get(api_record)).with_state(app);
     let input=json!({"version":3,"session":{"sessionId":"af-session","metadata":{"meetingId":"4321","meetingTopic":"Imported session","startedAt":1700000000000_u64},"derivedRows":[{"zoomName":"Ada","currentStatus":"present"}]}});
     let req=axum::http::Request::builder().method("POST").uri("/api/records/import/preview").header("content-type","application/json").body(axum::body::Body::from(input.to_string())).unwrap();
     let response=api.clone().oneshot(req).await.unwrap();let plan:Value=serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap();assert_eq!(plan["plans"][0]["action"],"add");
     let req=axum::http::Request::builder().method("POST").uri("/api/records/import/commit").header("content-type","application/json").body(axum::body::Body::from(plan.to_string())).unwrap();assert_eq!(api.clone().oneshot(req).await.unwrap().status(),StatusCode::OK);
     let id=plan["plans"][0]["value"]["meeting"]["instanceId"].as_str().unwrap();assert!(store.meeting(id).unwrap().is_some());let req=axum::http::Request::builder().uri(format!("/api/meetings/{id}/record")).body(axum::body::Body::empty()).unwrap();let response=api.oneshot(req).await.unwrap();assert_eq!(response.status(),StatusCode::OK);let record:Value=serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap();assert_eq!(record["rows"][0]["zoomName"],"Ada");
+}
+#[tokio::test]
+async fn zoom_endpoints_report_status_and_reject_foreign_origins() {
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+    let store = Arc::new(Store::open(std::env::temp_dir().join(format!("zc-zoom-status-{}.db", now()))).unwrap());
+    let app = App {
+        tx: broadcast::channel(8).0,
+        tracker: Arc::new(Mutex::new(Tracker::default())),
+        session: Arc::new(Mutex::new(None)),
+        shutdown: Arc::new(AtomicBool::new(false)),
+        port: 47812,
+        allowed: vec![],
+        ui: None,
+        log_dir: std::env::temp_dir(),
+        store,
+        provider: Arc::new(StubRecordProvider),
+        record_updates: Arc::new(Mutex::new(Default::default())),
+        link: Default::default(),
+    };
+    set_zoom(&app, ZoomStatus::new(ZoomState::SignedOut, "").with_reason("session_expired"));
+    let api = Router::new()
+        .route("/api/zoom", get(api_zoom_status))
+        .route("/api/zoom/sign-in", post(api_zoom_sign_in))
+        .route("/api/zoom/sign-out", post(api_zoom_sign_out))
+        .with_state(app.clone());
+    let req = |method: &str, uri: &str, origin: Option<&str>| {
+        let mut b = axum::http::Request::builder().method(method).uri(uri);
+        if let Some(o) = origin {
+            b = b.header("origin", o);
+        }
+        b.body(axum::body::Body::empty()).unwrap()
+    };
+    let r = api.clone().oneshot(req("GET", "/api/zoom", None)).await.unwrap();
+    assert_eq!(r.status(), StatusCode::OK);
+    let v: Value = serde_json::from_slice(&r.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(v["state"], "signed_out");
+    assert_eq!(v["reason"], "session_expired");
+    // POSTs need this app's Origin: missing or foreign origins never reach the token store.
+    for uri in ["/api/zoom/sign-in", "/api/zoom/sign-out"] {
+        for origin in [None, Some("https://evil.test")] {
+            let r = api.clone().oneshot(req("POST", uri, origin)).await.unwrap();
+            assert_eq!(r.status(), StatusCode::FORBIDDEN, "{uri} {origin:?}");
+        }
+    }
+    assert_eq!(app.link.status.lock().unwrap().state, ZoomState::SignedOut);
+    assert!(!app.link.sign_out.load(Ordering::SeqCst));
 }

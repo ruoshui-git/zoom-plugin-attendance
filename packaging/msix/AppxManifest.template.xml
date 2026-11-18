@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  MSIX manifest for AttendFlow Desktop. scripts\package.ps1 -Msix fills the
+  {{...}} placeholders. For the Microsoft Store, IdentityName / Publisher /
+  PublisherDisplayName must be copied from Partner Center
+  (Product management > Product identity) after reserving the app name.
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap rescap">
+  <Identity Name="{{IdentityName}}" Publisher="{{Publisher}}" Version="{{Version}}" ProcessorArchitecture="x64" />
+  <Properties>
+    <DisplayName>AttendFlow Desktop</DisplayName>
+    <PublisherDisplayName>{{PublisherDisplayName}}</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+    <Description>Attendance records for Zoom meetings, captured on your own computer.</Description>
+  </Properties>
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+  <Resources>
+    <Resource Language="en-us" />
+    <Resource Language="zh-cn" />
+  </Resources>
+  <Applications>
+    <Application Id="AttendFlowDesktop" Executable="AttendFlowDesktop.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="AttendFlow Desktop"
+        Description="Attendance records for Zoom meetings"
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png" />
+    </Application>
+  </Applications>
+  <Capabilities>
+    <!-- Win32 desktop app: needed to load the Zoom Plugin SDK and talk to Zoom Workplace over IPC. -->
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>

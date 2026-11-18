@@ -98,6 +98,44 @@ pub fn login_interactive(
     Ok(tokens)
 }
 
+/// Signs out: revokes the grant at Zoom (best effort, so the app also leaves the
+/// user's Zoom "Added apps") and always deletes the local token store.
+/// Returns whether Zoom confirmed the revocation.
+pub fn sign_out(store: &TokenStore) -> Result<bool, AuthError> {
+    let revoked = match store.load() {
+        Ok(Some(t)) => {
+            let mut ok = token::revoke(&t.client_id, &t.access_token);
+            if ok.is_err() {
+                if let Some(rt) = &t.refresh_token {
+                    ok = token::revoke(&t.client_id, rt);
+                }
+            }
+            if let Err(e) = &ok {
+                log::warn!("token revocation failed (local tokens are still deleted): {e}");
+            }
+            ok.is_ok()
+        }
+        Ok(None) => false,
+        Err(e) => {
+            log::warn!("token store unreadable during sign-out; deleting it: {e}");
+            false
+        }
+    };
+    store.clear()?;
+    Ok(revoked)
+}
+
+/// Refreshes now, even if the access token has not expired (re-persisting the
+/// rotated tokens). A 4xx from Zoom means the grant is gone: the user removed the
+/// app from their Zoom account, or the refresh token expired.
+pub fn refresh_now(store: &TokenStore) -> Result<TokenSet, AuthError> {
+    let t = store.load()?.ok_or(AuthError::NotSignedIn)?;
+    let rt = t.refresh_token.clone().ok_or(AuthError::NotSignedIn)?;
+    let fresh = token::refresh(&t.client_id, &rt)?;
+    store.save(&fresh)?;
+    Ok(fresh)
+}
+
 /// Returns a valid access token, refreshing (and re-persisting) if needed.
 pub fn valid_tokens(store: &TokenStore, client_id: &str) -> Result<TokenSet, AuthError> {
     let t = store.load()?.ok_or(AuthError::NotSignedIn)?;

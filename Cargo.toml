@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
-members = ["crates/zoom-bridge", "crates/zoom-auth", "crates/attend-engine", "crates/attend-store", "crates/zoom-companion"]
-default-members = ["crates/zoom-bridge", "crates/zoom-auth", "crates/zoom-companion"]
+members = ["crates/zoom-bridge", "crates/zoom-auth", "crates/attend-engine", "crates/attend-store", "crates/zoom-companion", "crates/attendflow-desktop"]
+default-members = ["crates/zoom-bridge", "crates/zoom-auth", "crates/zoom-companion", "crates/attendflow-desktop"]
 
 [workspace.package]
 version = "0.1.0"
@@ -30,6 +30,7 @@ windows-sys = { version = "0.59", features = [
     "Win32_UI_Shell",
     "Win32_System_Memory",
     "Win32_Globalization",
+    "Win32_System_Diagnostics_ToolHelp",
 ] }
 
 [profile.release]

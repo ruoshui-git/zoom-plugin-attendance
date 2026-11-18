@@ -25,7 +25,12 @@ zoom-companion (Rust CLI, later UI)
 .\scripts\run.ps1 doctor              # environment / SDK / DLL / Zoom / auth checks
 .\scripts\run.ps1 serve               # loopback HTTP + WebSocket companion bridge
 pwsh -NoProfile -File .\scripts\verify.ps1 [-BuildDemo] [-Connect]   # full checklist
+.\scripts\package.ps1 -ClientId <public client ID> [-Msix]           # release zip / MSIX in dist\
 ```
+
+Release builds have the client ID built in: end users run `AttendFlowDesktop.exe` and click
+**Sign in with Zoom** (no config, no CLI). Publishing steps (Zoom Marketplace review,
+Microsoft Store, website): **[docs/publishing/README.md](docs/publishing/README.md)**.
 
 First-time auth (interactive, once per machine/user):
 

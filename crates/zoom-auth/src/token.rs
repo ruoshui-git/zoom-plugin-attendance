@@ -8,6 +8,7 @@ use crate::{AuthError, Secret};
 
 pub const ZOOM_AUTHORIZE_URL: &str = "https://zoom.us/oauth/authorize";
 pub const ZOOM_TOKEN_URL: &str = "https://zoom.us/oauth/token";
+pub const ZOOM_REVOKE_URL: &str = "https://zoom.us/oauth/revoke";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokenSet {
@@ -55,7 +56,9 @@ pub(crate) fn dev_client_secret() -> Option<Secret> {
     std::env::var("ZOOM_COMPANION_CLIENT_SECRET").ok().filter(|s| !s.is_empty()).map(Secret::new)
 }
 
-pub(crate) fn post_token(client_id: &str, form: &[(&str, &str)]) -> Result<TokenSet, AuthError> {
+/// POSTs a form to a Zoom OAuth endpoint as this client (public: `client_id` in the
+/// body; dev-only confidential: HTTP Basic). Returns the body of a 2xx response.
+fn post_oauth_form(url: &str, client_id: &str, form: &[(&str, &str)]) -> Result<String, AuthError> {
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .http_status_as_error(false)
         .timeout_global(Some(Duration::from_secs(30)))
@@ -64,7 +67,7 @@ pub(crate) fn post_token(client_id: &str, form: &[(&str, &str)]) -> Result<Token
 
     let mut fields: Vec<(&str, &str)> = form.to_vec();
     let secret = dev_client_secret();
-    let mut req = agent.post(ZOOM_TOKEN_URL);
+    let mut req = agent.post(url);
     let basic;
     if let Some(sec) = &secret {
         use base64::Engine;
@@ -90,6 +93,17 @@ pub(crate) fn post_token(client_id: &str, form: &[(&str, &str)]) -> Result<Token
             .unwrap_or_else(|_| "unparseable error body".into());
         return Err(AuthError::TokenEndpoint { status, detail });
     }
+    Ok(body)
+}
+
+/// Revokes a token (`POST /oauth/revoke`). Revoking either token ends the grant,
+/// which also removes the app from the user's Zoom "Added apps".
+pub fn revoke(client_id: &str, token: &Secret) -> Result<(), AuthError> {
+    post_oauth_form(ZOOM_REVOKE_URL, client_id, &[("token", token.expose())]).map(|_| ())
+}
+
+pub(crate) fn post_token(client_id: &str, form: &[(&str, &str)]) -> Result<TokenSet, AuthError> {
+    let body = post_oauth_form(ZOOM_TOKEN_URL, client_id, form)?;
     let t: TokenResponse =
         serde_json::from_str(&body).map_err(|e| AuthError::Http(format!("bad token JSON: {e}")))?;
     Ok(TokenSet {

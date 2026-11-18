@@ -9,6 +9,15 @@ use serde::{Deserialize, Serialize};
 pub const DEFAULT_REDIRECT_URI: &str = "http://127.0.0.1:47811/callback";
 pub const DEFAULT_DOMAIN: &str = "https://zoom.us";
 
+/// Public client ID compiled into release builds (`scripts\package.ps1 -ClientId`,
+/// via the `ZOOM_COMPANION_BUILTIN_CLIENT_ID` build env var) so end users never
+/// configure anything. A public PKCE client ID is not a secret. A non-empty
+/// `client_id` in config.toml or `ZOOM_COMPANION_CLIENT_ID` still overrides it (dev).
+pub const BUILTIN_CLIENT_ID: &str = match option_env!("ZOOM_COMPANION_BUILTIN_CLIENT_ID") {
+    Some(id) => id,
+    None => "",
+};
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
@@ -23,7 +32,7 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Config {
-            client_id: String::new(),
+            client_id: BUILTIN_CLIENT_ID.trim().into(),
             redirect_uri: DEFAULT_REDIRECT_URI.into(),
             domain: DEFAULT_DOMAIN.into(),
         }
@@ -46,6 +55,9 @@ impl Config {
         };
         if let Ok(v) = std::env::var("ZOOM_COMPANION_CLIENT_ID") {
             cfg.client_id = v;
+        }
+        if cfg.client_id.trim().is_empty() {
+            cfg.client_id = BUILTIN_CLIENT_ID.trim().into();
         }
         if let Ok(v) = std::env::var("ZOOM_COMPANION_REDIRECT_URI") {
             cfg.redirect_uri = v;

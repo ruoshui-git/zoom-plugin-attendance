@@ -118,8 +118,8 @@ impl LoopbackServer {
         }
         let result = classify(code, state.as_deref(), error, expected_state);
         match &result {
-            Ok(_) => respond(&mut stream, "200 OK", "Zoom sign-in complete. You can close this tab and return to zoom-companion."),
-            Err(_) => respond(&mut stream, "400 Bad Request", "Zoom sign-in failed. Return to zoom-companion for details."),
+            Ok(_) => respond(&mut stream, "200 OK", "Zoom sign-in complete. You can close this tab and return to AttendFlow Desktop. / 登录完成，可以关闭此页面并返回 AttendFlow Desktop。"),
+            Err(_) => respond(&mut stream, "400 Bad Request", "Zoom sign-in failed. Return to AttendFlow Desktop for details. / Zoom 登录失败，请返回 AttendFlow Desktop 查看详情。"),
         }
         Some(result)
     }
@@ -142,7 +142,7 @@ fn classify(
 
 fn respond(stream: &mut TcpStream, status: &str, msg: &str) {
     let body = format!(
-        "<!doctype html><meta charset=utf-8><title>zoom-companion</title><p style=\"font:16px system-ui;margin:2em\">{msg}</p>"
+        "<!doctype html><meta charset=utf-8><title>AttendFlow Desktop</title><p style=\"font:16px system-ui;margin:2em\">{msg}</p>"
     );
     let _ = write!(
         stream,

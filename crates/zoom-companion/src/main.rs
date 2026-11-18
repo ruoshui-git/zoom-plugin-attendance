@@ -9,6 +9,7 @@
 //!   participants        (in a meeting) GetParticipantsList / GetMySelf / meeting info
 
 mod config;
+mod connection;
 mod serve;
 mod record;
 mod record_export;
@@ -31,8 +32,9 @@ use crate::config::Config;
 #[derive(Parser)]
 #[command(name = "zoom-companion", version, about = "Zoom Plugin SDK development companion")]
 struct Cli {
+    /// Without a command, opens the AttendFlow Desktop window (same as `app`).
     #[command(subcommand)]
-    cmd: Cmd,
+    cmd: Option<Cmd>,
 }
 
 #[derive(Subcommand)]
@@ -119,7 +121,7 @@ fn main() {
 }
 
 fn run(cli: Cli) -> Result<()> {
-    match cli.cmd {
+    match cli.cmd.unwrap_or(Cmd::App) {
         Cmd::Doctor => doctor(),
         Cmd::Selftest => selftest(),
         Cmd::Config { cmd } => match cmd {
@@ -198,18 +200,50 @@ fn auth(cmd: AuthCmd) -> Result<()> {
             Ok(())
         }
         AuthCmd::Logout => {
-            println!("{}", if store.clear()? { "tokens deleted" } else { "no tokens stored" });
+            let had = store.load().ok().flatten().is_some();
+            let revoked = zoom_auth::sign_out(&store)?;
+            println!(
+                "{}",
+                match (had, revoked) {
+                    (false, _) => "no tokens stored",
+                    (true, true) => "signed out: access revoked at Zoom, local tokens deleted",
+                    (true, false) => "local tokens deleted (Zoom revocation failed; remove the app under Zoom > Added apps)",
+                }
+            );
             Ok(())
         }
     }
 }
 
+/// Whether a `Zoom.exe` process exists (process snapshot; no child process, so it
+/// is cheap enough to poll and never flashes a console window).
 fn zoom_workplace_running() -> bool {
-    std::process::Command::new("tasklist")
-        .args(["/FI", "IMAGENAME eq Zoom.exe", "/NH"])
-        .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).contains("Zoom.exe"))
-        .unwrap_or(false)
+    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
+    };
+    // SAFETY: standard Toolhelp iteration; `entry.dwSize` is set before use and the
+    // snapshot handle is closed on every path.
+    unsafe {
+        let snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if snap == INVALID_HANDLE_VALUE {
+            return false;
+        }
+        let mut entry: PROCESSENTRY32W = std::mem::zeroed();
+        entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+        let mut found = false;
+        let mut ok = Process32FirstW(snap, &mut entry) != 0;
+        while ok {
+            let len = entry.szExeFile.iter().position(|&c| c == 0).unwrap_or(entry.szExeFile.len());
+            if String::from_utf16_lossy(&entry.szExeFile[..len]).eq_ignore_ascii_case("Zoom.exe") {
+                found = true;
+                break;
+            }
+            ok = Process32NextW(snap, &mut entry) != 0;
+        }
+        CloseHandle(snap);
+        found
+    }
 }
 
 fn doctor() -> Result<()> {
@@ -325,7 +359,7 @@ fn start_session() -> Result<(Session, std::sync::mpsc::Receiver<Event>)> {
     }
     let cfg = Config::load()?;
     if cfg.client_id.is_empty() {
-        bail!("client_id not configured");
+        return Err(connection::StartError::NotConfigured.into());
     }
     if zoom_bridge::sdk_runtime_beside_exe().is_none() {
         bail!(
@@ -336,7 +370,7 @@ fn start_session() -> Result<(Session, std::sync::mpsc::Receiver<Event>)> {
     let store = TokenStore::open_default()?;
     let tokens = zoom_auth::valid_tokens(&store, &cfg.client_id)?;
     if !zoom_workplace_running() {
-        log::warn!("Zoom.exe does not appear to be running; IPC will likely time out");
+        return Err(connection::StartError::ZoomNotRunning.into());
     }
     log::info!("SDK thread will run on a dedicated message-pump thread; main tid {}", current_tid());
     let (session, rx) = Session::start(SessionConfig {

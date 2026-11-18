@@ -36,6 +36,11 @@ reconnect/meeting-change handling) and close the unverified items listed there.
   `waitingRoomOnly`); no record continuation after a meeting ends.
 
 **Open:**
+- Publishing (branch `release-prep`, 2026-11-18): in-app Zoom sign-in/sign-out, built-in
+  client ID, launcher, zip/MSIX packaging; website + user guide in zoom-tracker branch
+  `desktop-pages`. Owner steps and status: [publishing/README.md](publishing/README.md).
+  Not yet verified: SDK IPC inside the MSIX container (Zoom Workplace was signed out during
+  the test: `IPC_STATUS_CONNECT_TIMEOUT` both packaged and unpackaged).
 - Live run as a NON-host (needs a meeting the owner does not host).
 - Small: default profile name is created in English ("All participants"); end reason is
   "left" even when the host ended the meeting (Zoom reports the same status sequence);
