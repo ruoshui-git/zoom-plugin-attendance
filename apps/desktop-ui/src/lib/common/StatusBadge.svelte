@@ -1,3 +1,9 @@
-<script lang="ts">export let label = ""; export let tone = "neutral";</script>
-<span class="badge" class:success={tone==='success'} class:warning={tone==='warning'} class:danger={tone==='danger'}>{label}</span>
-<style>.badge{display:inline-flex;align-items:center;border-radius:12px;padding:2px 7px;background:#edf1f5;color:#596273;font-size:10px;line-height:1.35;white-space:nowrap}.badge.success{background:#eaf7f0;color:#228353}.badge.warning{background:#fff3e8;color:#ba6a28}.badge.danger{background:#fff0f0;color:#b42332}</style>
+<script lang="ts">
+  import { statusStyle } from '../status-style';
+  export let label = '';
+  export let tone = 'neutral';
+  export let status = '';
+  $: palette = status ? statusStyle(status) : tone === 'success' ? statusStyle('full_present') : tone === 'warning' ? statusStyle('late') : tone === 'danger' ? statusStyle('absent') : statusStyle('total');
+</script>
+<span class="badge" style={`--badge-color:${palette.color};--badge-bg:${palette.background};--badge-border:${palette.border}`}>{label}</span>
+<style>.badge{display:inline-flex;align-items:center;border:1px solid var(--badge-border);border-radius:12px;padding:2px 7px;background:var(--badge-bg);color:var(--badge-color);font-size:10px;font-weight:600;line-height:1.35;white-space:nowrap}</style>
