@@ -4,6 +4,7 @@ import { join } from "node:path";
 
 const componentDir = join(process.cwd(), "src");
 const pagesDir = join(componentDir, "pages");
+const commonDir = join(componentDir, "lib", "common");
 const pageFiles: string[] = [];
 function collectPageFiles(directory: string) {
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -13,6 +14,7 @@ function collectPageFiles(directory: string) {
   }
 }
 collectPageFiles(pagesDir);
+collectPageFiles(commonDir);
 const files = [
   join(componentDir, "App.svelte"),
   ...readdirSync(join(componentDir, "lib"))

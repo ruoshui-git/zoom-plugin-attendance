@@ -23,4 +23,13 @@ describe('configuration import preview component', () => {
     expect(document.body.textContent).toContain('canonicalName');
     expect(document.body.textContent).toContain('"Ada"');
   });
+
+  it('opens a translated in-app form for bulk roster edits', async () => {
+    render(ConfigWorkspace, { language: 'en', roster: [{ personId: 1, canonicalName: 'Ada', pinyin: 'ada', group: 'A', active: true }], aliases: [] });
+    await fireEvent.click(screen.getByText('Select all filtered'));
+    await fireEvent.click(screen.getByText('Bulk edit'));
+    expect(screen.getByText('Bulk edit · 1')).toBeTruthy();
+    expect(screen.getByLabelText('Group (blank keeps current)')).toBeTruthy();
+    expect(screen.getByLabelText('Active status')).toBeTruthy();
+  });
 });
