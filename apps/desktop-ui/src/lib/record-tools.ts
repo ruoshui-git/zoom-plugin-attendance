@@ -1,5 +1,18 @@
 export const statusTags = ['seen', 'full_present', 'late', 'returned', 'left_early', 'missing', 'ignored'] as const;
 
+export function filterMeetings(meetings: any[], options: { search?: string; mode?: string; source?: string; status?: string } = {}) {
+  const search = (options.search || '').trim().toLocaleLowerCase();
+  return meetings.filter((meeting) => {
+    const text = `${meeting.topic || ''} ${meeting.meetingNumber || ''} ${meeting.startedAt || ''} ${meeting.endedAt || ''}`.toLocaleLowerCase();
+    if (search && !text.includes(search)) return false;
+    if (options.mode && options.mode !== 'all' && (meeting.mode || 'generic') !== options.mode) return false;
+    if (options.source && options.source !== 'all' && (meeting.source || 'live') !== options.source) return false;
+    if (options.status === 'ended' && !meeting.endedAt) return false;
+    if (options.status === 'active' && meeting.endedAt) return false;
+    return true;
+  });
+}
+
 export function filterRowsByTag(rows: any[], tag: string) {
   if (!tag || tag === 'total') return rows;
   return rows.filter((r) => (r.tags || []).includes(tag) || ({

@@ -1,0 +1,10 @@
+<script lang="ts">
+  export let open = false;
+  export let title = '';
+  export let closeLabel = '';
+  export let onClose: () => void = () => {};
+</script>
+{#if open}<div class="scrim"><button class="backdrop" aria-label={closeLabel} onclick={onClose}></button><dialog open class="panel" aria-label={title}><header><h2>{title}</h2><button aria-label={closeLabel} onclick={onClose}>×</button></header><div class="body"><slot /></div></dialog></div>{/if}
+<style>
+  .scrim{position:fixed;inset:0;z-index:20;background:#17203366;display:flex;justify-content:flex-end}.backdrop{position:absolute;inset:0;width:100%;height:100%;border:0;border-radius:0;background:transparent}.panel{position:relative;margin:0;max-width:none;max-height:none;height:100%;width:min(720px,94vw);display:flex;flex-direction:column;background:var(--surface);border:0;padding:0;box-shadow:-10px 0 32px #17203322}.panel header{padding:15px 20px;margin:0;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between}.panel h2{font-size:16px;margin:0}.body{overflow:auto;padding:18px 20px;flex:1}
+</style>

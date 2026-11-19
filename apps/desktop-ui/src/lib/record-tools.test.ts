@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { deriveHandEntries, eventTypeCounts, filterEventsByType, filterRowsByTag, sortRows } from './record-tools';
+import { deriveHandEntries, eventTypeCounts, filterEventsByType, filterMeetings, filterRowsByTag, sortRows } from './record-tools';
 
 describe('record detail helpers', () => {
+  it('filters records by date/topic search and mode/source/status', () => {
+    const meetings = [
+      { topic: 'Weekly staff', meetingNumber: '101', startedAt: '2025-03-15T13:00:00Z', mode: 'roster', source: 'imported', endedAt: '2025-03-15T14:00:00Z' },
+      { topic: 'Student review', meetingNumber: '202', startedAt: '2025-03-16T13:00:00Z', mode: 'generic', source: 'live' },
+    ];
+    expect(filterMeetings(meetings, { search: '2025-03-15', mode: 'roster', source: 'imported', status: 'ended' })).toEqual([meetings[0]]);
+    expect(filterMeetings(meetings, { search: 'student', status: 'active' })).toEqual([meetings[1]]);
+    expect(filterMeetings(meetings, { search: 'absent' })).toEqual([]);
+  });
   const rows = [
     { zoomName: 'Bee', pinyin: 'bee', score: 50, totalPresenceMinutes: 20, tags: ['seen'], hasBeenSeen: true },
     { zoomName: 'Ada', pinyin: 'ada', score: 95, totalPresenceMinutes: 4, tags: ['late'], hasBeenSeen: true, wasLate: true },
