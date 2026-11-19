@@ -32,6 +32,8 @@
   import RecordsPage from "./pages/RecordsPage.svelte";
   import ConfigurationPage from "./pages/ConfigurationPage.svelte";
   import SettingsPage from "./pages/SettingsPage.svelte";
+  import ConfirmDialog from "./lib/common/ConfirmDialog.svelte";
+  import Toast from "./lib/common/Toast.svelte";
 
   $: $language = $uiLanguage;
   $: banner = $language ? zoomBanner($zoom, t) : null;
@@ -98,7 +100,8 @@
 </script>
 
 <svelte:head><title>AttendFlow Desktop</title></svelte:head>
-{#if $toastMessage}<div class="toast" role="status">{$toastMessage}</div>{/if}
+<Toast message={$toastMessage} />
+<ConfirmDialog />
 <div class="shell">
   <aside>
     <div class="brand">
