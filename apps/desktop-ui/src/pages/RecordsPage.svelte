@@ -1,269 +1,60 @@
 <script lang="ts">
-  import {
-    meeting,
-    record,
-    recordEvents,
-    stateValue,
-    configs,
-    language,
-    mode,
-    page,
-    recordCounts,
-    recordModes,
-    meetings,
-    settings,
-    zoom,
-    connected,
-    toastMessage,
-    selectedRecords,
-    configTab,
-    recordImportPreview,
-    stateRevision,
-    configRevision,
-    stagedState,
-  } from "../lib/stores";
-  import {
-    get,
-    refresh,
-    loadConfig,
-    saveConfig,
-    saveSettings,
-    download,
-    downloadBackup,
-    exportRecords,
-    exportOne,
-    exportAll,
-    deleteRecords,
-    previewRecordImport,
-    commitRecordImport,
-    loadExampleData,
-    addConfig,
-    editConfig,
-    removeConfig,
-    loadState,
-    loadRecordEvents,
-    currentUsers,
-    saveRecordState,
-    captureManual,
-    captureHands,
-    applyOverrides,
-    saveDecision,
-    selectProfile,
-    profileGuess,
-    resetOverrides,
-    switchMode,
-    zoomSignIn,
-    zoomSignOut,
-    zoomAction,
-    importBackup,
-    chooseLanguage,
-  } from "../lib/api";
-  import { t, dateTime, timeOnly } from "../lib/ui";
-  import { getLiveStatusLabel } from "../lib/session-labels";
-  import { formatMinutes } from "../lib/formatting";
-  import RecordActivity from "./../lib/RecordActivity.svelte";
-  import NameMatchingPanel from "./../lib/NameMatchingPanel.svelte";
+  import { meeting, record, meetings, recordCounts, recordModes, selectedRecords, recordImportPreview, language } from '../lib/stores';
+  import { get, exportRecords, deleteRecords, previewRecordImport, commitRecordImport, exportOne, exportAll, loadState, loadRecordEvents } from '../lib/api';
+  import { t, dateTime } from '../lib/ui';
+  import { filterMeetings } from '../lib/record-tools';
+  import DataTable from '../lib/common/DataTable.svelte';
+  import SlideOverPanel from '../lib/common/SlideOverPanel.svelte';
+  import RecordDetail from './records/RecordDetail.svelte';
 
-  let recordImportInput: HTMLInputElement;
-  let recordSearch = "";
+  let search = '';
+  let modeFilter = 'all';
+  let sourceFilter = 'all';
+  let statusFilter = 'all';
+  let detailOpen = false;
+  let importInput: HTMLInputElement;
+  $: filtered = filterMeetings($meetings.map((item) => ({ ...item, mode: $recordModes[item.instanceId] || item.mode })), { search, mode: modeFilter, source: sourceFilter, status: statusFilter });
+  $: columns = [
+    { key: 'topic', label: t('会议','Meeting'), value: (item: any) => item.topic || item.meetingNumber || '—' },
+    { key: 'startedAt', label: t('开始时间','Started'), value: (item: any) => item.startedAt ? dateTime(item.startedAt) : '—', sortValue: (item: any) => Date.parse(item.startedAt || '') || 0 },
+    { key: 'endedAt', label: t('结束时间','Ended'), value: (item: any) => item.endedAt ? dateTime(item.endedAt) : '—', sortValue: (item: any) => Date.parse(item.endedAt || '') || 0 },
+    { key: 'mode', label: t('考勤模式','Attendance Mode'), value: (item: any) => (($recordModes[item.instanceId] || item.mode) === 'roster') ? t('花名册','Roster') : t('通用','Generic') },
+    { key: 'attended', label: t('出席人数','# Attended'), value: (item: any) => String($recordCounts[item.instanceId] ?? '—'), sortValue: (item: any) => $recordCounts[item.instanceId] ?? -1 },
+    { key: 'status', label: t('状态','Status'), value: (item: any) => item.endedAt ? (item.exportedAt ? t('已下载','Downloaded') : t('已结束','Ended')) : t('进行中','In progress') },
+  ];
+  const modeOptions = [['all','全部','All modes'],['generic','通用','Generic'],['roster','花名册','Roster']];
+  const sourceOptions = [['all','全部','All sources'],['live','实时采集','Live'],['imported','导入','Imported']];
+  const statusOptions = [['all','全部','All status'],['ended','已结束','Ended'],['active','进行中','Active']];
+  async function openRecord(item: any) {
+    detailOpen = true;
+    meeting.set(item);
+    record.set(await get(`/api/meetings/${item.instanceId}/record`));
+    await Promise.all([loadState(), loadRecordEvents()]);
+  }
+  function selectRecords(ids: string[]) { selectedRecords.set(ids); }
+  async function exportSelection() { if ($selectedRecords.length) await exportRecords($selectedRecords); else await exportRecords(); }
+  async function deleteSelection() {
+    if (!$selectedRecords.length) return;
+    if (!confirm(t(`确定删除 ${$selectedRecords.length} 条会议记录吗？此操作无法撤销。`,`Delete ${$selectedRecords.length} meeting record(s)? This cannot be undone.`))) return;
+    await deleteRecords($selectedRecords);
+  }
+  function filterOptions(options: string[][]) { return options.map(([value, zh, en]) => ({ value, label: t(zh,en) })); }
+  $: previewPlans = $recordImportPreview?.plans || [];
 </script>
 
-<section class="panel records-panel">
-  <div class="records-heading">
-    <div>
-      <h2>{t("所有会议", "All meetings")}</h2>
-      <p>{$meetings.length} {t("条会议记录", "meeting records")}</p>
-    </div>
-  </div>
-  <div class="records-toolbar">
-    <input
-      aria-label={t("按日期搜索", "Search by date")}
-      placeholder={t("按日期或主题搜索", "Search date or topic")}
-      bind:value={recordSearch}
-    /><button onclick={() => recordImportInput.click()}>
-      {t("导入会议记录", "Import records")}
-    </button><input
-      bind:this={recordImportInput}
-      type="file"
-      accept=".json,application/json"
-      hidden
-      onchange={previewRecordImport}
-    /><button onclick={() => exportRecords($selectedRecords)}>
-      {$selectedRecords.length
-        ? t("导出所选", "Export selected")
-        : t("导出全部", "Export all")}
-    </button><button
-      class="danger"
-      disabled={!$selectedRecords.length}
-      onclick={() => deleteRecords($selectedRecords)}
-    >
-      {t("删除所选", "Delete selected")}
-    </button>
-  </div>
-  <div class="table-wrap records-table">
-    <table>
-      <thead>
-        <tr>
-          <th>
-            <input
-              type="checkbox"
-              aria-label={t("全选", "Select all")}
-              checked={$meetings.length > 0 &&
-                $selectedRecords.length === $meetings.length}
-              onchange={(e) =>
-                ($selectedRecords = e.currentTarget.checked
-                  ? $meetings.map((m) => m.instanceId)
-                  : [])}
-            />
-          </th><th>{t("会议", "Meeting")}</th><th>
-            {t("开始时间", "Started")}
-          </th><th>{t("结束时间", "Ended")}</th><th>{t("模式", "Mode")}</th><th>
-            {t("出席人数", "# Attended")}
-          </th><th>{t("状态", "Status")}</th>
-        </tr>
-      </thead><tbody>
-        {#each $meetings.filter((m) => !recordSearch || `${new Date(m.startedAt).toISOString()} ${m.topic || ""} ${m.meetingNumber || ""}`
-              .toLowerCase()
-              .includes(recordSearch.toLowerCase())) as m}<tr
-            class="record-list-row"
-          >
-            <td>
-              <input
-                type="checkbox"
-                checked={$selectedRecords.includes(m.instanceId)}
-                onchange={(e) =>
-                  ($selectedRecords = e.currentTarget.checked
-                    ? [...$selectedRecords, m.instanceId]
-                    : $selectedRecords.filter((id) => id !== m.instanceId))}
-              />
-            </td><td>
-              <button
-                class="record-open"
-                title={m.topic || m.meetingNumber}
-                onclick={async () => {
-                  $meeting = m;
-                  $record = await get(`/api/meetings/${m.instanceId}/record`);
-                  await loadState();
-                  await loadRecordEvents();
-                  $mode = $record.mode || "generic";
-                  $page = "records";
-                }}
-              >
-                <b>{m.topic || m.meetingNumber}</b><small>
-                  {m.meetingNumber}
-                </small>
-              </button>
-            </td><td>{m.startedAt ? dateTime(m.startedAt) : "—"}</td><td>
-              {m.endedAt ? dateTime(m.endedAt) : "—"}
-            </td><td>
-              <span class="badge">
-                {($recordModes[m.instanceId] || m.mode) === "roster"
-                  ? t("花名册", "Roster")
-                  : t("通用", "Generic")}
-              </span>
-            </td><td>{$recordCounts[m.instanceId] ?? "—"}</td><td>
-              <span class="badge" class:live={m.source !== "imported"}>
-                {m.source === "imported"
-                  ? t("导入", "Imported")
-                  : t("实时", "Live")}
-              </span>
-              <span class="badge" class:ended={!!m.endedAt}>
-                {m.endedAt ? t("已结束", "Ended") : t("进行中", "In progress")}
-              </span>
-              <span class="badge" class:downloaded={!!m.exportedAt}>
-                {m.exportedAt
-                  ? t("已下载", "Downloaded")
-                  : t("未下载", "Not downloaded")}
-              </span>
-            </td>
-          </tr>{:else}<tr>
-            <td colspan="7" class="empty">
-              {t("没有符合条件的会议记录", "No matching meeting records")}
-            </td>
-          </tr>{/each}
-      </tbody>
-    </table>
-  </div>
+<section class="records-page">
+  <div class="heading"><div><h2>{t('考勤记录','Attendance Records')}</h2><p>{filtered.length} / {$meetings.length} {t('条记录','records')}</p></div><div class="actions"><button onclick={() => importInput.click()}>{t('导入','Import')}</button><input bind:this={importInput} type="file" accept=".json,application/json" hidden onchange={previewRecordImport}/><button onclick={exportSelection}>{$selectedRecords.length ? t('导出所选','Export Selected') : t('导出全部','Export All')}</button><button class="danger" disabled={!$selectedRecords.length} onclick={deleteSelection}>{t('删除所选','Delete Selected')}</button></div></div>
+  <div class="filters"><label>{t('搜索日期/时间','Search date/time')}<input aria-label={t('按日期或主题搜索','Search by date/time')} placeholder={t('例如：2024-03、2024-03-15 或会议主题','e.g. 2024-03, 2024-03-15 or meeting topic')} bind:value={search}/></label><label>{t('考勤模式','Attendance Mode')}<select bind:value={modeFilter}>{#each filterOptions(modeOptions) as option}<option value={option.value}>{option.label}</option>{/each}</select></label><label>{t('来源','Source')}<select bind:value={sourceFilter}>{#each filterOptions(sourceOptions) as option}<option value={option.value}>{option.label}</option>{/each}</select></label><label>{t('状态','Status')}<select bind:value={statusFilter}>{#each filterOptions(statusOptions) as option}<option value={option.value}>{option.label}</option>{/each}</select></label></div>
+  <DataTable items={filtered} {columns} selectedIds={$selectedRecords} rowId={(item) => String(item.instanceId)} emptyLabel={t('没有符合条件的会议记录','No matching meeting records')} selectAllLabel={t('全选','Select all')} onSelectionChange={selectRecords} onRowClick={openRecord}/>
 </section>
-{#if $meeting}<section class="panel record-detail">
-    <div class="detail-heading">
-      <div>
-        <h2 title={$meeting.topic || $meeting.meetingNumber}>
-          {$meeting.topic || $meeting.meetingNumber}
-        </h2>
-        <p>
-          {$meeting.meetingNumber} · {$record.summary?.total ?? 0}
-          {t("位参与者", "participants")}
-        </p>
-      </div>
-      <div class="actions">
-        <button onclick={() => exportOne("json")}>
-          {t("导出 JSON", "Export JSON")}
-        </button><button onclick={() => exportOne("summary")}>
-          {t("导出考勤 CSV", "Export Attendance CSV")}
-        </button><button onclick={() => exportOne("manual")}>
-          {t("导出手动记录 CSV", "Export Manual Records CSV")}
-        </button><button class="primary" onclick={exportAll}>
-          {t("导出全部", "Export all")}
-        </button>
-      </div>
-    </div>
-    <RecordActivity
-      meeting={$meeting}
-      record={$record}
-      state={$stateValue}
-      events={$recordEvents}
-      users={currentUsers()}
-      language={$language}
-      onCaptureManual={captureManual}
-      onCaptureHands={captureHands}
-    >
-      <NameMatchingPanel
-        slot="matching"
-        rows={$record.rows || []}
-        decisions={$stateValue.reconciliationDecisions || []}
-        roster={$configs.roster || []}
-        aliases={$configs.aliases || []}
-        nameChanges={$record.record?.nameChangeEvents || []}
-        language={$language}
-        readOnly={true}
-      />
-    </RecordActivity>
-  </section>{/if}
-{#if $recordImportPreview}<div class="overlay">
-    <section class="slide-panel import-panel">
-      <h2>{t("会议记录导入预览", "Meeting record import preview")}</h2>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>{t("状态", "Action")}</th><th>{t("会议", "Meeting")}</th><th>
-                {t("说明", "Reason")}
-              </th>
-            </tr>
-          </thead><tbody>
-            {#each $recordImportPreview.plans || [] as p}<tr>
-                <td>{p.action}</td><td>
-                  {p.value?.meeting?.topic ||
-                    p.value?.meeting?.meetingNumber ||
-                    "—"}
-                </td><td>{p.reason}</td>
-              </tr>{/each}
-          </tbody>
-        </table>
-      </div>
-      <div class="actions">
-        <button
-          class="primary"
-          disabled={($recordImportPreview.plans || []).some(
-            (p: any) => p.action === "reject",
-          )}
-          onclick={commitRecordImport}
-        >
-          {t("确认导入", "Confirm import")}
-        </button><button onclick={() => ($recordImportPreview = null)}>
-          {t("取消", "Cancel")}
-        </button>
-      </div>
-    </section>
-  </div>{/if}
+
+<SlideOverPanel open={detailOpen && !!$meeting} title={t('考勤记录详情','Attendance Record Detail')} closeLabel={t('关闭','Close')} width={960} onClose={() => detailOpen = false}>
+  {#if $meeting}<RecordDetail />{/if}
+</SlideOverPanel>
+
+<SlideOverPanel open={!!$recordImportPreview} title={t('会议记录导入预览','Import Attendance Records')} closeLabel={t('关闭','Close')} onClose={() => recordImportPreview.set(null)}>
+  {#if $recordImportPreview}<p class="intro">{t('检查每条记录的处理结果，再确认导入。','Review how each record will be handled before confirming the import.')}</p><div class="summary"><b>{previewPlans.length}</b> {t('条导入计划','planned record(s)')}<span>{previewPlans.filter((plan: any) => plan.action === 'reject').length} {t('条被拒绝','rejected')}</span></div><div class="preview-wrap"><table><thead><tr><th>{t('操作','Action')}</th><th>{t('会议','Meeting')}</th><th>{t('说明','Reason')}</th></tr></thead><tbody>{#each previewPlans as plan}<tr><td><span class:reject={plan.action==='reject'} class="action-pill">{plan.action === 'add' ? t('新增','Add') : plan.action === 'update' ? t('更新','Update') : t('拒绝','Reject')}</span></td><td>{plan.value?.meeting?.topic || plan.value?.meeting?.meetingNumber || plan.value?.record?.meeting?.topic || '—'}</td><td>{plan.reason}</td></tr>{:else}<tr><td colspan="3" class="empty">{t('没有可预览的记录','No records to preview')}</td></tr>{/each}</tbody></table></div><div class="panel-actions"><button class="primary" disabled={previewPlans.some((plan: any) => plan.action === 'reject')} onclick={commitRecordImport}>{t('确认导入','Confirm Import')}</button><button onclick={() => recordImportPreview.set(null)}>{t('取消','Cancel')}</button></div>{/if}
+</SlideOverPanel>
+<style>
+ .records-page{display:grid;gap:12px}.heading{display:flex;align-items:center;justify-content:space-between;gap:12px}.heading h2{font-size:16px;margin:0}.heading p{font-size:10px;color:var(--muted);margin:4px 0 0}.actions{display:flex;gap:6px;flex-wrap:wrap}.actions button{min-height:29px;padding:5px 9px;font-size:10px}.filters{display:flex;align-items:end;gap:9px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px}.filters label{display:grid;gap:4px;color:var(--muted);font-size:9px;flex:1;min-width:130px}.filters input,.filters select{min-height:30px!important;padding:5px 8px!important;font-size:11px!important}.intro{font-size:11px;color:var(--muted);margin:0 0 12px}.summary{font-size:11px;padding:10px;background:var(--surface-soft);border:1px solid var(--line);border-radius:7px;margin-bottom:12px}.summary span{float:right;color:var(--danger)}.preview-wrap{overflow:auto;border:1px solid var(--line);border-radius:8px}.preview-wrap table{width:100%;border-collapse:collapse;font-size:11px}.preview-wrap th,.preview-wrap td{padding:8px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}.preview-wrap th{position:sticky;top:0;background:#f5f6fa;font-size:9px;text-transform:uppercase;color:var(--muted)}.action-pill{font-size:10px;color:var(--success);background:#eaf8f0;border-radius:14px;padding:3px 7px}.action-pill.reject{color:var(--danger);background:#fff0f0}.empty{text-align:center;color:var(--muted);padding:22px!important}.panel-actions{display:flex;justify-content:flex-end;gap:7px;margin-top:14px}.panel-actions button{font-size:11px;min-height:30px}
+</style>
