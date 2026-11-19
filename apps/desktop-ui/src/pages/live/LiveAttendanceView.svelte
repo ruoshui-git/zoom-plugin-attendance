@@ -7,7 +7,7 @@
   import ChipFilter from "../../lib/common/ChipFilter.svelte";
   import StatusBadge from "../../lib/common/StatusBadge.svelte";
   import NameMatchingPanel from "../../lib/NameMatchingPanel.svelte";
-  export let view = "status", record: any = {}, state: any = {}, events: any[] = [], users: any[] = [], language = "en", configs: any = {}, mode = "generic";
+  export let view = "status", record: any = {}, state: any = {}, events: any[] = [], users: any[] = [], language = "en", configs: any = {}, mode = "generic", profile: any = null;
   export let onCaptureManual: () => void = () => {}; export let onCaptureHands: () => void = () => {};
   export let onDecision: (d: any) => Promise<void> = async () => {}; export let onRevert: (id: string) => Promise<void> = async () => {};
   export let onOverrides: (p?: any) => Promise<void> = async () => {}; export let onSelectProfile: (id: string) => Promise<void> = async () => {};
@@ -28,7 +28,7 @@
   $: handEntries = deriveHandEntries(events, users);
   $: searchedHands = handEntries.filter((e: any) => !search || e.screenName.toLowerCase().includes(search.toLowerCase())).slice().reverse();
   $: pendingDecisions = (state.reconciliationDecisions || []).slice().reverse();
-  $: settingsProfile = (configs.profiles || []).find((p: any) => p.id === (state.selectedProfileId || record.record?.selectedProfileId));
+  $: settingsProfile = profile || (configs.profiles || []).find((p: any) => p.id === (state.selectedProfileId || record.record?.selectedProfileId)) || (configs.profiles || []).find((p: any) => p.id === "default-all");
   function statusTone(status: string) { return status === "fullPresent" || status === "present" || status === "inMeeting" ? "success" : status === "late" || status === "returnedAfterLongAbsence" ? "warning" : status === "missing" || status === "leftEarly" ? "danger" : "neutral"; }
   function movementLabel(type: string) { const labels: Record<string, [string,string]> = { join:["加入会议","Joined"],leave:["离开会议","Left"],joinedBefore:["启动时已在会议中","Present at start"],waitingRoomJoinFromOutside:["进入等候室","Entered waiting room"],waitingRoomJoinFromMeeting:["移至等候室","Moved to waiting room"],waitingRoomJoinedBefore:["启动时在等候室","Waiting at start"],waitingRoomLeave:["离开等候室","Left waiting room"] }; const pair=labels[type] || [type,type]; return t(pair[0],pair[1]); }
 </script>

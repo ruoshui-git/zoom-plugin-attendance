@@ -47,7 +47,7 @@
   {#if primary === "attendance" && secondary === "matching"}
     <NameMatchingPanel rows={$record.rows || []} decisions={$stateValue.reconciliationDecisions || []} roster={$configs.roster || []} aliases={$configs.aliases || []} nameChanges={nameChanges} language={$language} onDecision={(d) => saveDecision(d)} onRevert={(id) => saveDecision(null, id)} />
   {:else}
-    <LiveAttendanceView view={primary === "attendance" ? secondary : primary} record={$record} state={$stateValue} events={$recordEvents} users={currentUsers()} language={$language} configs={$configs} mode={$mode} onCaptureManual={captureManual} onCaptureHands={captureHands} onDecision={(d: any) => saveDecision(d)} onRevert={(id: string) => saveDecision(null, id)} onOverrides={applyOverrides} onSelectProfile={selectProfile} />
+    <LiveAttendanceView view={primary === "attendance" ? secondary : primary} record={$record} state={$stateValue} events={$recordEvents} users={currentUsers()} language={$language} configs={$configs} mode={$mode} profile={profileGuess()} onCaptureManual={captureManual} onCaptureHands={captureHands} onDecision={(d: any) => saveDecision(d)} onRevert={(id: string) => saveDecision(null, id)} onOverrides={applyOverrides} onSelectProfile={selectProfile} />
   {/if}
 {:else}
   <section class="empty-card"><span>◉</span><h2>{t("尚未加入会议", "No active meeting")}</h2><p>{t("连接后，会议记录会自动显示在这里。", "When you join a meeting, its attendance record will appear here.")}</p></section>
