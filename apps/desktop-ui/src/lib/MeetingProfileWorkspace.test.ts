@@ -17,4 +17,14 @@ describe('attendance profile workspace', () => {
     await fireEvent.click(screen.getByText('Edit'));
     expect((screen.getByLabelText('Name (required)') as HTMLInputElement).disabled).toBe(true);
   });
+
+  it('uses the shared confirmation dialog before deleting selected profiles', async () => {
+    render(MeetingProfileWorkspace, { profiles: [{ id: 'custom', name: 'Custom', includedSubgroups: [], lateAfterMinutes: 10, returnWindowMinutes: 8, active: true }], language: 'en' });
+    const checkbox=screen.getAllByRole('checkbox')[0];
+    await fireEvent.click(checkbox);
+    await fireEvent.click(screen.getByText('Delete selected'));
+    expect(await screen.findByText('Delete selected profiles? The default profile is kept.')).toBeTruthy();
+    await fireEvent.click(screen.getByText('Cancel'));
+    expect(screen.getByText('Custom')).toBeTruthy();
+  });
 });

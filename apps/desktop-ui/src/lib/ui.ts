@@ -13,3 +13,10 @@ export const timeOnly = (value: string | number | Date) =>
     hour: "numeric",
     minute: "2-digit",
   }).format(new Date(value));
+
+export type ConfirmOptions = { title: string; message: string; confirmLabel?: string; cancelLabel?: string; destructive?: boolean };
+export function confirmDialog(options: ConfirmOptions): Promise<boolean> {
+  return new Promise((resolve) => {
+    window.dispatchEvent(new CustomEvent("attendflow:confirm", { detail: { ...options, confirmLabel: options.confirmLabel || t("确认", "Confirm"), cancelLabel: options.cancelLabel || t("取消", "Cancel"), resolve } }));
+  });
+}

@@ -643,3 +643,23 @@ export function chooseLanguage(next: string) {
   setUiLanguage(next as any);
   window.location.reload();
 }
+
+export async function loadExampleDataQuiet() {
+  const current = value(s.configs);
+  const bundle = getExampleConfigBundle(value(s.language) === "zh-CN" ? "zh-CN" : "en");
+  let nextId = Math.max(0, ...(current.roster || []).map((person: any) => Number(person.personId) || 0)) + 1;
+  const idMap = new Map<string, number>();
+  const roster = bundle.rosterPeople.map((person) => {
+    const personId = nextId++;
+    idMap.set(person.key, personId);
+    return { personId, canonicalName: person.canonicalName, pinyin: person.pinyin, group: person.group, active: person.active };
+  });
+  const aliases = bundle.aliasMappings.map((alias) => ({ zoomName: alias.zoomName, personId: idMap.get(alias.personKey), notes: alias.notes || "" }));
+  const profiles = bundle.profiles.map(({ specialParticipants, blacklist, ...profile }) => profile);
+  const response = await fetch("/api/config/example-data", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ roster, aliases, profiles }) });
+  const data = await response.json();
+  if (!response.ok) throw Error(data.message || t("示例数据冲突，未添加任何数据", "Example data conflict; nothing was added"));
+  await loadConfig();
+  set(s.toastMessage, t("已加载示例花名册、别名和四个考勤配置。", "Example roster, aliases, and four profiles loaded."));
+  setTimeout(() => set(s.toastMessage, ""), 3000);
+}
