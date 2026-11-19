@@ -11,6 +11,7 @@
   let modeFilter = 'all';
   let sourceFilter = 'all';
   let statusFilter = 'all';
+  let detailOpen = false;
   let importInput: HTMLInputElement;
   $: filtered = filterMeetings($meetings.map((item) => ({ ...item, mode: $recordModes[item.instanceId] || item.mode })), { search, mode: modeFilter, source: sourceFilter, status: statusFilter });
   $: columns = [
@@ -25,6 +26,7 @@
   const sourceOptions = [['all','全部','All sources'],['live','实时采集','Live'],['imported','导入','Imported']];
   const statusOptions = [['all','全部','All status'],['ended','已结束','Ended'],['active','进行中','Active']];
   async function openRecord(item: any) {
+    detailOpen = true;
     meeting.set(item);
     record.set(await get(`/api/meetings/${item.instanceId}/record`));
     await Promise.all([loadState(), loadRecordEvents()]);
@@ -44,8 +46,11 @@
   <div class="heading"><div><h2>{t('考勤记录','Attendance Records')}</h2><p>{filtered.length} / {$meetings.length} {t('条记录','records')}</p></div><div class="actions"><button onclick={() => importInput.click()}>{t('导入','Import')}</button><input bind:this={importInput} type="file" accept=".json,application/json" hidden onchange={previewRecordImport}/><button onclick={exportSelection}>{$selectedRecords.length ? t('导出所选','Export Selected') : t('导出全部','Export All')}</button><button class="danger" disabled={!$selectedRecords.length} onclick={deleteSelection}>{t('删除所选','Delete Selected')}</button></div></div>
   <div class="filters"><label>{t('搜索日期/时间','Search date/time')}<input aria-label={t('按日期或主题搜索','Search by date/time')} placeholder={t('例如：2024-03、2024-03-15 或会议主题','e.g. 2024-03, 2024-03-15 or meeting topic')} bind:value={search}/></label><label>{t('考勤模式','Attendance Mode')}<select bind:value={modeFilter}>{#each filterOptions(modeOptions) as option}<option value={option.value}>{option.label}</option>{/each}</select></label><label>{t('来源','Source')}<select bind:value={sourceFilter}>{#each filterOptions(sourceOptions) as option}<option value={option.value}>{option.label}</option>{/each}</select></label><label>{t('状态','Status')}<select bind:value={statusFilter}>{#each filterOptions(statusOptions) as option}<option value={option.value}>{option.label}</option>{/each}</select></label></div>
   <DataTable items={filtered} {columns} selectedIds={$selectedRecords} rowId={(item) => String(item.instanceId)} emptyLabel={t('没有符合条件的会议记录','No matching meeting records')} selectAllLabel={t('全选','Select all')} onSelectionChange={selectRecords} onRowClick={openRecord}/>
-  {#if $meeting}<RecordDetail />{/if}
 </section>
+
+<SlideOverPanel open={detailOpen && !!$meeting} title={t('考勤记录详情','Attendance Record Detail')} closeLabel={t('关闭','Close')} width={960} onClose={() => detailOpen = false}>
+  {#if $meeting}<RecordDetail />{/if}
+</SlideOverPanel>
 
 <SlideOverPanel open={!!$recordImportPreview} title={t('会议记录导入预览','Import Attendance Records')} closeLabel={t('关闭','Close')} onClose={() => recordImportPreview.set(null)}>
   {#if $recordImportPreview}<p class="intro">{t('检查每条记录的处理结果，再确认导入。','Review how each record will be handled before confirming the import.')}</p><div class="summary"><b>{previewPlans.length}</b> {t('条导入计划','planned record(s)')}<span>{previewPlans.filter((plan: any) => plan.action === 'reject').length} {t('条被拒绝','rejected')}</span></div><div class="preview-wrap"><table><thead><tr><th>{t('操作','Action')}</th><th>{t('会议','Meeting')}</th><th>{t('说明','Reason')}</th></tr></thead><tbody>{#each previewPlans as plan}<tr><td><span class:reject={plan.action==='reject'} class="action-pill">{plan.action === 'add' ? t('新增','Add') : plan.action === 'update' ? t('更新','Update') : t('拒绝','Reject')}</span></td><td>{plan.value?.meeting?.topic || plan.value?.meeting?.meetingNumber || plan.value?.record?.meeting?.topic || '—'}</td><td>{plan.reason}</td></tr>{:else}<tr><td colspan="3" class="empty">{t('没有可预览的记录','No records to preview')}</td></tr>{/each}</tbody></table></div><div class="panel-actions"><button class="primary" disabled={previewPlans.some((plan: any) => plan.action === 'reject')} onclick={commitRecordImport}>{t('确认导入','Confirm Import')}</button><button onclick={() => recordImportPreview.set(null)}>{t('取消','Cancel')}</button></div>{/if}
