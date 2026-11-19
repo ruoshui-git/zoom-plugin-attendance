@@ -1,82 +1,181 @@
 <script lang="ts">
- import { onMount } from 'svelte';
- import { uiLanguage, setUiLanguage } from './lib/i18n-core';
- import { getLiveStatusLabel } from './lib/session-labels';
- import { formatMinutes, scoreBand } from './lib/formatting';
- import ConfigWorkspace from './lib/ConfigWorkspace.svelte';
- import MeetingProfileWorkspace from './lib/MeetingProfileWorkspace.svelte';
- import { getExampleConfigBundle } from './lib/example-config-data';
- import ProfileOverrideForm from './lib/ProfileOverrideForm.svelte';
- import NameMatchingPanel from './lib/NameMatchingPanel.svelte';
- import RecordActivity from './lib/RecordActivity.svelte';
- import { zoomBanner, zoomSidebarLabel, zoomSignedIn, zoomActionLabel, type ZoomStatus } from './lib/zoom-status';
- type Row=Record<string,any>; type Meeting=Record<string,any>;
- let page='live', connected=false, meeting:Meeting|null=null, record:any={rows:[],summary:{}}, meetings:Meeting[]=[], recordCounts:Record<string,number>={}, recordModes:Record<string,string>={}, configs:any={}, filter='', mode='generic', stateRevision=0, stateValue:any={mode:'generic',reconciliationDecisions:[],manualSnapshots:[],raiseHandEntries:[],raiseHandCaptures:[]}, configRevision:any={}, language='en', recordEvents:any[]=[];
- let recordSearch='', selectedRecords:string[]=[], configTab='roster', settings:any={}, stagedState:any={}, profileQuery='', recordImportPreview:any=null, recordImportInput:HTMLInputElement;
- let zoom:ZoomStatus|null=null;
- $: banner=language?zoomBanner(zoom,t):null;
- let activeFilter=''; let fileInput:HTMLInputElement; let toastMessage='';
- $: language=$uiLanguage;
- const t=(zh:string,en:string)=>language==='zh-CN'?zh:en;
- const dateTime=(value:string|number|Date)=>new Intl.DateTimeFormat(language==='zh-CN'?'zh-CN':'en',{dateStyle:'medium',timeStyle:'short'}).format(new Date(value));
- const timeOnly=(value:string|number|Date)=>new Intl.DateTimeFormat(language==='zh-CN'?'zh-CN':'en',{hour:'numeric',minute:'2-digit'}).format(new Date(value));
- async function get(path:string){const r=await fetch(path);if(!r.ok)throw Error(`${r.status}`);return r.json()}
- async function zoomSignIn(){const r=await fetch('/api/zoom/sign-in',{method:'POST'}).catch(()=>null);if(!r?.ok){toastMessage=t('无法开始登录','Could not start sign-in');setTimeout(()=>toastMessage='',2600)}}
- async function zoomSignOut(){if(!confirm(t('退出 Zoom 登录，并从你的 Zoom 账号中移除 AttendFlow Desktop？考勤记录会保留在这台电脑上。','Sign out and remove AttendFlow Desktop from your Zoom account? Your attendance records stay on this computer.')))return false;const r=await fetch('/api/zoom/sign-out',{method:'POST'}).catch(()=>null);const v=r?await r.json().catch(()=>({})):{};toastMessage=r?.ok?(v.revoked?t('已退出 Zoom 并移除授权','Signed out and access removed'):t('已退出。请在 Zoom 网站的“已添加的应用”中移除 AttendFlow Desktop。','Signed out. Remove AttendFlow Desktop under Added apps on the Zoom website.')):t('退出失败','Sign-out failed');setTimeout(()=>toastMessage='',4000);return !!r?.ok}
- async function zoomAction(action:string){if(action==='switch_account'){if(await zoomSignOut())await zoomSignIn()}else await zoomSignIn()}
- async function refresh(){try{const s=await get('/api/meetings');meetings=s;const stats=await Promise.all(s.map(async (m:Meeting)=>{try{const [d,st]=await Promise.all([get(`/api/meetings/${m.instanceId}/record`),get(`/api/meetings/${m.instanceId}/state`)]);return [m.instanceId,Number(d.summary?.seen??d.summary?.fullPresent)||0,st.value?.mode||d.mode||"generic"] as const}catch{return [m.instanceId,0,"generic"] as const}}));recordCounts=Object.fromEntries(stats.map(([id,count])=>[id,count]));recordModes=Object.fromEntries(stats.map(([id,,recordMode])=>[id,recordMode])); if(meeting?.instanceId){record=await get(`/api/meetings/${meeting.instanceId}/record`)} else {meeting=meetings.find((m)=>!m.endedAt)||null;if(meeting)record=await get(`/api/meetings/${meeting.instanceId}/record`)}}catch{}}
- async function loadConfig(){for(const key of ['roster','aliases','profiles','settings']){try{const d=await get(`/api/config/${key}`);configs[key]=d.value;configRevision[key]=d.revision}catch{configs[key]=[]}}settings=configs.settings||{exportLanguage:'en',filterDefaultsClosed:false};}
- async function saveConfig(key:string,value:any){const r=await fetch(`/api/config/${key}`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({revision:configRevision[key]||0,value})});if(r.status===409){await loadConfig();throw Error(t('数据已被其他窗口修改，请重试。','Data changed in another window. Please retry.'))}if(!r.ok)throw Error(await r.text());const d=await r.json();configs[key]=d.value;configRevision[key]=d.revision}
- async function saveSettings(){try{await saveConfig('settings',settings)}catch(e:any){alert(e.message)}}
- function download(filename:string,data:string){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([data],{type:'application/json;charset=utf-8'}));a.download=filename;a.click();URL.revokeObjectURL(a.href)}
- async function downloadBackup(){const b=await get('/api/backup');download('attendflow-backup-v3.json',JSON.stringify(b,null,2))}
- async function exportRecords(ids:string[]=[]){const data=await get('/api/records/export');const records=(data.records||[]).filter((x:any)=>!ids.length||ids.includes(x.meeting.instanceId));download('attendflow-records.json',JSON.stringify({version:3,records},null,2))}
- async function exportOne(kind:string){if(!meeting)return;const response=await fetch(`/api/meetings/${meeting.instanceId}/export?kind=${kind}&language=${settings.exportLanguage==='zh'?'zh-CN':'en'}`);if(!response.ok)throw Error(await response.text());const blob=await response.blob();const filename=response.headers.get('content-disposition')?.match(/filename="([^"]+)"/)?.[1]||`session.${kind}`;const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;a.click();URL.revokeObjectURL(a.href);await loadState();await refresh()}
- async function exportAll(){for(const kind of ['json','summary','manual'])await exportOne(kind)}
- async function deleteRecords(ids:string[]){if(!ids.length)return;const r=await fetch('/api/records/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({instanceIds:ids})});if(!r.ok){alert(t('无法删除正在进行的会议。','Active meetings cannot be deleted.'));return}selectedRecords=[];meeting=null;await refresh()}
- async function previewRecordImport(e:Event){const input=e.currentTarget as HTMLInputElement;const f=input.files?.[0];if(!f)return;try{const data=JSON.parse(await f.text());const r=await fetch('/api/records/import/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});recordImportPreview=await r.json();if(!r.ok)throw Error(recordImportPreview.message||'Preview failed')}catch(err:any){alert(err.message)}finally{input.value=''}}
- async function commitRecordImport(){const r=await fetch('/api/records/import/commit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(recordImportPreview)});if(!r.ok){alert((await r.json()).message||'Import failed');return}recordImportPreview=null;await refresh()}
- async function loadExampleData(){const bundle=getExampleConfigBundle(language==='zh-CN'?'zh-CN':'en');const roster=configs.roster||[],aliases=configs.aliases||[];let nextId=Math.max(0,...roster.map((p:any)=>Number(p.personId)||0))+1;const idMap=new Map<string,number>();const exampleRoster=bundle.rosterPeople.map(p=>{const personId=nextId++;idMap.set(p.key,personId);return {personId,canonicalName:p.canonicalName,pinyin:p.pinyin,group:p.group,active:p.active}});const exampleAliases=bundle.aliasMappings.map(a=>({zoomName:a.zoomName,personId:idMap.get(a.personKey),notes:a.notes||''}));const exampleProfiles=bundle.profiles.map(({specialParticipants,blacklist,...p})=>p);const r=await fetch('/api/config/example-data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({roster:exampleRoster,aliases:exampleAliases,profiles:exampleProfiles})});const d=await r.json();if(!r.ok){alert(t('示例数据冲突，未添加任何数据：','Example data conflict; nothing was added: ')+(d.message||''));return}await loadConfig();alert(t('已加载示例花名册、别名和四个考勤配置。','Example roster, aliases, and four profiles loaded.'))}
- async function addConfig(){let value:any={};if(configTab==='roster')value={personId:Date.now(),canonicalName:'',pinyin:'',group:'',active:true};if(configTab==='aliases')value={zoomName:'',personId:0};if(configTab==='profiles')value={id:`profile-${Date.now()}`,name:'',description:'',includedSubgroups:['*'],lateAfterMinutes:10,returnWindowMinutes:8,meetingIds:[],topicKeywords:[],groupSortOrder:[],active:true};const label=configTab==='roster'?'canonicalName':configTab==='aliases'?'zoomName':'name';const val=prompt(t('请输入名称','Enter name'));if(!val)return;value[label]=val;try{await saveConfig(configTab,[...(configs[configTab]||[]),value])}catch(e:any){alert(e.message)}}
- async function editConfig(index:number,item:any){const label=configTab==='roster'?'canonicalName':configTab==='aliases'?'zoomName':'name';const val=prompt(t('编辑名称','Edit name'),item[label]||'');if(val===null)return;const next=[...(configs[configTab]||[])];next[index]={...item,[label]:val};try{await saveConfig(configTab,next)}catch(e:any){alert(e.message)}}
- async function removeConfig(index:number){if(!confirm(t('确定删除此项目？','Delete this item?')))return;const next=[...(configs[configTab]||[])];next.splice(index,1);try{await saveConfig(configTab,next)}catch(e:any){alert(e.message)}}
- async function loadState(){if(!meeting)return;try{const d=await get(`/api/meetings/${meeting.instanceId}/state`);stateRevision=d.revision;stateValue=d.value;if(!stateValue.reconciliationDecisions)stateValue.reconciliationDecisions=stateValue.decisions||[];mode=d.value.mode||'generic'}catch{}}
- async function loadRecordEvents(){if(!meeting)return;try{recordEvents=await get(`/api/meetings/${meeting.instanceId}/events`)}catch{recordEvents=[]}}
- function currentUsers(){const users=new Map<string,any>();for(const e of recordEvents){if(e.kind==='users'){if(e.action==='sync_all')users.clear();for(const u of e.users||[]){const id=String(u.userId);if(e.action==='left')users.delete(id);else users.set(id,{...users.get(id),...u})}}else if(e.kind==='hand'){const id=String(e.userId);if(users.has(id))users.set(id,{...users.get(id),raisedHand:!!e.raised})}}return [...users.values()]}
- async function saveRecordState(patch:any){if(!meeting)return;const next={...stateValue,...patch};const r=await fetch(`/api/meetings/${meeting.instanceId}/state`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({revision:stateRevision,value:next})});if(r.status===409){await loadState();return}if(!r.ok)throw Error(await r.text());const d=await r.json();stateRevision=d.revision;stateValue=d.value}
- async function captureManual(){const at=new Date().toISOString();const participants=currentUsers().map((u:any)=>{const r=(record.rows||[]).find((row:any)=>row.zoomNames?.includes(u.name)||row.zoomName===u.name);return {participantUUID:String(u.userId),screenName:u.name,screenNamePinyin:r?.pinyin||'',role:u.host?'host':'participant',location:u.waitingRoom?'waiting-room':'meeting',sessionParticipantId:r?.sessionParticipantId,matchedPersonId:r?.personId,matchedCanonicalName:r?.canonicalName,matchStatus:r?.matchStatus||'not-applicable'}});const snap={id:`manual-${Date.now()}`,timestamp:at,participants};await saveRecordState({manualSnapshots:[...(stateValue.manualSnapshots||[]),snap]})}
- async function captureHands(){const raised=currentUsers().filter((u:any)=>u.raisedHand||u.raised_hand);if(!raised.length)return;const capture={id:`hands-${Date.now()}`,timestamp:new Date().toISOString(),participantUUIDs:raised.map((u:any)=>String(u.userId)),screenNames:raised.map((u:any)=>u.name||'Unknown'),totalCount:raised.length};await saveRecordState({raiseHandCaptures:[...(stateValue.raiseHandCaptures||[]),capture]})}
- async function applyOverrides(patch:any=stagedState){if(!meeting)return;const next={...stateValue,...patch};const r=await fetch(`/api/meetings/${meeting.instanceId}/state`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({revision:stateRevision,value:next})});if(!r.ok){await loadState();return}const d=await r.json();stateRevision=d.revision;stateValue=d.value;stagedState={};record=await get(`/api/meetings/${meeting.instanceId}/record`)}
- async function saveDecision(decision:any,revertId?:string){if(!meeting)throw Error(t('没有活动会议','No active meeting'));for(let attempt=0;attempt<2;attempt++){const body:any={revision:stateRevision,aliasesRevision:configRevision.aliases||0,value:{...stateValue,reconciliationDecisions:[...(stateValue.reconciliationDecisions||[])]}};if(revertId)body.revertId=revertId;else body.decision=decision;const r=await fetch(`/api/meetings/${meeting.instanceId}/reconciliation`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});if(r.status===409&&attempt===0){await loadState();const a=await get('/api/config/aliases');configs.aliases=a.value;configRevision.aliases=a.revision;continue}const d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.message||t('保存名称匹配失败','Could not save name matching'));stateRevision=d.revision;stateValue=d.value;configRevision.aliases=d.aliasesRevision;configs.aliases=await get('/api/config/aliases').then(x=>x.value);record=await get(`/api/meetings/${meeting.instanceId}/record`);toastMessage=revertId?t('已撤销决定','Decision reverted'):t('名称匹配已保存','Name matching saved');setTimeout(()=>toastMessage='',2600);return}throw Error(t('数据已被修改，请重试','Data changed; please retry'))}
- async function selectProfile(id:string){stagedState={selectedProfileId:id,lateAfterMinutesOverride:null,returnWindowMinutesOverride:null};await applyOverrides()}
- function profileGuess(){const ps=(configs.profiles||[]).filter((p:any)=>p.active);if(stateValue.selectedProfileId){const chosen=ps.find((p:any)=>p.id===stateValue.selectedProfileId);if(chosen)return chosen}return ps.find((p:any)=>(p.meetingIds||[]).includes(meeting?.meetingNumber))||ps.find((p:any)=>(p.topicKeywords||[]).some((k:string)=>(meeting?.topic||'').toLowerCase().includes(k.toLowerCase())))||ps.find((p:any)=>p.id==='default-all')||ps[0]}
- function resetOverrides(){stagedState={lateAfterMinutesOverride:null,returnWindowMinutesOverride:null}}
- async function switchMode(next:string){if(!meeting)return;mode=next;stateValue={...stateValue,mode};try{const r=await fetch(`/api/meetings/${meeting.instanceId}/state`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({revision:stateRevision,value:stateValue})});if(r.status===409){await loadState();return}const d=await r.json();stateRevision=d.revision}catch{}}
- function summaryRows(key:string){activeFilter=key==='total'||activeFilter===key?'':key}
- $: rows=(record.rows||[]).filter((r:Row)=>{if(filter&&!`${r.canonicalName||''} ${r.zoomName||''}`.toLowerCase().includes(filter.toLowerCase()))return false;if(!activeFilter)return true;const tags=r.tags||[];return tags.includes(activeFilter)||({seen:r.hasBeenSeen,full_present:r.isCurrentlyPresent&&!r.wasLate,late:r.wasLate,returned:r.currentStatus==='returnedAfterLongAbsence',left_early:r.currentStatus==='leftEarly',missing:r.currentStatus==='missing',ignored:r.matchStatus==='guest'||r.matchStatus==='unmatched'} as any)[activeFilter]});
- $: matchingCount=(record.rows||[]).filter((r:any)=>r.matchStatus==='unmatched').length+(record.record?.nameChangeEvents||[]).filter((e:any)=>!(stateValue.reconciliationDecisions||[]).some((d:any)=>d.sessionParticipantId===e.sessionParticipantId&&Date.parse(d.createdAt||'')>=Date.parse(e.timestamp||''))).length;
- onMount(()=>{setUiLanguage((localStorage.getItem('attendflow-desktop.ui-language')||localStorage.getItem('ui-language')||'en') as any);get('/api/zoom').then(v=>zoom=v).catch(()=>{});const ws=new WebSocket(`ws://${location.host}/bridge`);ws.onopen=()=>{connected=true;ws.send(JSON.stringify({type:'subscribe'}))};ws.onclose=()=>connected=false;ws.onerror=()=>connected=false;ws.onmessage=(ev)=>{const m=JSON.parse(ev.data);if(m.type==='zoom_status'){zoom=m;return}if(m.type==='state'){meeting=m.meeting;refresh();loadState();loadRecordEvents()}if(m.type==='record_updated'&&(!meeting||m.instanceId===meeting.instanceId)){refresh();loadRecordEvents()}};refresh();loadConfig();return()=>ws.close()});
- async function importBackup(e:Event){const input=e.target as HTMLInputElement;const f=input.files?.[0];if(!f)return;try{const data=JSON.parse(await f.text());const preview=`${data.rosterPeople?.length||0} roster · ${data.aliasMappings?.length||0} aliases · ${data.attendanceProfiles?.length||0} profiles`;if(!confirm(`${t('将导入以下配置：','Import this backup configuration:')} ${preview}`))return;const r=await fetch('/api/backup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});if(r.ok){await loadConfig();alert(t('备份配置已导入','Backup configuration imported'))}else alert(t('导入失败：','Import failed: ')+(await r.text()))}catch(err:any){alert(err.message)}finally{input.value=''}}
- function chooseLanguage(v:string){localStorage.setItem('ui-language',v);setUiLanguage(v as any);window.location.reload()}
- const nav=[['live','◉','Live','出勤'],['matching','⇄','Name Matching','名称匹配'],['records','▤','Records','考勤记录'],['configuration','⌘','Configuration','考勤配置'],['settings','⚙','Settings','其他设置']];
- const stats=[['seen','Seen','到过'],['full_present','Full Present','全程到场'],['late','Late','迟到'],['returned','Returned','返回'],['left_early','Left Early','早退'],['missing','Absent','缺席'],['ignored','Ignored','不计入'],['total','Total','总计']];
+  import { onMount } from "svelte";
+  import { uiLanguage, setUiLanguage } from "./lib/i18n-core";
+  import {
+    zoomBanner,
+    zoomSidebarLabel,
+    zoomActionLabel,
+  } from "./lib/zoom-status";
+  import {
+    get,
+    refresh,
+    loadConfig,
+    loadState,
+    loadRecordEvents,
+    zoomAction,
+    chooseLanguage,
+  } from "./lib/api";
+  import {
+    page,
+    connected,
+    meeting,
+    mode,
+    language,
+    zoom,
+    toastMessage,
+    record,
+    stateValue,
+  } from "./lib/stores";
+  import { t, dateTime } from "./lib/ui";
+  import LivePage from "./pages/LivePage.svelte";
+  import MatchingPage from "./pages/MatchingPage.svelte";
+  import RecordsPage from "./pages/RecordsPage.svelte";
+  import ConfigurationPage from "./pages/ConfigurationPage.svelte";
+  import SettingsPage from "./pages/SettingsPage.svelte";
+
+  $: $language = $uiLanguage;
+  $: banner = $language ? zoomBanner($zoom, t) : null;
+  $: matchingCount =
+    ($record.rows || []).filter((row: any) => row.matchStatus === "unmatched")
+      .length +
+    ($record.record?.nameChangeEvents || []).filter(
+      (event: any) =>
+        !($stateValue.reconciliationDecisions || []).some(
+          (decision: any) =>
+            decision.sessionParticipantId === event.sessionParticipantId &&
+            Date.parse(decision.createdAt || "") >=
+              Date.parse(event.timestamp || ""),
+        ),
+    ).length;
+  const nav = [
+    ["live", "◉", "Live", "出勤"],
+    ["matching", "⇄", "Name Matching", "名称匹配"],
+    ["records", "▤", "Records", "考勤记录"],
+    ["configuration", "⌘", "Configuration", "考勤配置"],
+    ["settings", "⚙", "Settings", "其他设置"],
+  ];
+
+  onMount(() => {
+    setUiLanguage(
+      (localStorage.getItem("attendflow-desktop.ui-language") ||
+        localStorage.getItem("ui-language") ||
+        "en") as any,
+    );
+    get("/api/zoom")
+      .then((value) => zoom.set(value))
+      .catch(() => {});
+    const ws = new WebSocket(`ws://${location.host}/bridge`);
+    ws.onopen = () => {
+      connected.set(true);
+      ws.send(JSON.stringify({ type: "subscribe" }));
+    };
+    ws.onclose = () => connected.set(false);
+    ws.onerror = () => connected.set(false);
+    ws.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+      if (message.type === "zoom_status") {
+        zoom.set(message);
+        return;
+      }
+      if (message.type === "state") {
+        meeting.set(message.meeting);
+        refresh();
+        loadState();
+        loadRecordEvents();
+      }
+      if (
+        message.type === "record_updated" &&
+        (!$meeting || message.instanceId === $meeting.instanceId)
+      ) {
+        refresh();
+        loadRecordEvents();
+      }
+    };
+    refresh();
+    loadConfig();
+    return () => ws.close();
+  });
 </script>
+
 <svelte:head><title>AttendFlow Desktop</title></svelte:head>
-{#if toastMessage}<div class="toast" role="status">{toastMessage}</div>{/if}<div class="shell"><aside><div class="brand"><span class="mark">A</span><div><b>AttendFlow</b><small>DESKTOP</small></div></div><nav>{#each nav as [key,icon,en,zh]}<button class:active={page===key} onclick={()=>page=key}><span>{icon}</span>{t(zh,en)}{#if key==='matching'&&mode==='roster'&&matchingCount>0}<small class="nav-badge">{matchingCount}</small>{/if}</button>{/each}</nav><div class="connection"><i class:up={connected&&zoom?.state==='connected'}></i>{zoomSidebarLabel(zoom,connected,t)}</div></aside><main><header><div><div class="eyebrow">{t('会议考勤','MEETING ATTENDANCE')}</div><h1>{page==='live'?t('出勤','Live Meeting'):page==='matching'?t('昵称匹配','Name Matching'):page==='records'?t('考勤记录','Records'):page==='configuration'?t('考勤配置','Configuration'):t('其他设置','Settings')}</h1></div><div class="header-actions">{#if meeting}<span class="live-pill"><i></i>{meeting.topic||meeting.meetingNumber||t('会议中','Live meeting')}</span>{/if}<select value={language} onchange={(e)=>chooseLanguage(e.currentTarget.value)}><option value="en">English</option><option value="zh-CN">简体中文</option></select></div></header>{#if banner}<div class="zoom-banner {banner.tone}" role="status"><div><b>{banner.title}</b><p>{banner.body}</p>{#if banner.detail}<small>{banner.detail}</small>{/if}</div>{#if banner.action}<button class="primary" onclick={()=>banner?.action&&zoomAction(banner.action)}>{zoomActionLabel(banner.action,t)}</button>{/if}</div>{/if}
-{#if page==='live'}
-{#if meeting}<section class="meet-head"><div><b>{meeting.topic||t('未命名会议','Untitled meeting')}</b><small>{meeting.meetingNumber} · {dateTime(meeting.startedAt)}</small></div><div class="switch"><button class:chosen={mode==='generic'} onclick={()=>switchMode('generic')}>{t('通用','Generic')}</button><button class:chosen={mode==='roster'} onclick={()=>switchMode('roster')}>{t('花名册','Roster')}</button></div></section><section class="panel live-profile"><label>{t('考勤配置','Attendance profile')}<select value={stateValue.selectedProfileId||profileGuess()?.id||'default-all'} onchange={e=>selectProfile(e.currentTarget.value)}>{#each (configs.profiles||[]).filter((p:any)=>p.active) as p}<option value={p.id}>{p.name}</option>{/each}</select></label><div class="muted">{t('迟到','Late')}: {record.record?.lateAfterMinutes??profileGuess()?.lateAfterMinutes??10} {t('分钟','min')} · {t('返回','Return')}: {record.record?.returnWindowMinutes??profileGuess()?.returnWindowMinutes??8} {t('分钟','min')} · {t('预期小组','Expected groups')}: {(profileGuess()?.includedSubgroups||[]).join(', ')||t('全部','All')}</div>{#key stateValue.selectedProfileId}<ProfileOverrideForm initialLate={stateValue.lateAfterMinutesOverride??null} initialReturn={stateValue.returnWindowMinutesOverride??null} {language} onApply={applyOverrides}/>{/key}</section><section class="stats">{#each stats as [key,en,zh]}<button class:chosen={activeFilter===key} onclick={()=>{if(key==='ignored'&&mode==='roster'){page='matching';return}summaryRows(key)}}><small>{t(zh,en)}</small><strong>{key==='total'?record.summary?.total??0:record.summary?.[key==='full_present'?'fullPresent':key==='left_early'?'leftEarly':key]??0}</strong></button>{/each}</section><section class="toolbar"><input placeholder={t('搜索姓名…','Search names…')} bind:value={filter}/><span>{rows.length} {t('位参与者','participants')}</span></section><div class="table-wrap"><table><thead><tr><th>{t('姓名','Name')}</th><th>{t('Zoom 名称','Zoom name')}</th><th>{t('状态','Status')}</th><th>{t('位置','Location')}</th><th>{t('小组','Group')}</th><th>{t('首次加入','First join')}</th><th>{t('最近进出','Last seen')}</th><th>{t('分钟','Minutes')}</th>{#if meeting.isHost}<th>{t('等候室分钟','Waiting')}</th>{/if}</tr></thead><tbody>{#each rows as r}<tr><td><b>{r.canonicalName||r.zoomName}</b></td><td>{r.zoomName}</td><td><span class="chip">{getLiveStatusLabel(r.currentStatus,language as any)}</span></td><td>{r.currentLocation==='meeting'?t('会议中','In meeting'):r.currentLocation==='waiting-room'?t('等候室','Waiting room'):'—'}</td><td>{r.group||'—'}</td><td>{r.firstJoinAt?timeOnly(r.firstJoinAt):'—'}</td><td>{r.lastSeenAt?timeOnly(r.lastSeenAt):'—'}</td><td>{formatMinutes(r.totalPresenceMinutes)}</td>{#if meeting.isHost}<td>{Math.round(r.waitingRoomMinutes||0)}</td>{/if}</tr>{:else}<tr><td colspan="9" class="empty">{t('等待参与者事件…','Waiting for participant events…')}</td></tr>{/each}</tbody></table></div><RecordActivity meeting={meeting} {record} state={stateValue} events={recordEvents} users={currentUsers()} {language} live={true} onCaptureManual={captureManual} onCaptureHands={captureHands}><NameMatchingPanel slot="matching" rows={record.rows||[]} decisions={stateValue.reconciliationDecisions||[]} roster={configs.roster||[]} aliases={configs.aliases||[]} nameChanges={record.record?.nameChangeEvents||[]} {language} onDecision={(d)=>saveDecision(d)} onRevert={(id)=>saveDecision(null,id)}/></RecordActivity>{:else}<section class="empty-card"><span>◉</span><h2>{t('尚未加入会议','No active meeting')}</h2><p>{t('连接后，会议记录会自动显示在这里。','When you join a meeting, its attendance record will appear here.')}</p></section>{/if}
-{:else if page==='matching'}{#if meeting&&mode==='roster'}<NameMatchingPanel rows={record.rows||[]} decisions={stateValue.reconciliationDecisions||[]} roster={configs.roster||[]} aliases={configs.aliases||[]} nameChanges={record.record?.nameChangeEvents||[]} {language} onDecision={(d)=>saveDecision(d)} onRevert={(id)=>saveDecision(null,id)}/>{:else}<section class="empty-card"><h2>{t('名称匹配仅适用于花名册模式','Name matching is available in roster mode')}</h2><button onclick={()=>{page='live';switchMode('roster')}}>{t('切换到花名册模式','Switch to roster mode')}</button></section>{/if}{:else if page==='records'}<section class="panel records-panel"><div class="records-heading"><div><h2>{t('所有会议','All meetings')}</h2><p>{meetings.length} {t('条会议记录','meeting records')}</p></div></div><div class="records-toolbar"><input aria-label={t('按日期搜索','Search by date')} placeholder={t('按日期或主题搜索','Search date or topic')} bind:value={recordSearch}/><button onclick={()=>recordImportInput.click()}>{t('导入会议记录','Import records')}</button><input bind:this={recordImportInput} type="file" accept=".json,application/json" hidden onchange={previewRecordImport}/><button onclick={()=>exportRecords(selectedRecords)}>{selectedRecords.length?t('导出所选','Export selected'):t('导出全部','Export all')}</button><button class="danger" disabled={!selectedRecords.length} onclick={()=>deleteRecords(selectedRecords)}>{t('删除所选','Delete selected')}</button></div><div class="table-wrap records-table"><table><thead><tr><th><input type="checkbox" aria-label={t('全选','Select all')} checked={meetings.length>0&&selectedRecords.length===meetings.length} onchange={e=>selectedRecords=e.currentTarget.checked?meetings.map(m=>m.instanceId):[]}/></th><th>{t('会议','Meeting')}</th><th>{t('开始时间','Started')}</th><th>{t('结束时间','Ended')}</th><th>{t('模式','Mode')}</th><th>{t('出席人数','# Attended')}</th><th>{t('状态','Status')}</th></tr></thead><tbody>{#each meetings.filter((m)=>!recordSearch||`${new Date(m.startedAt).toISOString()} ${m.topic||''} ${m.meetingNumber||''}`.toLowerCase().includes(recordSearch.toLowerCase())) as m}<tr class="record-list-row"><td><input type="checkbox" checked={selectedRecords.includes(m.instanceId)} onchange={(e)=>selectedRecords=e.currentTarget.checked?[...selectedRecords,m.instanceId]:selectedRecords.filter((id)=>id!==m.instanceId)}/></td><td><button class="record-open" title={m.topic||m.meetingNumber} onclick={async()=>{meeting=m;record=await get(`/api/meetings/${m.instanceId}/record`);await loadState();await loadRecordEvents();mode=record.mode||'generic';page='records'}}><b>{m.topic||m.meetingNumber}</b><small>{m.meetingNumber}</small></button></td><td>{m.startedAt?dateTime(m.startedAt):'—'}</td><td>{m.endedAt?dateTime(m.endedAt):'—'}</td><td><span class="badge">{(recordModes[m.instanceId]||m.mode)==='roster'?t('花名册','Roster'):t('通用','Generic')}</span></td><td>{recordCounts[m.instanceId]??'—'}</td><td><span class="badge" class:live={m.source!=='imported'}>{m.source==='imported'?t('导入','Imported'):t('实时','Live')}</span> <span class="badge" class:ended={!!m.endedAt}>{m.endedAt?t('已结束','Ended'):t('进行中','In progress')}</span> <span class="badge" class:downloaded={!!m.exportedAt}>{m.exportedAt?t('已下载','Downloaded'):t('未下载','Not downloaded')}</span></td></tr>{:else}<tr><td colspan="7" class="empty">{t('没有符合条件的会议记录','No matching meeting records')}</td></tr>{/each}</tbody></table></div></section>{#if meeting}<section class="panel record-detail"><div class="detail-heading"><div><h2 title={meeting.topic||meeting.meetingNumber}>{meeting.topic||meeting.meetingNumber}</h2><p>{meeting.meetingNumber} · {record.summary?.total??0} {t('位参与者','participants')}</p></div><div class="actions"><button onclick={()=>exportOne('json')}>{t('导出 JSON','Export JSON')}</button><button onclick={()=>exportOne('summary')}>{t('导出考勤 CSV','Export Attendance CSV')}</button><button onclick={()=>exportOne('manual')}>{t('导出手动记录 CSV','Export Manual Records CSV')}</button><button class="primary" onclick={exportAll}>{t('导出全部','Export all')}</button></div></div><RecordActivity meeting={meeting} {record} state={stateValue} events={recordEvents} users={currentUsers()} {language} onCaptureManual={captureManual} onCaptureHands={captureHands}><NameMatchingPanel slot="matching" rows={record.rows||[]} decisions={stateValue.reconciliationDecisions||[]} roster={configs.roster||[]} aliases={configs.aliases||[]} nameChanges={record.record?.nameChangeEvents||[]} {language} readOnly={true}/></RecordActivity></section>{/if}
-{:else if page==='configuration'}<div class="panel-title"><div class="switch"><button class:chosen={configTab==='roster'} onclick={()=>configTab='roster'}>{t('花名册与别名','Roster & aliases')}</button><button class:chosen={configTab==='profiles'} onclick={()=>configTab='profiles'}>{t('考勤配置','Profiles')}</button></div></div>{#if configTab==='profiles'}<MeetingProfileWorkspace profiles={configs.profiles||[]} revision={configRevision.profiles||0} {language} onSaved={loadConfig}/>{:else}<ConfigWorkspace language={language} exportLanguage={settings.exportLanguage||'en'} roster={configs.roster||[]} aliases={configs.aliases||[]} rosterRevision={configRevision.roster||0} aliasesRevision={configRevision.aliases||0} onSaved={loadConfig}/>{/if}
-{:else}<section class="panel settings"><h2>{t('语言与界面','Language and display')}</h2><p>{t('界面语言与导出语言分别设置。','Set the interface and export language separately.')}</p><div class="language-options"><button class:chosen={language==='zh-CN'} onclick={()=>chooseLanguage('zh-CN')}>简体中文</button><button class:chosen={language==='en'} onclick={()=>chooseLanguage('en')}>English</button></div><label>{t('导出语言','Export language')} <select bind:value={settings.exportLanguage} onchange={saveSettings}><option value="en">English</option><option value="zh">简体中文</option></select></label><label>{t('大小','UI size')} <select value={localStorage.getItem('ui-size')||'medium'} onchange={(e)=>localStorage.setItem('ui-size',e.currentTarget.value)}><option value="compact">{t('紧凑','Compact')}</option><option value="medium">{t('中等','Medium')}</option><option value="large">{t('大','Large')}</option><option value="xlarge">{t('特大','X Large')}</option><option value="xxlarge">{t('超大','XX Large')}</option></select></label><label><input type="checkbox" bind:checked={settings.filterDefaultsClosed} onchange={saveSettings}/> {t('默认折叠筛选器','Collapse filters by default')}</label><div class="zoom-account"><div><b>{t('Zoom 账号','Zoom account')}</b><p>{zoomSidebarLabel(zoom,connected,t)}</p></div>{#if zoomSignedIn(zoom)}<button class="danger" onclick={zoomSignOut}>{t('退出 Zoom 登录','Sign out of Zoom')}</button>{:else if zoom?.state!=='not_configured'}<button class="primary" onclick={zoomSignIn}>{t('使用 Zoom 登录','Sign in with Zoom')}</button>{/if}</div><div class="settings-actions"><button onclick={loadExampleData}>{t('加载示例数据','Load example data')}</button><button onclick={downloadBackup}>{t('导出完整备份','Export full backup')}</button><button onclick={()=>fileInput.click()}>{t('恢复备份','Restore backup')}</button><button class="danger" onclick={async()=>{if(confirm(t('清除所有本地记录？','Clear all local records?'))){const r=await fetch('/api/local-data',{method:'DELETE'});if(r.ok){meeting=null;await refresh()}else alert(t('会议进行时不能清除数据。','Cannot clear while a meeting is live.'))}}}>{t('清除本地记录','Clear local records')}</button><input bind:this={fileInput} type="file" accept="application/json,.json" hidden onchange={importBackup}/></div><div class="about"><span class="mark">A</span><div><b>AttendFlow Desktop</b><small>Zoom Companion · {t('仅本地保存考勤记录','Local-only attendance records')}</small></div></div></section>{/if}</main></div>
-
-
-
-
-
-
-
-{#if recordImportPreview}<div class="overlay"><section class="slide-panel import-panel"><h2>{t('会议记录导入预览','Meeting record import preview')}</h2><div class="table-wrap"><table><thead><tr><th>{t('状态','Action')}</th><th>{t('会议','Meeting')}</th><th>{t('说明','Reason')}</th></tr></thead><tbody>{#each recordImportPreview.plans||[] as p}<tr><td>{p.action}</td><td>{p.value?.meeting?.topic||p.value?.meeting?.meetingNumber||'—'}</td><td>{p.reason}</td></tr>{/each}</tbody></table></div><div class="actions"><button class="primary" disabled={(recordImportPreview.plans||[]).some((p:any)=>p.action==='reject')} onclick={commitRecordImport}>{t('确认导入','Confirm import')}</button><button onclick={()=>recordImportPreview=null}>{t('取消','Cancel')}</button></div></section></div>{/if}
-
-
-
-
+{#if $toastMessage}<div class="toast" role="status">{$toastMessage}</div>{/if}
+<div class="shell">
+  <aside>
+    <div class="brand">
+      <span class="mark">A</span>
+      <div><b>AttendFlow</b><small>DESKTOP</small></div>
+    </div>
+    <nav>
+      {#each nav as [key, icon, en, zh]}
+        <button class:active={$page === key} onclick={() => page.set(key)}>
+          <span>{icon}</span>{t(
+            zh,
+            en,
+          )}{#if key === "matching" && $mode === "roster" && matchingCount > 0}<small
+              class="nav-badge"
+            >
+              {matchingCount}
+            </small>{/if}
+        </button>
+      {/each}
+    </nav>
+    <div class="connection">
+      <i class:up={$connected && $zoom?.state === "connected"}
+      ></i>{zoomSidebarLabel($zoom, $connected, t)}
+    </div>
+  </aside>
+  <main>
+    <header>
+      <div>
+        <div class="eyebrow">{t("会议考勤", "MEETING ATTENDANCE")}</div>
+        <h1>
+          {$page === "live"
+            ? t("出勤", "Live Meeting")
+            : $page === "matching"
+              ? t("昵称匹配", "Name Matching")
+              : $page === "records"
+                ? t("考勤记录", "Records")
+                : $page === "configuration"
+                  ? t("考勤配置", "Configuration")
+                  : t("其他设置", "Settings")}
+        </h1>
+      </div>
+      <div class="header-actions">
+        {#if $meeting}<span class="live-pill">
+            <i></i>{$meeting.topic ||
+              $meeting.meetingNumber ||
+              t("会议中", "Live meeting")}
+          </span>{/if}
+        <select
+          value={$language}
+          onchange={(event) => chooseLanguage(event.currentTarget.value)}
+        >
+          <option value="en">English</option><option value="zh-CN">
+            简体中文
+          </option>
+        </select>
+      </div>
+    </header>
+    {#if banner}
+      <div class="zoom-banner {banner.tone}" role="status">
+        <div>
+          <b>{banner.title}</b>
+          <p>{banner.body}</p>
+          {#if banner.detail}<small>{banner.detail}</small>{/if}
+        </div>
+        {#if banner.action}<button
+            class="primary"
+            onclick={() => banner?.action && zoomAction(banner.action)}
+          >
+            {zoomActionLabel(banner.action, t)}
+          </button>{/if}
+      </div>
+    {/if}
+    {#if $page === "live"}<LivePage />
+    {:else if $page === "matching"}<MatchingPage />
+    {:else if $page === "records"}<RecordsPage />
+    {:else if $page === "configuration"}<ConfigurationPage />
+    {:else}<SettingsPage />
+    {/if}
+  </main>
+</div>
