@@ -1,279 +1,59 @@
 <script lang="ts">
-  import {
-    meeting,
-    record,
-    recordEvents,
-    stateValue,
-    configs,
-    language,
-    mode,
-    page,
-    recordCounts,
-    recordModes,
-    meetings,
-    settings,
-    zoom,
-    connected,
-    toastMessage,
-    selectedRecords,
-    configTab,
-    recordImportPreview,
-    stateRevision,
-    configRevision,
-    stagedState,
-  } from "../lib/stores";
-  import {
-    get,
-    refresh,
-    loadConfig,
-    saveConfig,
-    saveSettings,
-    download,
-    downloadBackup,
-    exportRecords,
-    exportOne,
-    exportAll,
-    deleteRecords,
-    previewRecordImport,
-    commitRecordImport,
-    loadExampleData,
-    addConfig,
-    editConfig,
-    removeConfig,
-    loadState,
-    loadRecordEvents,
-    currentUsers,
-    saveRecordState,
-    captureManual,
-    captureHands,
-    applyOverrides,
-    saveDecision,
-    selectProfile,
-    profileGuess,
-    resetOverrides,
-    switchMode,
-    zoomSignIn,
-    zoomSignOut,
-    zoomAction,
-    importBackup,
-    chooseLanguage,
-  } from "../lib/api";
-  import { t, dateTime, timeOnly } from "../lib/ui";
-  import { getLiveStatusLabel } from "../lib/session-labels";
-  import { formatMinutes } from "../lib/formatting";
-  import ProfileOverrideForm from "./../lib/ProfileOverrideForm.svelte";
-  import RecordActivity from "./../lib/RecordActivity.svelte";
-  import NameMatchingPanel from "./../lib/NameMatchingPanel.svelte";
+  import { meeting, record, recordEvents, stateValue, configs, language, mode, page } from "../lib/stores";
+  import { captureManual, captureHands, applyOverrides, saveDecision, selectProfile, profileGuess, switchMode } from "../lib/api";
+  import { t, dateTime } from "../lib/ui";
+  import ProfileOverrideForm from "../lib/ProfileOverrideForm.svelte";
+  import NameMatchingPanel from "../lib/NameMatchingPanel.svelte";
+  import PrimaryTabs from "../lib/common/PrimaryTabs.svelte";
+  import SecondaryTabs from "../lib/common/SecondaryTabs.svelte";
+  import LiveAttendanceView from "./live/LiveAttendanceView.svelte";
+  import { currentUsers } from "../lib/api";
 
-  let rows: any[] = [];
-  let matchingCount = 0;
-  let filter = "";
-  let activeFilter = "";
-  $: rows = ($record.rows || []).filter((r: any) => {
-    if (
-      filter &&
-      !`${r.canonicalName || ""} ${r.zoomName || ""}`
-        .toLowerCase()
-        .includes(filter.toLowerCase())
-    )
-      return false;
-    if (!activeFilter) return true;
-    const tags = r.tags || [];
-    return (
-      tags.includes(activeFilter) ||
-      (
-        {
-          seen: r.hasBeenSeen,
-          full_present: r.isCurrentlyPresent && !r.wasLate,
-          late: r.wasLate,
-          returned: r.currentStatus === "returnedAfterLongAbsence",
-          left_early: r.currentStatus === "leftEarly",
-          missing: r.currentStatus === "missing",
-          ignored: r.matchStatus === "guest" || r.matchStatus === "unmatched",
-        } as any
-      )[activeFilter]
-    );
-  });
-  $: matchingCount =
-    ($record.rows || []).filter((r: any) => r.matchStatus === "unmatched")
-      .length +
-    ($record.record?.nameChangeEvents || []).filter(
-      (e: any) =>
-        !($stateValue.reconciliationDecisions || []).some(
-          (d: any) =>
-            d.sessionParticipantId === e.sessionParticipantId &&
-            Date.parse(d.createdAt || "") >= Date.parse(e.timestamp || ""),
-        ),
-    ).length;
-  const stats = [
-    ["seen", "Seen", "到过"],
-    ["full_present", "Full Present", "全程到场"],
-    ["late", "Late", "迟到"],
-    ["returned", "Returned", "返回"],
-    ["left_early", "Left Early", "早退"],
-    ["missing", "Absent", "缺席"],
-    ["ignored", "Ignored", "不计入"],
-    ["total", "Total", "总计"],
+  let primary = "attendance";
+  let secondary = "status";
+  const primaryTabs = [
+    { id: "attendance", label: t("自动考勤", "Auto Attendance") },
+    { id: "manual", label: t("手动考勤", "Manual Attendance") },
+    { id: "entry", label: t("进出记录", "Entry/Exit") },
+    { id: "hands", label: t("举手跟踪", "Raise Hand") },
   ];
-  function summaryRows(key: string) {
-    activeFilter = key === "total" || activeFilter === key ? "" : key;
-  }
+  const attendanceTabs = [
+    { id: "status", label: t("状态", "Status") },
+    { id: "matching", label: t("昵称匹配", "Name Matching") },
+    { id: "names", label: t("改名记录", "Name Changes") },
+    { id: "info", label: t("设置与信息", "Settings & Info") },
+  ];
+  $: unmatchedCount = ($record.rows || []).filter((r: any) => r.matchStatus === "unmatched").length;
+  $: nameChanges = $record.record?.nameChangeEvents || [];
+  $: if ($page === "matching") { primary = "attendance"; secondary = "matching"; }
+  $: liveLabel = $meeting?.status === "ended" ? t("已结束", "Ended") : t("进行中", "Live");
+  function pickPrimary(id: string) { primary = id; if (id === "attendance") secondary = "status"; }
 </script>
 
-{#if $meeting}<section class="meet-head">
-    <div>
-      <b>{$meeting.topic || t("未命名会议", "Untitled meeting")}</b><small>
-        {$meeting.meetingNumber} · {dateTime($meeting.startedAt)}
-      </small>
-    </div>
-    <div class="switch">
-      <button
-        class:chosen={$mode === "generic"}
-        onclick={() => switchMode("generic")}
-      >
-        {t("通用", "Generic")}
-      </button><button
-        class:chosen={$mode === "roster"}
-        onclick={() => switchMode("roster")}
-      >
-        {t("花名册", "Roster")}
-      </button>
+{#if $meeting}
+  <section class="meet-head compact-head">
+    <div class="meeting-title"><b title={$meeting.topic || t("未命名会议", "Untitled meeting")}>{$meeting.topic || t("未命名会议", "Untitled meeting")}</b><span class="meeting-number">#{ $meeting.meetingNumber || "—" }</span><span>{dateTime($meeting.startedAt)}</span></div>
+    <div class="head-controls">
+      <span class="live-status"><i></i>{liveLabel}</span>
+      <label class="profile"><span>{t("配置", "Profile")}</span><select aria-label={t("考勤配置", "Attendance profile")} value={$stateValue.selectedProfileId || profileGuess()?.id || "default-all"} onchange={(e) => selectProfile(e.currentTarget.value)}>
+        {#each ($configs.profiles || []).filter((p: any) => p.active) as p}<option value={p.id}>{p.name}</option>{/each}
+      </select></label>
+      <div class="switch" aria-label={t("考勤模式", "Attendance mode")}><button class:chosen={$mode === "generic"} onclick={() => switchMode("generic")}>{t("通用", "Generic")}</button><button class:chosen={$mode === "roster"} onclick={() => switchMode("roster")}>{t("花名册", "Roster")}</button></div>
+      <details class="overrides"><summary>{t("阈值", "Overrides")}</summary><div class="override-pop"><p>{t("迟到", "Late")}: {$record.record?.lateAfterMinutes ?? profileGuess()?.lateAfterMinutes ?? 10} {t("分钟", "min")} · {t("返回", "Return")}: {$record.record?.returnWindowMinutes ?? profileGuess()?.returnWindowMinutes ?? 8} {t("分钟", "min")}</p><ProfileOverrideForm initialLate={$stateValue.lateAfterMinutesOverride ?? null} initialReturn={$stateValue.returnWindowMinutesOverride ?? null} language={$language} onApply={applyOverrides} /></div></details>
     </div>
   </section>
-  <section class="panel live-profile">
-    <label>
-      {t("考勤配置", "Attendance profile")}<select
-        value={$stateValue.selectedProfileId ||
-          profileGuess()?.id ||
-          "default-all"}
-        onchange={(e) => selectProfile(e.currentTarget.value)}
-      >
-        {#each ($configs.profiles || []).filter((p: any) => p.active) as p}<option
-            value={p.id}
-          >
-            {p.name}
-          </option>{/each}
-      </select>
-    </label>
-    <div class="muted">
-      {t("迟到", "Late")}: {$record.record?.lateAfterMinutes ??
-        profileGuess()?.lateAfterMinutes ??
-        10}
-      {t("分钟", "min")} · {t("返回", "Return")}: {$record.record
-        ?.returnWindowMinutes ??
-        profileGuess()?.returnWindowMinutes ??
-        8}
-      {t("分钟", "min")} · {t("预期小组", "Expected groups")}: {(
-        profileGuess()?.includedSubgroups || []
-      ).join(", ") || t("全部", "All")}
-    </div>
-    {#key $stateValue.selectedProfileId}<ProfileOverrideForm
-        initialLate={$stateValue.lateAfterMinutesOverride ?? null}
-        initialReturn={$stateValue.returnWindowMinutesOverride ?? null}
-        language={$language}
-        onApply={applyOverrides}
-      />{/key}
-  </section>
-  <section class="stats">
-    {#each stats as [key, en, zh]}<button
-        class:chosen={activeFilter === key}
-        onclick={() => {
-          if (key === "ignored" && $mode === "roster") {
-            $page = "matching";
-            return;
-          }
-          summaryRows(key);
-        }}
-      >
-        <small>{t(zh, en)}</small><strong>
-          {key === "total"
-            ? ($record.summary?.total ?? 0)
-            : ($record.summary?.[
-                key === "full_present"
-                  ? "fullPresent"
-                  : key === "left_early"
-                    ? "leftEarly"
-                    : key
-              ] ?? 0)}
-        </strong>
-      </button>{/each}
-  </section>
-  <section class="toolbar">
-    <input
-      placeholder={t("搜索姓名…", "Search names…")}
-      bind:value={filter}
-    /><span>{rows.length} {t("位参与者", "participants")}</span>
-  </section>
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>{t("姓名", "Name")}</th><th>{t("Zoom 名称", "Zoom name")}</th><th>
-            {t("状态", "Status")}
-          </th><th>{t("位置", "Location")}</th><th>{t("小组", "Group")}</th><th>
-            {t("首次加入", "First join")}
-          </th><th>{t("最近进出", "Last seen")}</th><th>
-            {t("分钟", "Minutes")}
-          </th>{#if $meeting.isHost}<th>{t("等候室分钟", "Waiting")}</th>{/if}
-        </tr>
-      </thead><tbody>
-        {#each rows as r}<tr>
-            <td><b>{r.canonicalName || r.zoomName}</b></td><td>
-              {r.zoomName}
-            </td><td>
-              <span class="chip">
-                {getLiveStatusLabel(r.currentStatus, $language as any)}
-              </span>
-            </td><td>
-              {r.currentLocation === "meeting"
-                ? t("会议中", "In meeting")
-                : r.currentLocation === "waiting-room"
-                  ? t("等候室", "Waiting room")
-                  : "—"}
-            </td><td>{r.group || "—"}</td><td>
-              {r.firstJoinAt ? timeOnly(r.firstJoinAt) : "—"}
-            </td><td>{r.lastSeenAt ? timeOnly(r.lastSeenAt) : "—"}</td><td>
-              {formatMinutes(r.totalPresenceMinutes)}
-            </td>{#if $meeting.isHost}<td>
-                {Math.round(r.waitingRoomMinutes || 0)}
-              </td>{/if}
-          </tr>{:else}<tr>
-            <td colspan="9" class="empty">
-              {t("等待参与者事件…", "Waiting for participant events…")}
-            </td>
-          </tr>{/each}
-      </tbody>
-    </table>
-  </div>
-  <RecordActivity
-    meeting={$meeting}
-    record={$record}
-    state={$stateValue}
-    events={$recordEvents}
-    users={currentUsers()}
-    language={$language}
-    live={true}
-    onCaptureManual={captureManual}
-    onCaptureHands={captureHands}
-  >
-    <NameMatchingPanel
-      slot="matching"
-      rows={$record.rows || []}
-      decisions={$stateValue.reconciliationDecisions || []}
-      roster={$configs.roster || []}
-      aliases={$configs.aliases || []}
-      nameChanges={$record.record?.nameChangeEvents || []}
-      language={$language}
-      onDecision={(d) => saveDecision(d)}
-      onRevert={(id) => saveDecision(null, id)}
-    />
-  </RecordActivity>{:else}<section class="empty-card">
-    <span>◉</span>
-    <h2>{t("尚未加入会议", "No active meeting")}</h2>
-    <p>
-      {t(
-        "连接后，会议记录会自动显示在这里。",
-        "When you join a meeting, its attendance record will appear here.",
-      )}
-    </p>
-  </section>{/if}
+  <PrimaryTabs items={primaryTabs} active={primary} onSelect={pickPrimary} />
+  {#if primary === "attendance"}<SecondaryTabs items={attendanceTabs.map((x) => ({ ...x, label: x.id === "matching" && unmatchedCount ? `${x.label} · ${unmatchedCount}` : x.id === "names" && nameChanges.length ? `${x.label} · ${nameChanges.length}` : x.label }))} active={secondary} onSelect={(id) => { secondary = id; if (id !== "matching") $page = "live"; }} />{/if}
+  {#if primary === "attendance" && secondary === "matching"}
+    <NameMatchingPanel rows={$record.rows || []} decisions={$stateValue.reconciliationDecisions || []} roster={$configs.roster || []} aliases={$configs.aliases || []} nameChanges={nameChanges} language={$language} onDecision={(d) => saveDecision(d)} onRevert={(id) => saveDecision(null, id)} />
+  {:else}
+    <LiveAttendanceView view={primary === "attendance" ? secondary : primary} record={$record} state={$stateValue} events={$recordEvents} users={currentUsers()} language={$language} configs={$configs} mode={$mode} onCaptureManual={captureManual} onCaptureHands={captureHands} onDecision={(d: any) => saveDecision(d)} onRevert={(id: string) => saveDecision(null, id)} onOverrides={applyOverrides} onSelectProfile={selectProfile} />
+  {/if}
+{:else}
+  <section class="empty-card"><span>◉</span><h2>{t("尚未加入会议", "No active meeting")}</h2><p>{t("连接后，会议记录会自动显示在这里。", "When you join a meeting, its attendance record will appear here.")}</p></section>
+{/if}
+
+<style>
+ .compact-head{padding:8px 12px;margin-bottom:8px;min-height:44px}.meeting-title,.head-controls{display:flex;align-items:center;gap:10px;min-width:0}.meeting-title b{font-size:13px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.meeting-title span{font-size:11px;color:var(--muted);white-space:nowrap}.meeting-number{padding-left:9px;border-left:1px solid var(--line)}.head-controls{flex:none}.live-status{display:flex;align-items:center;gap:5px;color:#27835d;font-size:11px;white-space:nowrap}.live-status i{width:7px;height:7px;border-radius:50%;background:#26b47a}.profile{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:10px}.profile select{min-height:30px!important;padding:5px 7px!important;max-width:150px}.switch{display:flex;background:var(--surface-soft);padding:2px;border-radius:7px}.switch button{min-height:28px;padding:4px 9px;border-color:transparent;background:transparent;font-size:10px}.switch button.chosen{background:white;color:var(--accent);box-shadow:var(--shadow-card)}.overrides{position:relative}.overrides summary{cursor:pointer;list-style:none;border:1px solid var(--line);border-radius:6px;padding:6px 8px;color:var(--muted);font-size:10px}.override-pop{position:absolute;right:0;top:32px;z-index:5;width:min(420px,90vw);background:white;border:1px solid var(--line);box-shadow:0 8px 26px #18223020;border-radius:8px;padding:12px}.override-pop p{font-size:11px;color:var(--muted)}
+ @media(max-width:950px){.compact-head{align-items:flex-start;flex-wrap:wrap}.head-controls{flex-wrap:wrap}.meeting-title{flex-wrap:wrap}}
+</style>
