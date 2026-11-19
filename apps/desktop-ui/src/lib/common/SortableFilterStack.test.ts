@@ -17,7 +17,7 @@ describe("SortableFilterStack", () => {
     const buttons = screen.getAllByRole("button");
     await fireEvent.dragStart(buttons[0]);
     await fireEvent.drop(buttons[2]);
-    expect(screen.getAllByRole("button").map((button) => button.textContent?.replace(/⠿/g, "").trim())).toEqual(["Late2", "Absent1", "Seen4"]);
+    expect(screen.getAllByRole("button").map((button) => button.textContent?.replace(/⠿/g, "").trim())).toEqual(["2 Late", "1 Absent", "4 Seen"]);
     expect(JSON.parse(localStorage.getItem("test-order") || "[]")).toEqual(["late", "absent", "seen"]);
   });
 

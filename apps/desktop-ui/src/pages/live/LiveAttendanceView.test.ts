@@ -22,6 +22,18 @@ describe("LiveAttendanceView", () => {
     expect(screen.queryByText("Grace Hopper")).toBeNull();
   });
 
+  it("keeps one compact status summary and filters from its counts", async () => {
+    const { container } = render(LiveAttendanceView, { view: "status", mode: "roster", record: { rows: [
+      { canonicalName: "Ada Lovelace", currentStatus: "present", hasBeenSeen: true, isCurrentlyPresent: true, wasLate: false },
+      { canonicalName: "Grace Hopper", currentStatus: "late", hasBeenSeen: true, isCurrentlyPresent: true, wasLate: true },
+    ] } });
+    expect(container.querySelectorAll(".summary-row")).toHaveLength(1);
+    expect(container.querySelectorAll(".summary-line")).toHaveLength(0);
+    await fireEvent.click(screen.getByRole("button", { name: /1 FP/ }));
+    expect(screen.getByText("Ada Lovelace")).toBeTruthy();
+    expect(screen.queryByText("Grace Hopper")).toBeNull();
+  });
+
   it("wires manual attendance capture to the existing action", async () => {
     const capture = vi.fn();
     render(LiveAttendanceView, { view: "manual", state: { manualSnapshots: [] }, onCaptureManual: capture });
