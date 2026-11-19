@@ -11,7 +11,7 @@
 </nav>
 
 <style>
-  .secondary-tabs{display:flex;gap:6px;overflow:auto;padding:3px;background:var(--surface-soft);border-radius:8px;margin:0 0 12px}
-  button{flex:none;min-height:28px;padding:5px 9px;border:1px solid transparent;background:transparent;color:var(--muted);font-size:11px}
-  button.active{border-color:var(--line);background:var(--surface);color:var(--text);box-shadow:var(--shadow-card)}
+  .secondary-tabs{display:flex;gap:0;overflow:auto;padding:0;background:transparent;border-bottom:1px solid var(--line);margin:0 0 8px;scrollbar-width:thin}
+  .secondary-tabs button{width:auto;flex:none;min-height:30px;padding:5px 11px;border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;color:var(--muted);font-size:11px;white-space:nowrap}
+  .secondary-tabs button.active{border-bottom-color:var(--accent);background:transparent;color:var(--accent);font-weight:650;box-shadow:none}
 </style>

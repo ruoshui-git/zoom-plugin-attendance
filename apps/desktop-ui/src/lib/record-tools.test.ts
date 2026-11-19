@@ -10,6 +10,8 @@ describe('record detail helpers', () => {
   it('filters attendance rows by summary tag', () => {
     expect(filterRowsByTag(rows, 'late').map((r) => r.zoomName)).toEqual(['Ada']);
     expect(filterRowsByTag(rows, 'missing').map((r) => r.zoomName)).toEqual(['Missing']);
+    expect(filterRowsByTag(rows, 'total')).toHaveLength(3);
+    expect(filterRowsByTag(rows, 'ignored').map((r) => r.zoomName)).toEqual([]);
   });
   it('sorts rows by name, score, join time, and presence minutes', () => {
     expect(sortRows(rows, 'name').map((r) => r.zoomName)).toEqual(['Ada', 'Bee', 'Missing']);
