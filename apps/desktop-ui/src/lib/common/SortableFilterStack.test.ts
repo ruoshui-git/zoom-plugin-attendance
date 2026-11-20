@@ -9,23 +9,18 @@ const items = [
   { id: "absent", label: "Absent", count: 1 },
 ];
 
-describe("SortableFilterStack", () => {
-  afterEach(() => { cleanup(); localStorage.clear(); });
+describe("SortableFilterStack status presets", () => {
+  afterEach(cleanup);
 
-  it("reorders tabs by dragging and persists their order", async () => {
-    render(SortableFilterStack, { items, storageKey: "test-order" });
-    const buttons = screen.getAllByRole("button");
-    await fireEvent.dragStart(buttons[0]);
-    await fireEvent.drop(buttons[2]);
-    expect(screen.getAllByRole("button").map((button) => button.textContent?.replace(/⠿/g, "").trim())).toEqual(["2 Late", "1 Absent", "4 Seen"]);
-    expect(JSON.parse(localStorage.getItem("test-order") || "[]")).toEqual(["late", "absent", "seen"]);
+  it("shows items in supplied order without HTML drag and drop", () => {
+    const { container } = render(SortableFilterStack, { items });
+    expect(screen.getAllByRole("button").map((button) => button.textContent?.trim())).toEqual(["Seen4", "Late2", "Absent1"]);
+    expect(container.querySelector("[draggable]")).toBeNull();
   });
 
-  it("restores persisted ordering and sends selected filter id", async () => {
-    localStorage.setItem("test-order", JSON.stringify(["absent", "seen", "late"]));
+  it("sends the selected preset id", async () => {
     let selected = "";
-    render(SortableFilterStack, { items, storageKey: "test-order", onSelect: (id) => selected = id });
-    expect(screen.getAllByRole("button")[0].textContent).toContain("Absent");
+    render(SortableFilterStack, { items, onSelect: (id) => selected = id });
     await fireEvent.click(screen.getByRole("button", { name: /Late/ }));
     expect(selected).toBe("late");
   });
