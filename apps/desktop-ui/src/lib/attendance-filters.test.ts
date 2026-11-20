@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { filterAttendanceRows, reorderItems, sortAttendanceRows, sortGroupsByProfilePatterns } from './attendance-filters';
+import { applyFilterDragEnd, filterAttendanceRows, reorderItems, sortAttendanceRows, sortGroupsByProfilePatterns } from './attendance-filters';
 
 const rows = [
   { canonicalName: '乙', pinyin: 'yi', currentStatus: 'present', group: 'B', isExpected: true, tags: ['seen'] },
@@ -29,5 +29,9 @@ describe('attendance filters', () => {
   });
   it('reorders items by pointer drag target index', () => {
     expect(reorderItems(['expectation','group'], 1, 0)).toEqual(['group','expectation']);
+  });
+  it('keeps a hidden expectation section in its slot when visible sections reorder', () => {
+    const result = applyFilterDragEnd({ sections: ['expectation','group','other'], groups: ['A','B'], expectations: ['expected','unexpected'] }, { source: { type: 'filter-section' } }, (items) => [...items].reverse(), ['group','other']);
+    expect(result.sections).toEqual(['expectation','other','group']);
   });
 });
