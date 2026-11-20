@@ -48,4 +48,20 @@ describe("LiveAttendanceView", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Capture Attendance" }));
     expect(capture).toHaveBeenCalledOnce();
   });
+
+  it("shows full status names and toggles a preset off on a second click", async () => {
+    const { container } = render(LiveAttendanceView, { view: "status", language: "en", record: { rows: [
+      { canonicalName: "Late Member", currentStatus: "late", wasLate: true, tags: ["late"] },
+      { canonicalName: "On Time Member", currentStatus: "present", tags: ["seen"] },
+    ] } });
+    const strip = container.querySelector(".filter-stack")!;
+    expect(strip.textContent).toContain("Late");
+    expect(strip.textContent).not.toMatch(/\bLt\b/);
+    const late = Array.from(strip.querySelectorAll<HTMLButtonElement>("button")).find((b) => b.textContent?.includes("Late"))!;
+    await fireEvent.click(late);
+    expect(screen.getByText("Late Member")).toBeTruthy();
+    expect(screen.queryByText("On Time Member")).toBeNull();
+    await fireEvent.click(late);
+    expect(screen.getByText("On Time Member")).toBeTruthy();
+  });
 });
