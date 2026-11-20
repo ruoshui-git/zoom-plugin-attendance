@@ -139,7 +139,7 @@
   </div>
   <div class="settings-actions">
     <button onclick={async()=>{try{await loadExampleDataQuiet()}catch(e:any){$toastMessage=e.message}}}>
-      {t("加载示例数据", "Load example data")}
+      {t("导入示例数据", "Load example data")}
     </button><button onclick={downloadBackup}>
       {t("导出完整备份", "Export full backup")}
     </button><button onclick={() => fileInput.click()}>

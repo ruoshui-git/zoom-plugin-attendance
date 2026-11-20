@@ -245,7 +245,7 @@ export async function loadExampleData() {
   await loadConfig();
   alert(
     t(
-      "已加载示例花名册、别名和四个考勤配置。",
+      "已导入示例数据。",
       "Example roster, aliases, and four profiles loaded.",
     ),
   );
@@ -660,6 +660,6 @@ export async function loadExampleDataQuiet() {
   const data = await response.json();
   if (!response.ok) throw Error(data.message || t("示例数据冲突，未添加任何数据", "Example data conflict; nothing was added"));
   await loadConfig();
-  set(s.toastMessage, t("已加载示例花名册、别名和四个考勤配置。", "Example roster, aliases, and four profiles loaded."));
+  set(s.toastMessage, t("已导入示例数据。", "Example roster, aliases, and four profiles loaded."));
   setTimeout(() => set(s.toastMessage, ""), 3000);
 }

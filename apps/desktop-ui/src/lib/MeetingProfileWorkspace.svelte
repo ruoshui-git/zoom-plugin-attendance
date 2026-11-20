@@ -7,6 +7,14 @@
   export let language = "en";
   export let onSaved: () => void = () => {};
   const t = (zh: string, en: string) => (language === "zh-CN" ? zh : en);
+  function importActionLabel(action: unknown) {
+    switch (String(action).toLowerCase()) {
+      case "add": case "added": case "create": case "created": return t("新增", "Add");
+      case "update": case "updated": return t("更新", "Update");
+      case "remove": case "removed": case "delete": case "deleted": return t("删除", "Delete");
+      default: return t("未知", "Unknown");
+    }
+  }
   let query = "",
     active = "all",
     sortKey = "name",
@@ -169,7 +177,7 @@
     if (
       !p ||
       !(await confirmDialog({
-        title: t("恢复工厂默认值", "Reset factory defaults"),
+        title: t("重置为出厂默认", "Reset factory defaults"),
         message: t(
           "将默认配置恢复为工厂设置（迟到 10 分钟、返回 8 分钟、启用、无分组）？",
           "Reset default profile to factory settings (late 10, return 8, active, no subgroups)?",
@@ -285,7 +293,7 @@
         {profiles.length}
         {t("条记录", "records")}
       </span><button class="primary" onclick={() => (bulkMode = true)}>
-        {t("批量选择", "Bulk Select")}
+        {t("批量管理", "Bulk Select")}
       </button><input
         bind:this={importFile}
         type="file"
@@ -314,7 +322,7 @@
       {t("名称排序", "Sort name")}
       {asc ? "↑" : "↓"}
     </button><button onclick={reset}>
-      {t("恢复工厂默认值", "Reset to factory defaults")}
+      {t("重置为出厂默认", "Reset to factory defaults")}
     </button>
   </div>
   {#if bulkMode}<div class="toolbar">
@@ -349,7 +357,7 @@
           bulkMode = false;
         }}
       >
-        {t("退出批量选择", "Exit Bulk Select")}
+        {t("退出批量管理", "Exit Bulk Select")}
       </button><button disabled={!selected.length} onclick={remove}>
         {t("删除所选", "Delete selected")}
       </button>
@@ -359,7 +367,7 @@
       <thead>
         <tr>
           {#if bulkMode}<th
-            ></th>{/if}{#each [["name", "Name", "名称"], ["description", "Description", "描述"], ["includedSubgroups", "Subgroups", "小组"], ["lateAfterMinutes", "Late (min)", "迟到(分)"], ["returnWindowMinutes", "Return (min)", "返回(分)"], ["active", "Active", "启用"]] as [key, en, zh]}<th>
+            ></th>{/if}{#each [["name", "Name", "名称"], ["description", "Description", "描述"], ["includedSubgroups", "Subgroups", "分组"], ["lateAfterMinutes", "Late (min)", "迟到(分)"], ["returnWindowMinutes", "Return (min)", "返回(分)"], ["active", "Active", "启用"]] as [key, en, zh]}<th>
               <button
                 class="sort"
                 onclick={() => {
@@ -408,7 +416,7 @@
     <summary>{t("通配符帮助", "Wildcard help")}</summary>
     <p>
       {t(
-        "仅支持 * 匹配任意字符。问号、方括号、大括号和 ** 不支持。留空小组表示不限制。",
+        "仅支持 * 匹配任意字符。问号、方括号、大括号和 ** 不支持。留空分组表示不限制。",
         "Only * is supported and matches any characters. ?, square brackets, braces, and ** are invalid. Empty subgroup list means no restriction.",
       )}
     </p>
@@ -432,7 +440,7 @@
         ></textarea>
       </label><label>
         {t(
-          "纳入小组（逗号或换行；* 通配符）",
+          "纳入分组（逗号或换行；* 通配符）",
           "Included subgroups (comma or newline; * wildcard)",
         )}<textarea bind:value={draft.includedSubgroups}></textarea>
       </label><label>
@@ -457,7 +465,7 @@
         )}<textarea bind:value={draft.topicKeywords}></textarea>
       </label><label>
         {t(
-          "小组排序（每行一个，可用 *）",
+          "分组排序（每行一个，可用 *）",
           "Group sort order (one per line, * allowed)",
         )}<textarea bind:value={draft.groupSortOrder}></textarea>
       </label><label class="check">
@@ -519,7 +527,7 @@
             </tr>
           </thead><tbody>
             {#each preview.changes || [] as c}<tr>
-                <td>{c.row}</td><td>{c.id}</td><td>{c.action}</td><td>
+                <td>{c.row}</td><td>{c.id}</td><td>{importActionLabel(c.action)}</td><td>
                   {c.reason || ""}
                 </td>
               </tr>{/each}

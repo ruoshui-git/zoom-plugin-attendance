@@ -42,7 +42,7 @@ const liveStatusLabels: Record<LiveStatus, { zh: string; en: string }> = {
 
 const matchStatusLabels: Record<MatchStatus, { zh: string; en: string }> = {
   'not-applicable': { zh: '不适用', en: 'N/A' },
-  matched: { zh: '已匹配', en: 'Matched' },
+  matched: { zh: '已关联', en: 'Matched' },
   unmatched: { zh: '未匹配', en: 'Unmatched' },
   guest: { zh: '来宾', en: 'Guest' },
   split: { zh: '多人共用', en: 'Shared' },
@@ -57,7 +57,7 @@ const participantLocationLabels: Record<
 };
 
 const sessionModeLabels: Record<SessionMode, { zh: string; en: string }> = {
-  generic: { zh: '通用模式', en: 'Generic' },
+  generic: { zh: '普通模式', en: 'Generic' },
   roster: { zh: '花名册模式', en: 'Roster' },
 };
 
@@ -76,41 +76,57 @@ export function getLiveStatusLabel(
   const label = liveStatusLabels[value as LiveStatus];
   return label
     ? pickText(resolveLanguage(language), label.zh, label.en)
-    : value;
+    : pickText(resolveLanguage(language), '未知', 'Unknown');
 }
 
 export function getMatchStatusLabel(
-  value: MatchStatus,
+  value: MatchStatus | string,
   language?: UiLanguage | Readable<UiLanguage>
 ) {
-  const label = matchStatusLabels[value];
+  const label = (matchStatusLabels as Record<string, { zh: string; en: string }>)[value];
   return label
     ? pickText(resolveLanguage(language), label.zh, label.en)
-    : value;
+    : pickText(resolveLanguage(language), '未知', 'Unknown');
 }
 
 export function getParticipantLocationLabel(
-  value?: ParticipantLocation,
+  value?: ParticipantLocation | string,
   language?: UiLanguage | Readable<UiLanguage>
 ) {
   if (!value) {
     return '';
   }
 
-  const label = participantLocationLabels[value];
+  const label = (participantLocationLabels as Record<string, { zh: string; en: string }>)[value];
   return label
     ? pickText(resolveLanguage(language), label.zh, label.en)
-    : value;
+    : pickText(resolveLanguage(language), '未知', 'Unknown');
 }
 
 export function getSessionModeLabel(
-  value: SessionMode,
+  value: SessionMode | string,
   language?: UiLanguage | Readable<UiLanguage>
 ) {
-  const label = sessionModeLabels[value];
+  const label = (sessionModeLabels as Record<string, { zh: string; en: string }>)[value];
   return label
     ? pickText(resolveLanguage(language), label.zh, label.en)
-    : value;
+    : pickText(resolveLanguage(language), '未知', 'Unknown');
+}
+
+export function getDecisionActionLabel(
+  value: string,
+  language?: UiLanguage | Readable<UiLanguage>
+) {
+  const labels: Record<string, { zh: string; en: string }> = {
+    match: { zh: '已关联', en: 'Matched' },
+    guest: { zh: '来宾', en: 'Guest' },
+    split: { zh: '共用账号拆分', en: 'Shared account split' },
+    name_change_keep_match: { zh: '名称变更保持匹配', en: 'Name change keep match' },
+  };
+  const label = labels[value];
+  return label
+    ? pickText(resolveLanguage(language), label.zh, label.en)
+    : pickText(resolveLanguage(language), '未知', 'Unknown');
 }
 
 export function getLiveStatusVariant(status: LiveStatus): BadgeVariant {
@@ -169,16 +185,18 @@ export function getEventTypeVariant(type: MeetingEventType): BadgeVariant {
 }
 
 export function getRecordSourceLabel(
-  source: SessionRecordSource,
+  source: SessionRecordSource | string,
   language?: UiLanguage | Readable<UiLanguage>
 ): { label: string; variant: BadgeVariant } {
   switch (source) {
     case 'meeting_live':
+    case 'live':
       return {
         label: pickText(resolveLanguage(language), '实时采集', 'Live Capture'),
         variant: 'info',
       };
     case 'main_import':
+    case 'imported':
       return {
         label: pickText(resolveLanguage(language), '导入', 'Imported'),
         variant: 'neutral',
@@ -190,7 +208,7 @@ export function getRecordSourceLabel(
       };
     default:
       return {
-        label: source,
+        label: pickText(resolveLanguage(language), '未知', 'Unknown'),
         variant: 'neutral',
       };
   }

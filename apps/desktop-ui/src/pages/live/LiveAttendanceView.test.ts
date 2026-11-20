@@ -1,11 +1,12 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
-import { settings } from "../../lib/stores";
+import { language, settings } from "../../lib/stores";
+import { uiLanguage } from "../../lib/i18n-core";
 import LiveAttendanceView from "./LiveAttendanceView.svelte";
 
 describe("LiveAttendanceView", () => {
-  afterEach(cleanup);
+  afterEach(() => { cleanup(); language.set("en"); uiLanguage.set("en"); });
 
   it("uses status summary items as click presets and searches names", async () => {
     const { container } = render(LiveAttendanceView, { view: "status", record: { rows: [
@@ -47,6 +48,18 @@ describe("LiveAttendanceView", () => {
     render(LiveAttendanceView, { view: "manual", state: { manualSnapshots: [] }, onCaptureManual: capture });
     await fireEvent.click(screen.getByRole("button", { name: "Capture Attendance" }));
     expect(capture).toHaveBeenCalledOnce();
+  });
+
+  it("localizes manual attendance values and hides unknown raw values in Chinese", () => {
+    language.set("zh-CN");
+    uiLanguage.set("zh-CN");
+    const { container } = render(LiveAttendanceView, { view: "manual", language: "zh-CN", state: { manualSnapshots: [{ timestamp: "2026-01-01T12:00:00.000Z", participants: [
+      { screenName: "测试参与者", matchStatus: "not-applicable", location: "unknown-x" },
+    ] }] } });
+    expect(container.textContent).toContain("不适用");
+    expect(container.textContent).toContain("未知");
+    expect(container.textContent).not.toContain("not-applicable");
+    expect(container.textContent).not.toContain("unknown-x");
   });
 
   it("shows full status names and toggles a preset off on a second click", async () => {

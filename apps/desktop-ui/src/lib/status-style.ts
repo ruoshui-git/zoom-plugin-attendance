@@ -10,7 +10,7 @@ const styles: Record<AttendanceStatus, { zh: string; en: string; shortZh: string
   missing: { zh: '缺席', en: 'Absent', shortZh: '缺席', shortEn: 'A', color: '#e53e3e', background: '#fef2f2', border: '#fecaca' },
   returned: { zh: '返回', en: 'Returned', shortZh: '返回', shortEn: 'R', color: '#596273', background: '#edf1f5', border: '#d7dde5' },
   ignored: { zh: '不计入', en: 'Ignored', shortZh: '不计入', shortEn: 'I', color: '#596273', background: '#edf1f5', border: '#d7dde5' },
-  total: { zh: '总计', en: 'Total', shortZh: '总计', shortEn: 'T', color: '#596273', background: '#edf1f5', border: '#d7dde5' },
+  total: { zh: '共', en: 'Total', shortZh: '共', shortEn: 'T', color: '#596273', background: '#edf1f5', border: '#d7dde5' },
 };
 
 export function statusStyle(status: string) {
@@ -18,6 +18,7 @@ export function statusStyle(status: string) {
 }
 
 export function statusLabel(status: string, language: string, compact = false) {
+  if (!(status in styles)) return language === 'zh-CN' ? '未知' : 'Unknown';
   const style = statusStyle(status);
   return language === 'zh-CN' ? (compact ? style.shortZh : style.zh) : (compact ? style.shortEn : style.en);
 }
