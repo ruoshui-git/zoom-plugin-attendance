@@ -12,10 +12,10 @@
   IgnorableNamespaces="uap rescap">
   <Identity Name="{{IdentityName}}" Publisher="{{Publisher}}" Version="{{Version}}" ProcessorArchitecture="x64" />
   <Properties>
-    <DisplayName>AttendFlow Desktop</DisplayName>
+    <DisplayName>ms-resource:AppDisplayName</DisplayName>
     <PublisherDisplayName>{{PublisherDisplayName}}</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
-    <Description>Attendance records for Zoom meetings, captured on your own computer.</Description>
+    <Description>ms-resource:AppDescription</Description>
   </Properties>
   <Dependencies>
     <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.17763.0" MaxVersionTested="10.0.26100.0" />
@@ -27,8 +27,8 @@
   <Applications>
     <Application Id="AttendFlowDesktop" Executable="AttendFlowDesktop.exe" EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
-        DisplayName="AttendFlow Desktop"
-        Description="Attendance records for Zoom meetings"
+        DisplayName="ms-resource:AppDisplayName"
+        Description="ms-resource:AppDescription"
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"
         Square44x44Logo="Assets\Square44x44Logo.png" />

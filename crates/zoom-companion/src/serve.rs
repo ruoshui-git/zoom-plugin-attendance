@@ -810,7 +810,7 @@ pub fn run(
 pub fn app() -> anyhow::Result<()> {
     use tao::{
         event::{Event, WindowEvent},
-        event_loop::{ControlFlow, EventLoop},
+        event_loop::{ControlFlow, EventLoopBuilder},
         window::WindowBuilder,
     };
     let exe = std::env::current_exe()?;
@@ -830,7 +830,8 @@ pub fn app() -> anyhow::Result<()> {
         }
         std::thread::sleep(Duration::from_millis(100));
     }
-    let event_loop = EventLoop::new();
+    let event_loop = EventLoopBuilder::<String>::with_user_event().build();
+    let title_proxy = event_loop.create_proxy();
     // Icon resource 1 is embedded by build.rs (packaging/assets/app.ico).
     let icon = {
         use tao::platform::windows::IconExtWindows;
@@ -850,6 +851,9 @@ pub fn app() -> anyhow::Result<()> {
     );
     let _webview = wry::WebViewBuilder::new_with_web_context(&mut web_context)
         .with_url(&url)
+        .with_document_title_changed_handler(move |title| {
+            let _ = title_proxy.send_event(title);
+        })
         .with_download_started_handler(|download_url, suggested_path| {
             if !download_url.contains("/api/config/roster/export")
                 && !download_url.contains("/api/config/aliases/export")
@@ -887,12 +891,12 @@ pub fn app() -> anyhow::Result<()> {
         .build(&window)?;
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
-        if let Event::WindowEvent {
-            event: WindowEvent::CloseRequested,
-            ..
-        } = event
-        {
-            *control_flow = ControlFlow::Exit;
+        match event {
+            Event::UserEvent(title) => window.set_title(&title),
+            Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
+                *control_flow = ControlFlow::Exit;
+            }
+            _ => {}
         }
     });
 }
