@@ -29,6 +29,9 @@ Companion documents:
 | Loopback redirect allowed for public clients | confirmed in Zoom's PKCE docs; no hosted redirect page needed |
 | Zoom SDK license | confirmed: see step 5 |
 | Public repo + GitHub security scans | done: https://github.com/ruoshui-git/zoom-plugin-attendance (history scrubbed: meeting ID replaced, author email = GitHub noreply); CodeQL default setup, Dependabot alerts + security PRs, secret scanning + push protection. CodeQL scans `main`: merge `release-prep` so the submitted code is scanned |
+| Technical Design form: tech stack text, architecture diagram, SSDLC/SAST evidence, policy PDFs | done: `zoom-marketplace.md` "Technical Design form fields", files in `review/` |
+| CodeQL alerts | 4 reported, all triaged and dismissed with reasons (2026-11-19); 0 open |
+| Production sign-in end to end | **not verified yet**: sign-in uses a fresh loopback port again (the earlier "Invalid redirect" came from the confidential Client ID) |
 | SDK connection inside MSIX | **not verified yet** (owner test, step 2) |
 
 ## Your steps
@@ -36,6 +39,7 @@ Companion documents:
 ### Step 1: production credentials (Marketplace > AttendFlow Desktop > Production)
 - [x] *Use Public Client OAuth*: on. Justification text: `zoom-marketplace.md` section 1.
 - [x] PKCE OAuth Redirect URL and OAuth allow list: `http://127.0.0.1:47811/callback`.
+- [ ] OAuth redirect URL (required, unused): `https://www.attendflow.org/desktop`, also in the allow list. Save the Production tab.
 - [x] Scope `plugin_sdk:read:connection_meta`; Features > Access > Plugin SDK enabled.
 
 ### Step 2: build and test the production package yourself
@@ -56,16 +60,16 @@ Companion documents:
    or signed in as a different user).
 
 ### Step 3: website
-- [ ] Review/merge zoom-tracker branch `desktop-pages`.
-- [ ] Copy `dist\AttendFlowDesktop-<ver>-x64.zip` to `zoom-tracker\www\public\downloads\`
+- [x] Review/merge zoom-tracker branch `desktop-pages`.
+- [x] Copy `dist\AttendFlowDesktop-<ver>-x64.zip` to `zoom-tracker\www\public\downloads\`
       (git-ignored). Keep `desktopZipUrl` empty in `www/src/lib/desktop.ts` so the public page
       does not offer it before approval; give reviewers the direct URL
       `https://www.attendflow.org/downloads/AttendFlowDesktop-<ver>-x64.zip` in the test plan.
-- [ ] Deploy: `firebase deploy --only hosting:www,hosting:docs` (from `zoom-tracker`).
+- [x] Deploy: `firebase deploy --only hosting:www,hosting:docs` (from `zoom-tracker`).
 
 ### Step 4: submit to Zoom
-- [ ] Listing, URLs, technical design, scope justification and test plan from `zoom-marketplace.md`.
-- [ ] Security evidence: GitHub code scanning / Dependabot results once the repo is public
+- [x] Listing, URLs, technical design, scope justification and test plan from `zoom-marketplace.md`.
+- [x] Security evidence: GitHub code scanning / Dependabot results once the repo is public
       (as you did for AttendFlow), plus `cargo audit` and `pnpm audit` output.
 - [ ] Optional: 3-5 minute demo video of the test plan (unlisted link).
 

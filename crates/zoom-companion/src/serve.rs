@@ -1247,10 +1247,10 @@ async fn api_zoom_status(State(a): State<App>, headers: HeaderMap) -> Response {
     Json(a.link.status.lock().unwrap().wire()).into_response()
 }
 
-/// Starts the browser sign-in (PKCE, loopback on the registered redirect port)
-/// and returns at once; progress arrives as `zoom_status` messages. Only one
-/// sign-in can wait for its redirect at a time (the port is fixed), so clicking
-/// again while one is pending reopens the same authorize URL.
+/// Starts the browser sign-in (PKCE, loopback on an ephemeral port) and returns at
+/// once; progress arrives as `zoom_status` messages. One sign-in waits for its
+/// redirect at a time: clicking again while it is pending reopens the same
+/// authorize URL.
 async fn api_zoom_sign_in(State(a): State<App>, headers: HeaderMap) -> Response {
     if let Some(r) = strict_origin(&a, &headers) {
         return r;
@@ -1281,7 +1281,7 @@ async fn api_zoom_sign_in(State(a): State<App>, headers: HeaderMap) -> Response 
     };
     a.link.login_pending.fetch_add(1, Ordering::SeqCst);
     set_zoom(&a, ZoomStatus::new(ZoomState::SigningIn, ""));
-    log::info!("opening browser for Zoom authorization (client_id={}, redirect {})", cfg.client_id, cfg.redirect_uri);
+    log::info!("opening browser for Zoom authorization (client_id={}, redirect {})", cfg.client_id, pending.redirect_uri());
     if let Err(e) = open_browser(pending.authorize_url()) {
         log::warn!("{e}");
     }

@@ -18,18 +18,22 @@ Sources checked 2026-11-18: [PKCE / public clients](https://developers.zoom.us/d
 |---|---|
 | App type | General app, **user-managed** |
 | Use Public Client OAuth | **On**. Production public client ID `_up3N0AUTXmUr5u0F74umg` is the default in `scripts\package.ps1` |
+| OAuth redirect URL (required field, not used by the app) | `https://www.attendflow.org/desktop` |
 | PKCE OAuth Redirect URL | `http://127.0.0.1:47811/callback` |
-| OAuth allow list | `http://127.0.0.1:47811/callback` |
+| OAuth allow list | `http://127.0.0.1:47811/callback` and `https://www.attendflow.org/desktop` |
 | Scopes | `plugin_sdk:read:connection_meta` (only this one) |
 | Features > Access | Plugin SDK enabled (Windows) |
 | Deauthorization | Zoom's standard removal (Option 1). No endpoint: the app has no server. See section 6 |
 
 Loopback is officially supported for PKCE public clients: "Use a numeric loopback
 literal (`127.0.0.1` or `[::1]`); do not use `localhost`" and "Zoom ignores only the
-port". In practice the production credentials matched the port exactly ("Invalid
-redirect ... (4,700)" for any other port, 2026-11-18), so the app always uses exactly
-`http://127.0.0.1:47811/callback`. If another program holds port 47811, the app shows
-a sign-in error naming the port.
+port", so each sign-in binds a fresh ephemeral port and `47811` in the registered URL
+is only a placeholder. This applies to the **public client ID** only: with the
+confidential Client ID, Zoom checks the port and shows "Invalid redirect ... (4,700)".
+
+The plain "OAuth redirect URL" is required on the Production tab but rejects loopback
+addresses. The app never uses it; it is where Zoom sends someone who clicks "Add" on the
+Marketplace listing, so the download page is the right target.
 
 ### Why a public client ("Use Public Client OAuth" justification)
 
@@ -39,7 +43,7 @@ Short version for the form field:
 > keep a client secret confidential: anything shipped in the executable can be extracted.
 > Following RFC 8252 (OAuth for native apps), it uses the public client ID with
 > Authorization Code + PKCE (S256), the system browser, and a loopback redirect
-> (http://127.0.0.1:47811/callback) that listens only during sign-in and checks
+> (http://127.0.0.1:<ephemeral port>/callback) that listens only during sign-in and checks
 > `state`. Tokens are stored encrypted with Windows DPAPI for the current user and sent only
 > to zoom.us. The only scope is plugin_sdk:read:connection_meta, used solely to authenticate
 > the Zoom Plugin SDK connection to Zoom Workplace on the same computer.
@@ -50,7 +54,7 @@ Long version (if the review asks for detail):
 > A client secret shipped inside a desktop executable cannot be kept confidential, so the
 > app uses the public client ID with Authorization Code + PKCE (S256), as recommended
 > for native apps by RFC 8252. The browser redirects to a loopback address
-> (`http://127.0.0.1:47811/callback`) that the app listens on only for the
+> (`http://127.0.0.1:<ephemeral port>/callback`) that the app listens on only for the
 > duration of the sign-in; the `state` parameter is verified. Tokens are stored on the
 > user's computer encrypted with Windows DPAPI (current user scope) and are only sent
 > to zoom.us. The token is used for a single purpose: authenticating the Zoom Plugin SDK
@@ -152,7 +156,7 @@ developer or third parties.
 meetings, on the user's computer. No analytics, no advertising, no AI training, no sale.
 
 **Token handling.** Authorization Code + PKCE (S256) with `state` validation; loopback
-redirect on 127.0.0.1:47811 (listening only during sign-in); tokens encrypted at rest with Windows
+redirect on 127.0.0.1 with an ephemeral port (listening only during sign-in); tokens encrypted at rest with Windows
 DPAPI (`CryptProtectData`, current-user scope, app-specific entropy); in-memory copies
 zeroed after use; never logged. Refresh tokens are rotated and re-persisted. Sign-out
 calls `POST /oauth/revoke` and deletes the token file.
@@ -181,6 +185,60 @@ no secrets in the repository. Before submission, run and keep the reports from:
 `pnpm audit` in `apps/desktop-ui`.
 
 **Vulnerability reporting.** security reports to support@attendflow.org.
+
+### Technical Design form fields
+
+**Technology stack** (paste):
+
+> AttendFlow Desktop is a native Windows 10/11 (x64) desktop application with no backend
+> server.
+> - Languages: Rust (application), C (thin adapter around the Zoom SDK), TypeScript and
+>   Svelte (user interface).
+> - Zoom: Zoom Plugin SDK for Windows (zToolSuiteIPCProxy.dll, unmodified, from Zoom).
+>   It authenticates with StartToolSuiteAuth and reads the in-meeting participant list and
+>   join/leave events from Zoom Workplace over local IPC.
+> - Zoom OAuth 2.0: /oauth/authorize, /oauth/token and /oauth/revoke, using Authorization
+>   Code + PKCE (S256) as a public client. Only scope: plugin_sdk:read:connection_meta.
+>   No Zoom REST APIs, webhooks or Zoom Apps SDK.
+> - Windows APIs: DPAPI (CryptProtectData) for token encryption, Microsoft Edge WebView2
+>   for the app window, ShellExecute to open the system browser for sign-in.
+> - Rust libraries: tokio and axum (local HTTP/WebSocket server bound to 127.0.0.1),
+>   ureq with rustls (HTTPS/TLS 1.2+ to zoom.us), rusqlite with bundled SQLite (local
+>   storage), wry/tao (WebView2 window), serde, sha2/base64/getrandom (PKCE), url, chrono,
+>   clap, log, windows-sys.
+> - UI libraries: Svelte 5, Luxon; built with Vite.
+> - Storage: a local SQLite file and a DPAPI-encrypted token file in the user's profile.
+>   No cloud storage or databases.
+> - Build and distribution: Cargo, pnpm, MSVC; MSIX package through the Microsoft Store.
+> - Security tooling: GitHub CodeQL (Rust, C/C++, JavaScript/TypeScript), Dependabot,
+>   secret scanning with push protection.
+
+**Architecture diagram:** upload `docs/publishing/review/architecture-diagram.png`
+(source: `architecture-diagram.html`; re-render with Edge headless if it changes).
+
+**Application development:**
+
+| Question | Answer | Upload |
+|---|---|---|
+| Secure software development process (SSDLC)? | **Yes** | `review/pdf/ssdlc.pdf` |
+| SAST and/or DAST? | **Yes** (SAST: CodeQL; the report says plainly that there is no hosted DAST because the app exposes no network service) | `review/pdf/sast-dast-evidence.pdf` |
+| Periodic third-party penetration testing? | **No** | none |
+
+**Additional documents:**
+
+| Item | File |
+|---|---|
+| Vulnerability management policy | `review/pdf/vulnerability-management-policy.pdf` |
+| Security policy | `review/pdf/security-policy.pdf` |
+| Privacy policy | print https://www.attendflow.org/privacy to PDF after the `desktop-pages` branch is deployed (it has the `#desktop` section) |
+| Data retention/protection policy | `review/pdf/data-retention-and-protection-policy.pdf` |
+| Incident management and response policy | `review/pdf/incident-response-policy.pdf` |
+| Infrastructure/dependency management policy | `review/pdf/infrastructure-and-dependency-management-policy.pdf` |
+| SOC2, ISO 27001 | leave empty (none) |
+
+Re-generate the PDFs after editing the Markdown sources:
+`.\docs\publishing\review\export-pdfs.ps1` (needs pandoc and Edge). Update the numbers
+in `sast-dast-evidence.md` from the GitHub Security tab first.
 
 ---
 

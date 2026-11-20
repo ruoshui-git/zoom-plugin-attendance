@@ -49,8 +49,9 @@ pub struct OAuthConfig {
     /// Marketplace **public client ID** (App Credentials -> Use Public Client
     /// OAuth). Not the confidential Client ID. Not a secret.
     pub client_id: String,
-    /// PKCE redirect registered on the Marketplace app, used verbatim (including
-    /// the port: production credentials match it exactly).
+    /// PKCE redirect registered on the Marketplace app; the port is replaced by
+    /// a fresh ephemeral port per attempt (Zoom ignores loopback ports for
+    /// public clients).
     pub redirect_uri: String,
 }
 
@@ -84,7 +85,7 @@ pub fn login_interactive(
 
 /// A sign-in waiting for the browser redirect: the loopback listener is bound and
 /// the authorize URL is fixed, so the same URL can be opened again (the user closed
-/// the tab) without starting a second listener on the same port.
+/// the tab) instead of starting a second sign-in.
 pub struct PendingLogin {
     server: loopback::LoopbackServer,
     client_id: String,
@@ -94,37 +95,34 @@ pub struct PendingLogin {
     url: String,
 }
 
-/// Binds the loopback listener on the **registered** redirect port and builds the
-/// authorize URL. Zoom's docs say the loopback port is ignored, but production
-/// credentials rejected ephemeral ports ("Invalid redirect", 4,700) on 2026-11-18,
-/// so the redirect must match the registered URL exactly.
+/// Binds the loopback listener on a fresh ephemeral port and builds the authorize
+/// URL with that port. Zoom matches loopback redirects of public (PKCE) clients
+/// ignoring only the port, so the registered `http://127.0.0.1:47811/callback`
+/// accepts any port. (The "Invalid redirect" errors of 2026-11-18 came from using
+/// the confidential Client ID, which has no such rule.)
 pub fn begin_login(cfg: &OAuthConfig) -> Result<PendingLogin, AuthError> {
     if cfg.client_id.trim().is_empty() {
         return Err(AuthError::Config("client_id is empty".into()));
     }
-    let target = loopback::parse_redirect(&cfg.redirect_uri)?;
-    if target.port == 0 {
-        return Err(AuthError::Config(format!(
-            "redirect_uri {} needs an explicit port matching the Marketplace app",
-            cfg.redirect_uri
-        )));
-    }
-    let port = target.port;
-    let server = loopback::LoopbackServer::bind(target).map_err(|e| {
-        AuthError::Loopback(format!(
-            "port {port} is in use by another program, so the Zoom sign-in redirect cannot be received ({e})"
-        ))
-    })?;
-    let redirect_uri = cfg.redirect_uri.clone();
+    let mut target = loopback::parse_redirect(&cfg.redirect_uri)?;
+    target.port = 0;
+    let server = loopback::LoopbackServer::bind(target)?;
+    let redirect_uri = loopback::with_port(&cfg.redirect_uri, server.port())?;
+    let effective = OAuthConfig { client_id: cfg.client_id.clone(), redirect_uri: redirect_uri.clone() };
     let pkce = pkce::Pkce::generate();
     let state = pkce::random_state();
-    let url = authorize_url(cfg, &pkce.challenge, &state);
+    let url = authorize_url(&effective, &pkce.challenge, &state);
     Ok(PendingLogin { server, client_id: cfg.client_id.clone(), redirect_uri, pkce, state, url })
 }
 
 impl PendingLogin {
     pub fn authorize_url(&self) -> &str {
         &self.url
+    }
+
+    /// The redirect actually sent to Zoom (registered URL with this attempt's port).
+    pub fn redirect_uri(&self) -> &str {
+        &self.redirect_uri
     }
 
     /// Waits for the redirect, exchanges the code and persists the tokens.
@@ -199,24 +197,20 @@ pub fn valid_tokens(store: &TokenStore, client_id: &str) -> Result<TokenSet, Aut
 mod tests {
     use super::*;
     #[test]
-    fn begin_login_uses_the_registered_redirect_exactly() {
-        // Free port chosen by the OS, then released, so the test does not depend on 47811.
-        let port = std::net::TcpListener::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
-        let redirect = format!("http://127.0.0.1:{port}/callback");
-        let cfg = OAuthConfig { client_id: "CID".into(), redirect_uri: redirect.clone() };
-        let pending = begin_login(&cfg).unwrap();
-        let u = url::Url::parse(pending.authorize_url()).unwrap();
-        let q: std::collections::HashMap<_, _> = u.query_pairs().into_owned().collect();
-        assert_eq!(q["redirect_uri"], redirect, "no ephemeral port substitution");
-        // While it waits, a second sign-in cannot take the port and says why.
-        match begin_login(&cfg) {
-            Err(AuthError::Loopback(m)) => assert!(m.contains("in use"), "{m}"),
-            other => panic!("expected port-in-use error, got {:?}", other.err()),
+    fn begin_login_uses_a_fresh_loopback_port() {
+        let cfg = OAuthConfig { client_id: "CID".into(), redirect_uri: "http://127.0.0.1:47811/callback".into() };
+        let a = begin_login(&cfg).unwrap();
+        let b = begin_login(&cfg).unwrap();
+        for p in [&a, &b] {
+            let u = url::Url::parse(p.authorize_url()).unwrap();
+            let q: std::collections::HashMap<_, _> = u.query_pairs().into_owned().collect();
+            assert_eq!(q["redirect_uri"], p.redirect_uri());
+            let r = url::Url::parse(p.redirect_uri()).unwrap();
+            assert_eq!((r.host_str(), r.path()), (Some("127.0.0.1"), "/callback"));
         }
-        drop(pending);
-        assert!(begin_login(&cfg).is_ok(), "port is released with the pending login");
-        let no_port = OAuthConfig { client_id: "CID".into(), redirect_uri: "http://127.0.0.1/callback".into() };
-        assert!(matches!(begin_login(&no_port), Err(AuthError::Config(_))));
+        assert_ne!(a.redirect_uri(), b.redirect_uri(), "each attempt has its own port");
+        let none = OAuthConfig { client_id: " ".into(), redirect_uri: cfg.redirect_uri.clone() };
+        assert!(matches!(begin_login(&none), Err(AuthError::Config(_))));
     }
 
     #[test]

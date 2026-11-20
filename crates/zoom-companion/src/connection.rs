@@ -72,8 +72,8 @@ pub struct ZoomLink {
     pub sign_out: AtomicBool,
     /// Browser sign-ins in flight; while > 0 the worker does not report `SignedOut`.
     pub login_pending: AtomicUsize,
-    /// Authorize URL of the sign-in waiting for its redirect (one at a time: the
-    /// redirect port is fixed). "Sign in" again just reopens this URL.
+    /// Authorize URL of the sign-in waiting for its redirect (one at a time).
+    /// "Sign in" again just reopens this URL.
     pub login_url: Mutex<Option<String>>,
 }
 
