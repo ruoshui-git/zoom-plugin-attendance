@@ -337,6 +337,9 @@ pub fn adapt_bridge_events(events: &[Value]) -> Result<Vec<Value>, EngineError> 
                     out.push(json!({"eventType":et,"timestamp":ts,"participantUUID":format!("{instance}:{uid}"),"screenName":u["name"].as_str().unwrap_or(""),"role":if u["host"].as_bool().unwrap_or(false){"host"}else{"attendee"},"location":if waiting{"waiting-room"}else{"meeting"}}));
                 }
                 if let Some(previous) = previous_roster {
+                    // Sorted so rebuilt records get stable event ids.
+                    let mut previous: Vec<_> = previous.into_iter().collect();
+                    previous.sort_by(|a, b| a.0.cmp(&b.0));
                     for (uuid, participant) in previous {
                         if !present.contains(&uuid) {
                             let waiting = participant["location"] == "waiting-room";
