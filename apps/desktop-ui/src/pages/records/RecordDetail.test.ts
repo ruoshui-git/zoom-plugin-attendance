@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
 import { configs, language, meeting, record, recordEvents, settings, stateValue } from "../../lib/stores";
 import RecordDetail from "./RecordDetail.svelte";
+import { uiLanguage } from "../../lib/i18n-core";
 
 describe("RecordDetail attendance filters", () => {
   afterEach(() => {
@@ -11,6 +12,7 @@ describe("RecordDetail attendance filters", () => {
     configs.set({});
     settings.set({});
     language.set("en");
+    uiLanguage.set("en");
     meeting.set(null);
     stateValue.set({ manualSnapshots: [], reconciliationDecisions: [], raiseHandCaptures: [] });
     recordEvents.set([]);
@@ -41,5 +43,19 @@ describe("RecordDetail attendance filters", () => {
     expect(screen.queryByText("Ada")).toBeNull();
     await fireEvent.click(late);
     expect(screen.getByText("Ada")).toBeTruthy();
+  });
+
+  it("localizes manual attendance values and hides unknown raw values in Chinese", async () => {
+    language.set("zh-CN");
+    uiLanguage.set("zh-CN");
+    stateValue.set({ manualSnapshots: [{ timestamp: "2026-01-01T12:00:00.000Z", participants: [
+      { screenName: "测试参与者", matchStatus: "not-applicable", location: "unknown-x" },
+    ] }] });
+    const { container } = render(RecordDetail);
+    await fireEvent.click(screen.getByRole("tab", { name: /手动考勤记录/ }));
+    expect(container.textContent).toContain("不适用");
+    expect(container.textContent).toContain("未知");
+    expect(container.textContent).not.toContain("not-applicable");
+    expect(container.textContent).not.toContain("unknown-x");
   });
 });

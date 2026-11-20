@@ -33,6 +33,14 @@
   let file: HTMLInputElement;
   const zh = () => language === "zh-CN";
   const t = (c: string, e: string) => (zh() ? c : e);
+  function importActionLabel(action: unknown) {
+    switch (String(action).toLowerCase()) {
+      case "add": case "added": case "create": case "created": return t("新增", "Add");
+      case "update": case "updated": return t("更新", "Update");
+      case "remove": case "removed": case "delete": case "deleted": return t("删除", "Delete");
+      default: return t("未知", "Unknown");
+    }
+  }
   const names = (r: any) =>
     `${r.personId} ${r.canonicalName || ""} ${r.pinyin || ""}`;
   const rowKey = (r: any) =>
@@ -331,7 +339,7 @@
           bulkMode = true;
         }}
       >
-        {t("批量选择", "Bulk Select")}
+        {t("批量管理", "Bulk Select")}
       </button><input
         bind:this={file}
         type="file"
@@ -363,7 +371,7 @@
           bulkMode = false;
         }}
       >
-        {t("退出批量选择", "Exit Bulk Select")}
+        {t("退出批量管理", "Exit Bulk Select")}
       </button><span>
         {t(`已选择 ${selected.length} 项`, `${selected.length} selected`)}
       </span>
@@ -499,7 +507,7 @@
         </label>{:else}<label>
           {t("昵称", "Nickname")} *<input bind:value={form.zoomName} />
         </label><label>
-          {t("花名册人员", "Roster person")} *<select
+          {t("对应人员", "Roster person")} *<select
             bind:value={form.personId}
           >
             <option value="">
@@ -611,7 +619,7 @@
             </tr>
           </thead><tbody>
             {#each preview.changes || [] as c}<tr>
-                <td>{c.row}</td><td>{c.action}</td><td>{c.id}</td><td>
+                <td>{c.row}</td><td>{importActionLabel(c.action)}</td><td>{c.id}</td><td>
                   {JSON.stringify(c.before)}
                 </td><td>{JSON.stringify(c.after)}</td><td>{c.notes}</td><td>
                   {c.aliasImpact || 0}

@@ -18,11 +18,11 @@
     { key: 'topic', label: t('会议','Meeting'), value: (item: any) => item.topic || item.meetingNumber || '—' },
     { key: 'startedAt', label: t('开始时间','Started'), value: (item: any) => item.startedAt ? dateTime(item.startedAt) : '—', sortValue: (item: any) => Date.parse(item.startedAt || '') || 0 },
     { key: 'endedAt', label: t('结束时间','Ended'), value: (item: any) => item.endedAt ? dateTime(item.endedAt) : '—', sortValue: (item: any) => Date.parse(item.endedAt || '') || 0 },
-    { key: 'mode', label: t('考勤模式','Attendance Mode'), value: (item: any) => (($recordModes[item.instanceId] || item.mode) === 'roster') ? t('花名册','Roster') : t('通用','Generic') },
-    { key: 'attended', label: t('出席人数','# Attended'), value: (item: any) => String($recordCounts[item.instanceId] ?? '—'), sortValue: (item: any) => $recordCounts[item.instanceId] ?? -1 },
+    { key: 'mode', label: t('考勤模式','Attendance Mode'), value: (item: any) => (($recordModes[item.instanceId] || item.mode) === 'roster') ? t('花名册','Roster') : t('普通模式','Generic') },
+    { key: 'attended', label: t('参与人数','# Attended'), value: (item: any) => String($recordCounts[item.instanceId] ?? '—'), sortValue: (item: any) => $recordCounts[item.instanceId] ?? -1 },
     { key: 'status', label: t('状态','Status'), value: (item: any) => item.endedAt ? (item.exportedAt ? t('已下载','Downloaded') : t('已结束','Ended')) : t('进行中','In progress') },
   ];
-  const modeOptions = [['all','全部','All modes'],['generic','通用','Generic'],['roster','花名册','Roster']];
+  const modeOptions = [['all','全部','All modes'],['generic','普通模式','Generic'],['roster','花名册','Roster']];
   const sourceOptions = [['all','全部','All sources'],['live','实时采集','Live'],['imported','导入','Imported']];
   const statusOptions = [['all','全部','All status'],['ended','已结束','Ended'],['active','进行中','Active']];
   async function openRecord(item: any) {
@@ -44,7 +44,7 @@
 
 <section class="records-page">
   <div class="heading"><div><h2>{t('考勤记录','Attendance Records')}</h2><p>{filtered.length} / {$meetings.length} {t('条记录','records')}</p></div><div class="actions"><button onclick={() => importInput.click()}>{t('导入','Import')}</button><input bind:this={importInput} type="file" accept=".json,application/json" hidden onchange={previewRecordImport}/><button onclick={exportSelection}>{$selectedRecords.length ? t('导出所选','Export Selected') : t('导出全部','Export All')}</button><button class="danger" disabled={!$selectedRecords.length} onclick={deleteSelection}>{t('删除所选','Delete Selected')}</button></div></div>
-  <div class="filters"><label>{t('搜索日期/时间','Search date/time')}<input aria-label={t('按日期或主题搜索','Search by date/time')} placeholder={t('例如：2024-03、2024-03-15 或会议主题','e.g. 2024-03, 2024-03-15 or meeting topic')} bind:value={search}/></label><label>{t('考勤模式','Attendance Mode')}<select bind:value={modeFilter}>{#each filterOptions(modeOptions) as option}<option value={option.value}>{option.label}</option>{/each}</select></label><label>{t('来源','Source')}<select bind:value={sourceFilter}>{#each filterOptions(sourceOptions) as option}<option value={option.value}>{option.label}</option>{/each}</select></label><label>{t('状态','Status')}<select bind:value={statusFilter}>{#each filterOptions(statusOptions) as option}<option value={option.value}>{option.label}</option>{/each}</select></label></div>
+  <div class="filters"><label>{t('搜索日期/时间','Search date/time')}<input aria-label={t('按日期/时间或主题搜索','Search by date/time or topic')} placeholder={t('例如：2024-03、2024-03-15 或会议主题','e.g. 2024-03, 2024-03-15 or meeting topic')} bind:value={search}/></label><label>{t('考勤模式','Attendance Mode')}<select bind:value={modeFilter}>{#each filterOptions(modeOptions) as option}<option value={option.value}>{option.label}</option>{/each}</select></label><label>{t('来源','Source')}<select bind:value={sourceFilter}>{#each filterOptions(sourceOptions) as option}<option value={option.value}>{option.label}</option>{/each}</select></label><label>{t('状态','Status')}<select bind:value={statusFilter}>{#each filterOptions(statusOptions) as option}<option value={option.value}>{option.label}</option>{/each}</select></label></div>
   <DataTable items={filtered} {columns} selectedIds={$selectedRecords} rowId={(item) => String(item.instanceId)} emptyLabel={t('没有符合条件的会议记录','No matching meeting records')} selectAllLabel={t('全选','Select all')} onSelectionChange={selectRecords} onRowClick={openRecord}/>
 </section>
 
