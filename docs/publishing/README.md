@@ -87,4 +87,5 @@ Client software development kits"). Findings:
 
 ### Step 6: Microsoft Store (after Zoom approval)
 Upload the **MSIX** (not an EXE/MSI installer): see [microsoft-store.md](microsoft-store.md).
+Reserve the Chinese display name `出勤助手桌面版` in Partner Center for the zh-CN listing; otherwise, Store certification rejects the package.
 Then set `desktopStoreUrl` in `www/src/lib/desktop.ts` and redeploy.

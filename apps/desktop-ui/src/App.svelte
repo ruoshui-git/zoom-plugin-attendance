@@ -36,6 +36,7 @@
   import Toast from "./lib/common/Toast.svelte";
 
   $: $language = $uiLanguage;
+  $: appTitle = $language ? t("出勤助手桌面版", "AttendFlow Desktop") : "AttendFlow Desktop";
   $: banner = $language ? zoomBanner($zoom, t) : null;
   $: matchingCount =
     ($record.rows || []).filter((row: any) => row.matchStatus === "unmatched")
@@ -99,7 +100,7 @@
   });
 </script>
 
-<svelte:head><title>AttendFlow Desktop</title></svelte:head>
+<svelte:head><title>{appTitle}</title></svelte:head>
 <Toast message={$toastMessage} />
 <ConfirmDialog />
 <div class="shell">

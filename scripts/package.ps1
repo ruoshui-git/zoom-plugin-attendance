@@ -88,6 +88,7 @@ if ($Msix) {
     if (Test-Path $layout) { Remove-Item $layout -Recurse -Force }
     Copy-Item $out $layout -Recurse
     Copy-Item (Join-Path $script:RepoRoot 'packaging\msix\Assets') (Join-Path $layout 'Assets') -Recurse
+    Copy-Item (Join-Path $script:RepoRoot 'packaging\msix\Strings') (Join-Path $layout 'Strings') -Recurse
     $manifest = (Get-Content (Join-Path $script:RepoRoot 'packaging\msix\AppxManifest.template.xml') -Raw).
         Replace('{{IdentityName}}', $IdentityName).
         Replace('{{Publisher}}', [Security.SecurityElement]::Escape($Publisher)).
@@ -97,7 +98,7 @@ if ($Msix) {
 
     # resources.pri lets Windows pick the unplated 256 px taskbar icon variant.
     $priCfg = Join-Path $dist 'priconfig.xml'
-    & $makepri createconfig /cf $priCfg /dq en-US /o | Out-Null
+    & $makepri createconfig /cf $priCfg /dq en-US_zh-CN /o | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "makepri createconfig failed ($LASTEXITCODE)" }
     & $makepri new /pr $layout /cf $priCfg /of (Join-Path $layout 'resources.pri') /o | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "makepri new failed ($LASTEXITCODE)" }

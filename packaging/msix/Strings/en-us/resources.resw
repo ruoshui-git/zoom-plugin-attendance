@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <data name="AppDisplayName" xml:space="preserve"><value>AttendFlow Desktop</value></data>
+  <data name="AppDescription" xml:space="preserve"><value>Attendance records for Zoom meetings, captured on your own computer.</value></data>
+</root>
