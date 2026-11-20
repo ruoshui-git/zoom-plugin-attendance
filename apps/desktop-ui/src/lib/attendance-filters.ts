@@ -81,8 +81,14 @@ export function filterAttendanceRows(rows: any[], options: { status?: string; gr
     if (options.status && options.status !== 'total' && !(row.tags || []).includes(options.status)) return false;
     if (options.roster && options.groups && !options.groups.includes(groupKey(row.group))) return false;
     if (options.roster && options.expectations && !options.expectations.includes(row.isExpected === false ? 'unexpected' : 'expected')) return false;
-    if (!needle) return true;
-    const names = [row.canonicalName, row.zoomName, row.pinyin, row.zoomPinyin, row.canonicalPinyin, ...(Array.isArray(row.zoomNames) ? row.zoomNames : [])];
-    return names.some((name) => typeof name === 'string' && name.length > 0 && normalizeSearchName(name).includes(needle));
+    return rowMatchesSearch(row, needle);
   });
+}
+
+/** True when any of the row's names (incl. earlier Zoom names) contains the query, compared after normalizeSearchName. */
+export function rowMatchesSearch(row: any, query: string) {
+  const needle = normalizeSearchName(query || '');
+  if (!needle) return true;
+  const names = [row.canonicalName, row.zoomName, row.pinyin, row.zoomPinyin, row.canonicalPinyin, ...(Array.isArray(row.zoomNames) ? row.zoomNames : [])];
+  return names.some((name) => typeof name === 'string' && name.length > 0 && normalizeSearchName(name).includes(needle));
 }

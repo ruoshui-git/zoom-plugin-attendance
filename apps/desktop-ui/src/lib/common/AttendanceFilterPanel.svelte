@@ -1,7 +1,7 @@
 <script lang="ts">
   import { settings } from "../stores";
   import { filterRowsByTag } from "../record-tools";
-  import { applyFilterDragEnd, sortGroupsByProfilePatterns, sortAttendanceRows } from "../attendance-filters";
+  import { applyFilterDragEnd, sortGroupsByProfilePatterns, sortAttendanceRows, rowMatchesSearch } from "../attendance-filters";
   import { groupKey } from "../group-label";
   import { DragDropProvider, DragOverlay, PointerSensor } from "@dnd-kit/svelte";
   import { PointerActivationConstraints } from "@dnd-kit/dom";
@@ -33,7 +33,7 @@
   $: if (groupNames.length && !selectedGroups.length) selectedGroups = [...groupNames];
   $: if ($settings.filterDefaultsClosed !== appliedFilterDefault) { appliedFilterDefault = $settings.filterDefaultsClosed; filterOpen = !$settings.filterDefaultsClosed; }
   $: sortedRows = sortAttendanceRows(rows, { sectionOrder: rosterMode ? sectionOrder : [], groups: groupOrder, expectations: expectationOrder, selectedGroups, selectedExpectations: expectations, ascending });
-  $: filteredRows = filterRowsByTag(sortedRows, activeFilter).filter((r: any) => (!rosterMode || selectedGroups.includes(groupKey(r.group))) && (!rosterMode || expectations.includes(r.isExpected === false ? "unexpected" : "expected")) && (!search || `${r.canonicalName || ""} ${r.zoomName || ""} ${r.pinyin || ""} ${r.zoomPinyin || ""} ${r.canonicalPinyin || ""}`.toLowerCase().includes(search.toLowerCase())));
+  $: filteredRows = filterRowsByTag(sortedRows, activeFilter).filter((r: any) => (!rosterMode || selectedGroups.includes(groupKey(r.group))) && (!rosterMode || expectations.includes(r.isExpected === false ? "unexpected" : "expected")) && rowMatchesSearch(r, search));
   $: onRows(filteredRows);
   function handleDragEnd(event: any) {
     const visible = sectionOrder.filter((section) => section !== "expectation" || rows.some((row: any) => row.isExpected === false));

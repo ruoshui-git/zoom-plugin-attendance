@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyFilterDragEnd, filterAttendanceRows, reorderItems, sortAttendanceRows, sortGroupsByProfilePatterns } from './attendance-filters';
+import { applyFilterDragEnd, filterAttendanceRows, reorderItems, sortAttendanceRows, sortGroupsByProfilePatterns, rowMatchesSearch } from './attendance-filters';
 
 const rows = [
   { canonicalName: '乙', pinyin: 'yi', currentStatus: 'present', group: 'B', isExpected: true, tags: ['seen'] },
@@ -52,5 +52,15 @@ describe('attendance filters', () => {
   it('keeps a hidden expectation section in its slot when visible sections reorder', () => {
     const result = applyFilterDragEnd({ sections: ['expectation','group','other'], groups: ['A','B'], expectations: ['expected','unexpected'] }, { source: { type: 'filter-section' } }, (items) => [...items].reverse(), ['group','other']);
     expect(result.sections).toEqual(['expectation','other','group']);
+  });
+});
+
+describe('rowMatchesSearch', () => {
+  it('matches earlier Zoom names and ignores spacing/punctuation', () => {
+    const row = { canonicalName: '王伟', zoomName: '新名字', zoomNames: ['旧名字', '新名字'], pinyin: 'wangwei' };
+    expect(rowMatchesSearch(row, '旧名')).toBe(true);
+    expect(rowMatchesSearch(row, 'Wang Wei')).toBe(true);
+    expect(rowMatchesSearch(row, '  ')).toBe(true);
+    expect(rowMatchesSearch(row, '别人')).toBe(false);
   });
 });
