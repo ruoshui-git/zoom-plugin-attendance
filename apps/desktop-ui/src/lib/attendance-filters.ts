@@ -53,6 +53,10 @@ export function reorderFilterOrder<T extends { id: string }>(order: string[], vi
   return mergeVisibleOrder(order, visibleOrder, reordered);
 }
 
+export function normalizeSearchName(value: string) {
+  return value.trim().toLowerCase().replace(/[\s　]+/g, '').replace(/[()（）[\]【】{}<>《》"'“”‘’.,，。!！?？、:：;；\-_]/g, '');
+}
+
 export function sortAttendanceRows(rows: any[], options: { sectionOrder?: string[]; groups?: string[]; expectations?: string[]; selectedGroups?: string[]; selectedExpectations?: string[]; ascending?: boolean } = {}) {
   const { sectionOrder = DEFAULT_FILTER_SECTION_ORDER, groups = [], expectations = ['expected', 'unexpected'], selectedGroups = [], selectedExpectations = ['expected', 'unexpected'], ascending = true } = options;
   return [...rows].sort((a, b) => {
@@ -71,13 +75,13 @@ export function sortAttendanceRows(rows: any[], options: { sectionOrder?: string
 }
 
 export function filterAttendanceRows(rows: any[], options: { status?: string; groups?: string[]; expectations?: string[]; search?: string; roster?: boolean } = {}) {
-  const needle = (options.search || '').trim().toLowerCase();
+  const needle = normalizeSearchName(options.search || '');
   return rows.filter((row) => {
     if (options.status && options.status !== 'total' && !(row.tags || []).includes(options.status)) return false;
     if (options.roster && options.groups && !options.groups.includes(row.group || '未分组')) return false;
     if (options.roster && options.expectations && !options.expectations.includes(row.isExpected === false ? 'unexpected' : 'expected')) return false;
     if (!needle) return true;
-    const names = [row.zoomName, row.canonicalName, row.pinyin, row.zoomPinyin, row.canonicalPinyin].filter(Boolean).join(' ').toLowerCase();
-    return names.includes(needle);
+    const names = [row.canonicalName, row.zoomName, row.pinyin, row.zoomPinyin, row.canonicalPinyin, ...(Array.isArray(row.zoomNames) ? row.zoomNames : [])];
+    return names.some((name) => typeof name === 'string' && name.length > 0 && normalizeSearchName(name).includes(needle));
   });
 }
