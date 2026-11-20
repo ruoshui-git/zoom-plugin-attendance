@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { meeting, record, recordEvents, stateValue, configs, language, mode, page } from "../lib/stores";
+  import { meeting, record, recordEvents, stateValue, configs, language, mode, requestedLiveSubtab } from "../lib/stores";
   import { captureManual, captureHands, applyOverrides, saveDecision, selectProfile, profileGuess, switchMode } from "../lib/api";
   import { t, dateTime } from "../lib/ui";
   import ProfileOverrideForm from "../lib/ProfileOverrideForm.svelte";
@@ -25,7 +25,11 @@
   ];
   $: unmatchedCount = ($record.rows || []).filter((r: any) => r.matchStatus === "unmatched").length;
   $: nameChanges = $record.record?.nameChangeEvents || [];
-  $: if ($page === "matching") { primary = "attendance"; secondary = "matching"; }
+  $: if ($requestedLiveSubtab) {
+    primary = "attendance";
+    secondary = $requestedLiveSubtab;
+    requestedLiveSubtab.set(null);
+  }
   $: liveLabel = $meeting?.status === "ended" ? t("已结束", "Ended") : t("进行中", "Live");
   function pickPrimary(id: string) { primary = id; if (id === "attendance") secondary = "status"; }
 </script>
@@ -42,7 +46,7 @@
     </div>
   </section>
   <PrimaryTabs items={primaryTabs} active={primary} onSelect={pickPrimary} />
-  {#if primary === "attendance"}<SecondaryTabs items={attendanceTabs.map((x) => ({ ...x, label: x.id === "matching" && unmatchedCount ? `${x.label} · ${unmatchedCount}` : x.id === "names" && nameChanges.length ? `${x.label} · ${nameChanges.length}` : x.label }))} active={secondary} onSelect={(id) => { secondary = id; if (id !== "matching") $page = "live"; }} />{/if}
+  {#if primary === "attendance"}<SecondaryTabs items={attendanceTabs.map((x) => ({ ...x, label: x.id === "matching" && unmatchedCount ? `${x.label} · ${unmatchedCount}` : x.id === "names" && nameChanges.length ? `${x.label} · ${nameChanges.length}` : x.label }))} active={secondary} onSelect={(id) => { secondary = id; }} />{/if}
   {#if primary === "attendance" && secondary === "matching"}
     <NameMatchingPanel rows={$record.rows || []} decisions={$stateValue.reconciliationDecisions || []} roster={$configs.roster || []} aliases={$configs.aliases || []} nameChanges={nameChanges} language={$language} onDecision={(d) => saveDecision(d)} onRevert={(id) => saveDecision(null, id)} />
   {:else}

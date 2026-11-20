@@ -19,7 +19,6 @@
     page,
     connected,
     meeting,
-    mode,
     language,
     zoom,
     toastMessage,
@@ -28,7 +27,7 @@
   } from "./lib/stores";
   import { t, dateTime } from "./lib/ui";
   import LivePage from "./pages/LivePage.svelte";
-  import MatchingPage from "./pages/MatchingPage.svelte";
+  import SidebarNav from "./lib/SidebarNav.svelte";
   import RecordsPage from "./pages/RecordsPage.svelte";
   import ConfigurationPage from "./pages/ConfigurationPage.svelte";
   import SettingsPage from "./pages/SettingsPage.svelte";
@@ -50,14 +49,6 @@
               Date.parse(event.timestamp || ""),
         ),
     ).length;
-  const nav = [
-    ["live", "◉", "Live", "出勤"],
-    ["matching", "⇄", "Name Matching", "名称匹配"],
-    ["records", "▤", "Records", "考勤记录"],
-    ["configuration", "⌘", "Configuration", "考勤配置"],
-    ["settings", "⚙", "Settings", "其他设置"],
-  ];
-
   onMount(() => {
     setUiLanguage(
       (localStorage.getItem("attendflow-desktop.ui-language") ||
@@ -109,20 +100,7 @@
       <span class="mark">A</span>
       <div><b>AttendFlow</b><small>DESKTOP</small></div>
     </div>
-    <nav>
-      {#each nav as [key, icon, en, zh]}
-        <button class:active={$page === key} onclick={() => page.set(key)}>
-          <span>{icon}</span>{t(
-            zh,
-            en,
-          )}{#if key === "matching" && $mode === "roster" && matchingCount > 0}<small
-              class="nav-badge"
-            >
-              {matchingCount}
-            </small>{/if}
-        </button>
-      {/each}
-    </nav>
+    <SidebarNav {matchingCount} />
     <div class="connection">
       <i class:up={$connected && $zoom?.state === "connected"}
       ></i>{zoomSidebarLabel($zoom, $connected, t)}
@@ -135,13 +113,11 @@
         <h1>
           {$page === "live"
             ? t("出勤", "Live Meeting")
-            : $page === "matching"
-              ? t("昵称匹配", "Name Matching")
-              : $page === "records"
-                ? t("考勤记录", "Records")
-                : $page === "configuration"
-                  ? t("考勤配置", "Configuration")
-                  : t("其他设置", "Settings")}
+            : $page === "records"
+              ? t("考勤记录", "Records")
+              : $page === "configuration"
+                ? t("考勤配置", "Configuration")
+                : t("其他设置", "Settings")}
         </h1>
       </div>
       <div class="header-actions">
@@ -176,7 +152,6 @@
       </div>
     {/if}
     {#if $page === "live"}<LivePage />
-    {:else if $page === "matching"}<MatchingPage />
     {:else if $page === "records"}<RecordsPage />
     {:else if $page === "configuration"}<ConfigurationPage />
     {:else}<SettingsPage />

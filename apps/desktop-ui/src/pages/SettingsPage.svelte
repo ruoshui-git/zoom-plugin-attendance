@@ -21,6 +21,8 @@
     stateRevision,
     configRevision,
     stagedState,
+    uiScale,
+    UI_SCALE_STEPS,
   } from "../lib/stores";
   import {
     get,
@@ -67,6 +69,19 @@
   import { confirmDialog } from "../lib/ui";
 
   let fileInput: HTMLInputElement;
+  const scaleLabels = [
+    ["紧凑", "Compact"], ["中等", "Medium"], ["大号", "Large"],
+    ["超大", "Extra Large"], ["特大", "Maximum"],
+  ];
+  $: uiScaleIndex = Math.max(0, UI_SCALE_STEPS.indexOf($uiScale));
+  function changeUiScale(event: Event) {
+    const index = Number((event.currentTarget as HTMLInputElement).value);
+    const scale = UI_SCALE_STEPS[index];
+    if (!scale || scale === $uiScale) return;
+    uiScale.set(scale);
+    const [zh, en] = scaleLabels[index];
+    $toastMessage = t(`设置端界面字号已设为${zh}。`, `Settings panel UI size set to ${en}.`);
+  }
   async function restoreBackup(event: Event) {
     const input=event.currentTarget as HTMLInputElement; const file=input.files?.[0]; if(!file)return;
     try { const data=JSON.parse(await file.text()); const counts=`${data.rosterPeople?.length||0} roster · ${data.aliasMappings?.length||0} aliases · ${data.attendanceProfiles?.length||0} profiles`;
@@ -102,23 +117,12 @@
     <select bind:value={$settings.exportLanguage} onchange={saveSettings}>
       <option value="en">English</option><option value="zh">简体中文</option>
     </select>
-  </label><label>
-    {t("大小", "UI size")}
-    <select
-      value={localStorage.getItem("ui-size") || "medium"}
-      onchange={(e) => localStorage.setItem("ui-size", e.currentTarget.value)}
-    >
-      <option value="compact">{t("紧凑", "Compact")}</option><option
-        value="medium"
-      >
-        {t("中等", "Medium")}
-      </option><option value="large">{t("大", "Large")}</option><option
-        value="xlarge"
-      >
-        {t("特大", "X Large")}
-      </option><option value="xxlarge">{t("超大", "XX Large")}</option>
-    </select>
-  </label><div class="settings-toggle"><ToggleSwitch label={t("默认折叠筛选器", "Collapse filters by default")} bind:checked={$settings.filterDefaultsClosed} onChange={saveSettings}/></div>
+  </label><div class="ui-scale-control">
+    <div class="ui-scale-heading"><span>{t("大小", "UI size")}</span><b>{t(scaleLabels[uiScaleIndex][0], scaleLabels[uiScaleIndex][1])}</b></div>
+    <div class="ui-scale-ends" aria-hidden="true"><span>A-</span><span>A+</span></div>
+    <input class="ui-scale-slider" type="range" min="0" max="4" step="1" value={uiScaleIndex} aria-label={t("设置端界面字号", "Settings panel UI size")} oninput={changeUiScale} />
+    <div class="ui-scale-ticks" aria-hidden="true">{#each UI_SCALE_STEPS as scale, index}<span class:active={index <= uiScaleIndex}></span>{/each}</div>
+  </div><div class="settings-toggle"><ToggleSwitch label={t("默认折叠筛选器", "Collapse filters by default")} bind:checked={$settings.filterDefaultsClosed} onChange={saveSettings}/></div>
   <div class="zoom-account">
     <div>
       <b>{t("Zoom 账号", "Zoom account")}</b>
@@ -166,3 +170,13 @@
   </div>
 </section>
 <ConfirmDialog />
+<style>
+  .ui-scale-control{max-width:420px;margin:16px 0 10px;color:#596273;font-size:12px}
+  .ui-scale-heading,.ui-scale-ends{display:flex;justify-content:space-between;align-items:center}
+  .ui-scale-heading b{color:var(--text);font-weight:600}
+  .ui-scale-ends{margin:12px 2px 0;color:#7d8490;font-weight:650}
+  .ui-scale-slider{display:block;width:100%;accent-color:var(--accent);padding:0!important;min-height:20px!important}
+  .ui-scale-ticks{display:flex;justify-content:space-between;padding:0 6px;margin-top:-2px}
+  .ui-scale-ticks span{width:5px;height:5px;border-radius:50%;background:var(--line-strong)}
+  .ui-scale-ticks span.active{background:var(--accent)}
+</style>
