@@ -49,5 +49,14 @@ describe('NameMatchingPanel action visibility', () => {
     ], aliases: [{ zoomName: 'Known Nick', personId: 10 }] });
     expect(screen.getAllByRole('button', { name: 'Keep Match' })).toHaveLength(1);
   });
+
+  it('collapses multiple pending changes for one participant into earliest to latest', () => {
+    render(NameMatchingPanel, { rows: [], roster, decisions: [], nameChanges: [
+      { id: 'n1', sessionParticipantId: 'p1', previousScreenName: 'A', nextScreenName: 'B', timestamp: '2026-01-01T10:00:00Z' },
+      { id: 'n2', sessionParticipantId: 'p1', previousScreenName: 'B', nextScreenName: 'C', timestamp: '2026-01-02T10:00:00Z' },
+    ] });
+    expect(screen.getAllByText('A → C')).toHaveLength(1);
+    expect(screen.getByTestId('name-matching-panel')).toBeTruthy();
+  });
 });
 // @vitest-environment happy-dom

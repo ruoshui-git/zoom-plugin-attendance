@@ -20,6 +20,11 @@ describe('attendance filters', () => {
     expect(sortAttendanceRows(rows, { sectionOrder:['group'], groups:['B','A'], selectedGroups:['A','B'] })[0].group).toBe('B');
     expect(filterAttendanceRows(rows, { roster:true, groups:['A'] })).toHaveLength(2);
   });
+  it('matches engine and empty ungrouped values to the single ungrouped chip', () => {
+    const ungrouped = [{ group: '__UNGROUPED__' }, { group: '' }];
+    expect(filterAttendanceRows(ungrouped, { roster: true, groups: ['未分组'] })).toEqual(ungrouped);
+    expect(filterAttendanceRows(ungrouped, { roster: true, groups: ['未分组', 'A', 'B'] })).toEqual(ungrouped);
+  });
   it('status preset filters to one status and base order is status then pinyin', () => {
     expect(filterAttendanceRows(rows, { status:'late' }).map((r) => r.canonicalName)).toEqual(['丁']);
     expect(sortAttendanceRows(rows, { sectionOrder:[] }).map((r) => r.canonicalName)).toEqual(['甲','乙','丁']);
