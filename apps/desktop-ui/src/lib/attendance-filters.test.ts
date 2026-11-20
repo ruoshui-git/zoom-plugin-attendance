@@ -24,6 +24,20 @@ describe('attendance filters', () => {
     expect(filterAttendanceRows(rows, { status:'late' }).map((r) => r.canonicalName)).toEqual(['丁']);
     expect(sortAttendanceRows(rows, { sectionOrder:[] }).map((r) => r.canonicalName)).toEqual(['甲','乙','丁']);
   });
+  it('searches current and historical names independently with normalized text', () => {
+    const searchRows = [
+      { canonicalName: 'Ada Lovelace', zoomName: '新名字', zoomNames: ['旧名字', '新名字'] },
+      { canonicalName: "O'Neil", zoomName: 'Other' },
+      { canonicalName: 'Alpha', zoomName: 'Beta' },
+    ];
+    expect(filterAttendanceRows(searchRows, { search: '旧名' })).toEqual([searchRows[0]]);
+    expect(filterAttendanceRows(searchRows, { search: 'ada lovelace' })).toEqual([searchRows[0]]);
+    expect(filterAttendanceRows(searchRows, { search: 'adalovelace' })).toEqual([searchRows[0]]);
+    expect(filterAttendanceRows(searchRows, { search: 'oneil' })).toEqual([searchRows[1]]);
+    expect(filterAttendanceRows(searchRows, { search: 'AlphaBeta' })).toEqual([]);
+    expect(filterAttendanceRows(searchRows, { search: '' })).toEqual(searchRows);
+    expect(filterAttendanceRows(searchRows, { search: '　   ' })).toEqual(searchRows);
+  });
   it('seeds chip order from profile patterns', () => {
     expect(sortGroupsByProfilePatterns(['Blue','Red','Green'], ['Red','Blue'])).toEqual(['Red','Blue','Green']);
   });
