@@ -283,9 +283,16 @@ pub fn adapt_bridge_events(events: &[Value]) -> Result<Vec<Value>, EngineError> 
         if kind == "users" {
             let action = e.get("action").and_then(Value::as_str).unwrap_or("");
             if let Some(users) = e.get("users").and_then(Value::as_array) {
-                if matches!(action, "sync_all" | "syncAll") {
+                let is_snapshot = matches!(action, "sync_all" | "syncAll");
+                let previous_roster = if is_snapshot {
+                    Some(live_roster.clone())
+                } else {
+                    None
+                };
+                if is_snapshot {
                     live_roster.clear();
                 }
+                let mut present = HashSet::<String>::new();
                 for u in users {
                     let uid = u
                         .get("userId")
@@ -303,6 +310,11 @@ pub fn adapt_bridge_events(events: &[Value]) -> Result<Vec<Value>, EngineError> 
                         u["name"].as_str().unwrap_or("").into(),
                     );
                     let uuid = format!("{instance}:{uid}");
+                    present.insert(uuid.clone());
+                    let previous_location = previous_roster
+                        .as_ref()
+                        .and_then(|roster| roster.get(&uuid))
+                        .and_then(|p| p["location"].as_str());
                     if action == "left" {
                         live_roster.remove(&uuid);
                     } else {
@@ -314,9 +326,23 @@ pub fn adapt_bridge_events(events: &[Value]) -> Result<Vec<Value>, EngineError> 
                         "add" if waiting => "waitingRoomJoinFromOutside",
                         "add" => "join",
                         "update" => "update",
+                        _ if is_snapshot
+                            && previous_location
+                                == Some(if waiting { "waiting-room" } else { "meeting" }) =>
+                        {
+                            "update"
+                        }
                         _ => "snapshot",
                     };
                     out.push(json!({"eventType":et,"timestamp":ts,"participantUUID":format!("{instance}:{uid}"),"screenName":u["name"].as_str().unwrap_or(""),"role":if u["host"].as_bool().unwrap_or(false){"host"}else{"attendee"},"location":if waiting{"waiting-room"}else{"meeting"}}));
+                }
+                if let Some(previous) = previous_roster {
+                    for (uuid, participant) in previous {
+                        if !present.contains(&uuid) {
+                            let waiting = participant["location"] == "waiting-room";
+                            out.push(json!({"eventType":if waiting{"waitingRoomLeave"}else{"leave"},"timestamp":ts,"participantUUID":uuid,"screenName":participant["screenName"],"role":participant["role"],"location":participant["location"]}));
+                        }
+                    }
                 }
                 let snapshot: Vec<Value> = live_roster.values().cloned().collect();
                 out.push(
