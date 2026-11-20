@@ -597,7 +597,7 @@ export async function zoomSignOut() {
       ? data.revoked
         ? t("已退出 Zoom 并移除授权", "Signed out and access removed")
         : t(
-            "已退出。请在 Zoom 网站的“已添加的应用”中移除出勤助手桌面版。",
+            "已退出。请在 Zoom 网站的“已添加的应用”中移除 AttendFlow Desktop。",
             "Signed out. Remove AttendFlow Desktop under Added apps on the Zoom website.",
           )
       : t("退出失败", "Sign-out failed"),
