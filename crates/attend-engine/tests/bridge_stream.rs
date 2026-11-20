@@ -3,6 +3,85 @@ use attend_engine::{
 };
 use serde_json::{json, Value};
 
+fn snapshot_record(events: &[Value]) -> attend_engine::Record {
+    let normalized = adapt_bridge_events(events).unwrap();
+    let first = normalized.first().unwrap()["timestamp"].as_str().unwrap();
+    let last = normalized.last().unwrap()["timestamp"].as_str().unwrap();
+    build_record(
+        MeetingMeta {
+            meeting_id: events[0]["instanceId"].as_str().unwrap().into(),
+            meeting_topic: "resume".into(),
+            started_at: first.into(),
+            ended_at: None,
+        },
+        &normalized,
+        EngineConfig::default(),
+        EngineState::default(),
+        EngineOptions::default(),
+        last,
+    )
+    .unwrap()
+}
+
+#[test]
+fn resumed_sync_all_deduplicates_joins_and_closes_absent_users() {
+    use attend_engine::MovementType;
+    let instance = "resume-repro";
+    let base = 1_795_172_436_792_i64;
+    let person = json!({"userId":16778240,"name":"毛若水","host":true,"waitingRoom":false});
+    let mut repeated = vec![
+        json!({"kind":"users","action":"sync_all","instanceId":instance,"at":base,"users":[person]}),
+    ];
+    for at in [base + 72_505, base + 183_757, base + 598_558] {
+        repeated.push(json!({"kind":"instance_resumed","instanceId":instance,"at":at}));
+        repeated.push(json!({"kind":"users","action":"sync_all","instanceId":instance,"at":at,"users":[person]}));
+    }
+    repeated.push(json!({"kind":"instance_ended","instanceId":instance,"at":base+670_074}));
+    let repeated_record = snapshot_record(&repeated);
+    let one_record = snapshot_record(&[repeated[0].clone(), repeated.last().unwrap().clone()]);
+    let joins = repeated_record
+        .movement_events
+        .iter()
+        .filter(|m| m.kind == MovementType::JoinedBefore)
+        .count();
+    assert_eq!(joins, 1);
+    assert_eq!(
+        repeated_record.rows[0].total_presence_minutes,
+        one_record.rows[0].total_presence_minutes
+    );
+
+    let departed = snapshot_record(&[
+        json!({"kind":"users","action":"sync_all","instanceId":instance,"at":base,"users":[person]}),
+        json!({"kind":"instance_resumed","instanceId":instance,"at":base+300_000}),
+        json!({"kind":"users","action":"sync_all","instanceId":instance,"at":base+300_000,"users":[]}),
+        json!({"kind":"instance_ended","instanceId":instance,"at":base+600_000}),
+    ]);
+    assert!(departed
+        .movement_events
+        .iter()
+        .any(|m| m.kind == MovementType::Leave));
+    assert_eq!(
+        departed.rows[0].current_status,
+        attend_engine::AttendanceStatus::LeftEarly
+    );
+    assert!(departed.rows[0].total_presence_minutes < 10);
+
+    let new_user = snapshot_record(&[
+        json!({"kind":"users","action":"sync_all","instanceId":instance,"at":base,"users":[]}),
+        json!({"kind":"instance_resumed","instanceId":instance,"at":base+60_000}),
+        json!({"kind":"users","action":"sync_all","instanceId":instance,"at":base+60_000,"users":[{"userId":8,"name":"New User"}]}),
+        json!({"kind":"instance_ended","instanceId":instance,"at":base+120_000}),
+    ]);
+    assert_eq!(
+        new_user
+            .movement_events
+            .iter()
+            .filter(|m| m.kind == MovementType::JoinedBefore)
+            .count(),
+        1
+    );
+}
+
 fn derive_companion(events: &[Value], options: EngineOptions) -> attend_engine::Record {
     let normalized = adapt_bridge_events(events).unwrap();
     let first = normalized.first().unwrap()["timestamp"].as_str().unwrap();
