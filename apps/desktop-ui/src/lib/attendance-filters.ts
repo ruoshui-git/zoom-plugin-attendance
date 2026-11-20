@@ -28,6 +28,31 @@ export function reorderItems<T>(items: T[], from: number, to: number) {
   const next = [...items]; const [item] = next.splice(from, 1); next.splice(to, 0, item); return next;
 }
 
+/** Merge a reordered visible subset back into its original slots. */
+export function mergeVisibleOrder<T>(all: T[], visible: T[], reorderedVisible: T[]) {
+  const visibleSet = new Set(visible);
+  let index = 0;
+  return all.map((item) => visibleSet.has(item) ? reorderedVisible[index++] : item);
+}
+
+/** Pure order update used by the filter panel's dnd-kit onDragEnd handler. */
+export function applyFilterDragEnd(orders: { sections: string[]; groups: string[]; expectations: string[] }, event: any, useMove: (items: {id:string}[], event: any) => {id:string}[], visibleSections = orders.sections) {
+  if (event?.canceled) return { sections: [...orders.sections], groups: [...orders.groups], expectations: [...orders.expectations] };
+  const source = event?.operation?.source ?? event?.source;
+  const key = source?.type === 'filter-section' ? 'sections' : source?.type === 'filter-group' ? 'groups' : source?.type === 'filter-expectation' ? 'expectations' : null;
+  if (!key) return { sections: [...orders.sections], groups: [...orders.groups], expectations: [...orders.expectations] };
+  const current = key === 'sections' ? visibleSections : orders[key];
+  const moved = useMove(current.map((id) => ({ id })), event).map((item) => item.id);
+  return { ...orders, [key]: key === 'sections' ? mergeVisibleOrder(orders.sections, visibleSections, moved) : moved };
+}
+
+/** Apply a dnd-kit sortable event to a filter order, preserving hidden section slots. */
+export function reorderFilterOrder<T extends { id: string }>(order: string[], visibleOrder: string[], event: any, useMove: (items: T[], event: any) => T[]) {
+  const visible = visibleOrder.map((id) => ({ id })) as T[];
+  const reordered = useMove(visible, event).map((item) => item.id);
+  return mergeVisibleOrder(order, visibleOrder, reordered);
+}
+
 export function sortAttendanceRows(rows: any[], options: { sectionOrder?: string[]; groups?: string[]; expectations?: string[]; selectedGroups?: string[]; selectedExpectations?: string[]; ascending?: boolean } = {}) {
   const { sectionOrder = DEFAULT_FILTER_SECTION_ORDER, groups = [], expectations = ['expected', 'unexpected'], selectedGroups = [], selectedExpectations = ['expected', 'unexpected'], ascending = true } = options;
   return [...rows].sort((a, b) => {
