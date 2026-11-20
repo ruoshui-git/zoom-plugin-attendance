@@ -26,6 +26,7 @@
     stateValue,
   } from "./lib/stores";
   import { t, dateTime } from "./lib/ui";
+  import appIcon from "./assets/app-icon.png";
   import LivePage from "./pages/LivePage.svelte";
   import SidebarNav from "./lib/SidebarNav.svelte";
   import RecordsPage from "./pages/RecordsPage.svelte";
@@ -97,8 +98,11 @@
 <div class="shell">
   <aside>
     <div class="brand">
-      <span class="mark">A</span>
-      <div><b>AttendFlow</b><small>DESKTOP</small></div>
+      <img class="mark" src={appIcon} alt="" width="35" height="35" />
+      <div>
+        <b>{t("出勤助手", "AttendFlow")}</b>
+        <small class:zh={$language === "zh-CN"}>{t("桌面版", "DESKTOP")}</small>
+      </div>
     </div>
     <SidebarNav {matchingCount} />
     <div class="connection">
