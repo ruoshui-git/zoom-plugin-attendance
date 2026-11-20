@@ -4,13 +4,8 @@
   import { getLiveStatusLabel, getMatchStatusLabel } from "../../lib/session-labels";
   import { filterRowsByTag, deriveHandEntries, eventTypeCounts } from "../../lib/record-tools";
   import SortableFilterStack from "../../lib/common/SortableFilterStack.svelte";
-  import ChipFilter from "../../lib/common/ChipFilter.svelte";
+  import AttendanceFilterPanel from "../../lib/common/AttendanceFilterPanel.svelte";
   import { settings } from "../../lib/stores";
-  import { DragDropProvider, DragOverlay, PointerSensor } from "@dnd-kit/svelte";
-  import { PointerActivationConstraints } from "@dnd-kit/dom";
-  import { createSortable } from "@dnd-kit/svelte/sortable";
-  import { move } from "@dnd-kit/helpers";
-  import { applyFilterDragEnd, sortGroupsByProfilePatterns, sortAttendanceRows } from "../../lib/attendance-filters";
   import StatusBadge from "../../lib/common/StatusBadge.svelte";
   import NameMatchingPanel from "../../lib/NameMatchingPanel.svelte";
   import { statusStyle, statusLabel } from "../../lib/status-style";
@@ -18,35 +13,13 @@
   export let onCaptureManual: () => void = () => {}; export let onCaptureHands: () => void = () => {};
   export let onDecision: (d: any) => Promise<void> = async () => {}; export let onRevert: (id: string) => Promise<void> = async () => {};
   export let onOverrides: (p?: any) => Promise<void> = async () => {}; export let onSelectProfile: (id: string) => Promise<void> = async () => {}; export let onModeChange: (mode: string) => Promise<void> = async () => {};
-  let activeFilter = "", search = "", entryType = "", newest = true;
-  let filterOpen = !$settings.filterDefaultsClosed;
-  let appliedFilterDefault = $settings.filterDefaultsClosed;
-  let sectionOrder = ["expectation", "group"], expectationOrder = ["expected", "unexpected"], groupOrder: string[] = [];
-  let groupNames: string[] = [];
-  let lastProfileOrderKey = "";
-  let expectations = ["expected", "unexpected"], selectedGroups: string[] = [];
-  let expectationOpen = true, groupOpen = true, ascending = true;
-  const sensors = [PointerSensor.configure({ activationConstraints: [new PointerActivationConstraints.Distance({ value: 5 })] })];
+  let activeFilter = "", search = "", entryType = "", newest = true, ascending = true, filteredRows: any[] = [];
   const tLocal = (zh: string, en: string) => language === "zh-CN" ? zh : en;
   const statusDefs = [
     ["seen", "到过", "Seen", "seen"], ["full_present", "全程", "Full Present", "fullPresent"], ["late", "迟到", "Late", "late"], ["returned", "返回", "Returned", "returned"], ["left_early", "早退", "Left Early", "leftEarly"], ["missing", "缺席", "Absent", "missing"], ["ignored", "不计入", "Ignored", "ignored"], ["total", "总计", "Total", "total"],
   ];
   $: rows = record.rows || [];
   $: rosterMode = mode === "roster" && (configs.roster || []).length > 0;
-  $: groupNames = [...new Set<string>((configs.roster || []).map((p: any) => String(p.group || "未分组")))];
-  $: profileGroupOrder = settingsProfile?.groupSortOrder?.length ? sortGroupsByProfilePatterns(groupNames, settingsProfile.groupSortOrder) : groupNames.slice().sort((a: string,b: string) => a.localeCompare(b, "zh-CN"));
-  $: profileOrderKey = profileGroupOrder.join("\u0000");
-  $: if (profileOrderKey !== lastProfileOrderKey) { lastProfileOrderKey = profileOrderKey; groupOrder = [...profileGroupOrder]; }
-  $: if (!groupOrder.length || groupOrder.some((g) => !groupNames.includes(g))) { groupOrder = [...groupOrder.filter((g) => groupNames.includes(g)), ...profileGroupOrder.filter((g: string) => !groupOrder.includes(g))]; selectedGroups = [...selectedGroups.filter((g) => groupNames.includes(g)), ...groupNames.filter((g: string) => !selectedGroups.includes(g))]; }
-  $: if (groupNames.length && !selectedGroups.length) selectedGroups = [...groupNames];
-  $: if ($settings.filterDefaultsClosed !== appliedFilterDefault) { appliedFilterDefault = $settings.filterDefaultsClosed; filterOpen = !$settings.filterDefaultsClosed; }
-  $: sortedRows = sortAttendanceRows(rows, { sectionOrder: rosterMode ? sectionOrder : [], groups: groupOrder, expectations: expectationOrder, selectedGroups, selectedExpectations: expectations, ascending });
-  $: filteredRows = filterRowsByTag(sortedRows, activeFilter).filter((r: any) => (!rosterMode || selectedGroups.includes(r.group || "未分组")) && (!rosterMode || expectations.includes(r.isExpected === false ? "unexpected" : "expected")) && (!search || `${r.canonicalName || ""} ${r.zoomName || ""} ${r.pinyin || ""} ${r.zoomPinyin || ""} ${r.canonicalPinyin || ""}`.toLowerCase().includes(search.toLowerCase())));
-  function handleDragEnd(event: any) {
-    const visible = sectionOrder.filter((section) => section !== 'expectation' || rows.some((row: any) => row.isExpected === false));
-    const next = applyFilterDragEnd({ sections: sectionOrder, groups: groupOrder, expectations: expectationOrder }, event, move as any, visible);
-    sectionOrder = next.sections; groupOrder = next.groups; expectationOrder = next.expectations;
-  }
   $: statItems = statusDefs.filter((d: any) => d[0] !== "full_present" || mode === "roster").map((d: any) => ({ id: d[0], label: t(d[1], d[2]), color: statusStyle(d[0]).color, count: d[0] === "total" ? (record.summary?.total ?? rows.length) : (record.summary?.[d[3]] ?? filterRowsByTag(rows, d[0]).length) }));
   $: movement = record.record?.movementEvents || record.movementEvents || [];
   $: visibleMovement = movement.filter((e: any) => (!entryType || (e.type || e.eventType) === entryType) && (!search || (e.participant?.screenName || "").toLowerCase().includes(search.toLowerCase()))).slice().sort((a: any,b: any) => (Date.parse(a.timestamp)-Date.parse(b.timestamp)) * (newest ? -1 : 1));
@@ -72,39 +45,7 @@
 {#if view === "status"}
   <section class="status-view">
     <div class="summary-row"><SortableFilterStack items={statItems} active={activeFilter} onSelect={(id) => activeFilter = activeFilter === id ? '' : id} /><div class="mode-switch" aria-label={t("考勤模式", "Attendance mode")}><button class:chosen={mode === 'generic'} onclick={() => onModeChange('generic')}>{t("通用", "Generic")}</button><button class:chosen={mode === 'roster'} onclick={() => onModeChange('roster')}>{t("花名册", "Roster")}</button></div></div>
-    <div class="filters-panel">
-      <header><button class="panel-title" onclick={() => filterOpen = !filterOpen}>{filterOpen ? '⌄' : '›'} {t("筛选器", "Filters")} <span>· {t("分组", "groups")} {rosterMode ? selectedGroups.length : 0}/{rosterMode ? groupNames.length : 0}</span></button><button onclick={() => { activeFilter = ''; expectations = ['expected','unexpected']; expectationOrder = ['expected','unexpected']; selectedGroups = [...groupNames]; groupOrder = [...profileGroupOrder]; sectionOrder = ['expectation','group']; search = ''; }}>{t("重置", "Reset")}</button></header>
-      {#if filterOpen}
-        <div class="filter-controls"><button onclick={() => { expectationOpen = true; groupOpen = true; }}>{t("全部展开", "Expand all")}</button><button onclick={() => { expectationOpen = false; groupOpen = false; }}>{t("全部折叠", "Collapse all")}</button><button onclick={() => ascending = !ascending}>{ascending ? t("拼音升序", "Pinyin ascending") : t("拼音降序", "Pinyin descending")}</button></div>
-        {#if rosterMode}
-          <DragDropProvider {sensors} onDragEnd={handleDragEnd}>
-          {#each sectionOrder.filter((section) => section !== 'expectation' || rows.some((row: any) => row.isExpected === false)) as section, si (section)}
-            {@const sectionSortable = createSortable({id: section, index: si, type: 'filter-section', accept: 'filter-section'})}
-            <div class="filter-section" role="listitem" data-dragging={sectionSortable.isDragging} data-over={sectionSortable.isDropTarget} {@attach sectionSortable.attach}>
-              <div class="section-head"><button class="drag-handle" aria-label={t("拖动排序", "Drag to reorder")} {@attach sectionSortable.attachHandle}>⋮⋮</button><button class="section-toggle" onclick={() => section === 'group' ? groupOpen = !groupOpen : expectationOpen = !expectationOpen}>{section === 'group' ? t("分组", "Groups") : t("范围筛选", "Roster Scope")}</button></div>
-              {#if section === 'group' ? groupOpen : expectationOpen}
-                <div class="chip-filters">
-                  {#if section === 'group'}
-                    {#each groupOrder as group, gi (group)}
-                      {@const groupSortable = createSortable({id: group, index: gi, type: 'filter-group', accept: 'filter-group'})}
-                      <button class:active={selectedGroups.includes(group)} class="filter-chip" class:dragging={groupSortable.isDragging} {@attach groupSortable.attach} {@attach groupSortable.attachHandle} onclick={() => selectedGroups = selectedGroups.includes(group) ? selectedGroups.filter((g) => g !== group) : [...selectedGroups, group]}>{group}</button>
-                    {/each}
-                  {:else}
-                    {#each expectationOrder as expectation, ei (expectation)}
-                      {@const expectationSortable = createSortable({id: expectation, index: ei, type: 'filter-expectation', accept: 'filter-expectation'})}
-                      <button class:active={expectations.includes(expectation)} class="filter-chip" class:dragging={expectationSortable.isDragging} {@attach expectationSortable.attach} {@attach expectationSortable.attachHandle} onclick={() => expectations = expectations.includes(expectation) ? expectations.filter((g) => g !== expectation) : [...expectations, expectation]}>{expectation === 'expected' ? t("应到成员", "Expected Roster") : t("范围外成员", "Unexpected Roster")}</button>
-                    {/each}
-                  {/if}
-                </div>
-              {/if}
-            </div>
-          {/each}
-          <DragOverlay>{#snippet children(source: any)}<div class="filter-drag-overlay">{source.id}</div>{/snippet}</DragOverlay>
-          </DragDropProvider>
-        {/if}
-      {/if}
-    </div>
-    <div class="toolbar"><input aria-label={t("搜索姓名", "Search names")} placeholder={t("搜索姓名…", "Search names…")} bind:value={search} /><span>{filteredRows.length} {t("位参与者", "participants")}</span></div>
+    <AttendanceFilterPanel rows={rows} roster={configs.roster || []} configGroups={[]} profile={settingsProfile} {mode} {language} initiallyOpen={!$settings.filterDefaultsClosed} {activeFilter} bind:ascending onActiveFilterChange={(value) => activeFilter = value} onRows={(value) => filteredRows = value} />
     <div class="table-wrap"><table class="attendance-table"><thead><tr><th>#</th><th>{t("姓名", "Name")}</th><th>{t("状态", "Status")} <button class="sort-toggle" onclick={() => ascending = !ascending}>↕</button></th><th>{t("位置", "Location")}</th><th>{t("分组", "Group")}</th><th>{t("首次加入", "First join")}</th><th>{t("最近进出", "Last entry/exit")}</th><th>{t("分钟", "Minutes")}</th></tr></thead><tbody>{#each filteredRows as r, i}<tr class:issue={r.wasLate || r.currentStatus === "leftEarly"}><td>{i+1}</td><td><b>{r.canonicalName || r.zoomName || "—"}</b>{#if r.zoomName && r.canonicalName && r.zoomName !== r.canonicalName}<small>{r.zoomName}</small>{/if}</td><td><div class="badges">{#each rowStatusTags(r) as tag}<StatusBadge status={tag} label={statusLabel(tag, language)} />{/each}{#if r.matchStatus === "unmatched" || r.matchStatus === "guest"}<StatusBadge label={getMatchStatusLabel(r.matchStatus, language as any)} />{/if}</div></td><td>{r.currentLocation === "meeting" ? t("会议中", "Meeting") : r.currentLocation === "waiting-room" ? t("等候室", "Waiting room") : "—"}</td><td>{r.group || "—"}</td><td>{r.firstJoinAt ? timeOnly(r.firstJoinAt) : "—"}</td><td>{r.lastSeenAt ? timeOnly(r.lastSeenAt) : "—"}</td><td>{formatMinutes(r.totalPresenceMinutes)}</td></tr>{:else}<tr><td colspan="8" class="empty">{t("等待参与者事件…", "Waiting for participant events…")}</td></tr>{/each}</tbody></table></div>
   </section>
 {:else if view === "matching"}
@@ -126,6 +67,6 @@
 {/if}
 
 <style>
- .status-view,.log-view,.settings-view{min-width:0}.summary-row{display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line);padding:4px 0}.mode-switch{display:flex;flex:none;background:#f4f6fa;border-radius:7px;padding:2px}.mode-switch button{min-height:27px;padding:3px 9px;border:0;background:transparent;font-size:10px}.mode-switch button.chosen{background:white;color:var(--accent);box-shadow:var(--shadow-card)}.filters-panel{margin:5px 0;border:1px solid var(--line);border-radius:7px;background:#fafbfc}.filters-panel header{display:flex;align-items:center;gap:8px;padding:5px 9px}.filters-panel header>button:last-child,.filter-controls button{border:0;background:transparent;color:var(--accent);font-size:10px}.panel-title{border:0;background:transparent;font-size:11px;font-weight:650}.panel-title span{color:var(--muted);font-weight:400}.filters-panel header>button:last-child{margin-left:auto}.filter-controls{display:flex;gap:8px;padding:2px 9px}.filter-section{position:relative;border-top:1px solid var(--line);padding:5px 0}.filter-section[data-dragging="true"]{opacity:.35}.filter-section[data-over="true"]{box-shadow:inset 0 2px var(--accent)}.section-head{display:flex;align-items:center}.drag-handle{cursor:grab;border:0;background:transparent;color:var(--muted);touch-action:none}.drag-handle:active,.filter-chip:active{cursor:grabbing}.section-toggle{border:0;background:transparent;font-size:11px;font-weight:650}.chip-filters{display:flex;gap:5px;flex-wrap:wrap;padding:5px}.filter-chip{min-height:26px;padding:4px 8px;border:1px solid var(--line);border-radius:16px;background:white;color:#596273;font-size:10px;touch-action:none;cursor:grab}.filter-chip.dragging{opacity:.35}.filter-drag-overlay{padding:5px 10px;border:1px solid var(--accent);border-radius:16px;background:white;box-shadow:0 4px 14px #24334a33;cursor:grabbing;opacity:.92}.toolbar,.event-filters,.view-heading,.profile-actions{display:flex;align-items:center;gap:8px;margin:8px 0}.toolbar input,.event-filters input{min-height:30px!important;padding:6px 9px!important;flex:1}.toolbar span,.event-filters span{font-size:10px;color:var(--muted);white-space:nowrap}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:7px;background:#fff}table{width:100%;border-collapse:collapse;font-size:11px;text-align:left}th{position:sticky;top:0;background:#f4f6fa;color:#596273;font-size:10px;text-transform:uppercase;letter-spacing:.35px}th,td{padding:7px 9px;border-bottom:1px solid var(--line);white-space:nowrap}td{height:36px}tbody tr:last-child td{border-bottom:0}tbody tr.issue{background:#fffaf1}td b{font-weight:700}td small{display:block;color:var(--muted);font-size:9px}.badges{display:flex;gap:4px}.empty{text-align:center;color:var(--muted);padding:22px}.log-view h2,.settings-view h2{font-size:14px;margin:10px 0 4px}.log-view h2 small{font-size:10px;color:var(--muted);font-weight:400}.view-heading{justify-content:space-between;align-items:center}.view-heading h2{margin:0}.view-heading p{margin:4px 0;color:var(--muted);font-size:11px}.view-heading button{min-height:30px}.subheading{font-size:11px;color:var(--muted);margin:10px 0}.snapshot{border:1px solid var(--line);border-radius:7px;margin:8px 0;background:white}.snapshot summary{display:flex;gap:14px;align-items:center;cursor:pointer;padding:10px;font-size:11px}.snapshot summary span{color:var(--muted)}.event-row{display:flex;align-items:center;gap:10px;min-height:34px;padding:6px 8px;border-bottom:1px solid var(--line);font-size:11px}.event-row:last-child{border-bottom:0}.event-row time{min-width:145px;color:var(--muted);font-size:10px}.event-row span:last-child{margin-left:auto}.setting-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:10px 0}.setting-cards article{display:grid;gap:5px;padding:9px;border:1px solid var(--line);border-radius:7px;background:white;min-width:0}.setting-cards small{font-size:9px;color:var(--muted)}.setting-cards b{font-size:11px;overflow-wrap:anywhere}.profile-actions label,.profile-select{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted)}.profile-actions select,.profile-select select{min-height:30px!important;padding:5px!important}.hand-current{padding:10px 0;border-bottom:1px solid var(--line)}.hand-current h3,.section-heading{font-size:12px;margin:0 0 8px}.hand-current h3 small{margin-left:5px;color:var(--muted);font-weight:400}.hand-chips{display:flex;gap:6px;flex-wrap:wrap}.muted{font-size:11px;color:var(--muted)}
+ .status-view,.log-view,.settings-view{min-width:0}.summary-row{display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line);padding:4px 0}.mode-switch{display:flex;flex:none;background:#f4f6fa;border-radius:7px;padding:2px}.mode-switch button{min-height:27px;padding:3px 9px;border:0;background:transparent;font-size:10px}.mode-switch button.chosen{background:white;color:var(--accent);box-shadow:var(--shadow-card)}.event-filters,.view-heading,.profile-actions{display:flex;align-items:center;gap:8px;margin:8px 0}.event-filters input{min-height:30px!important;padding:6px 9px!important;flex:1}.event-filters span{font-size:10px;color:var(--muted);white-space:nowrap}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:7px;background:#fff}table{width:100%;border-collapse:collapse;font-size:11px;text-align:left}th{position:sticky;top:0;background:#f4f6fa;color:#596273;font-size:10px;text-transform:uppercase;letter-spacing:.35px}th,td{padding:7px 9px;border-bottom:1px solid var(--line);white-space:nowrap}td{height:36px}tbody tr:last-child td{border-bottom:0}tbody tr.issue{background:#fffaf1}td b{font-weight:700}td small{display:block;color:var(--muted);font-size:9px}.badges{display:flex;gap:4px}.empty{text-align:center;color:var(--muted);padding:22px}.log-view h2,.settings-view h2{font-size:14px;margin:10px 0 4px}.log-view h2 small{font-size:10px;color:var(--muted);font-weight:400}.view-heading{justify-content:space-between;align-items:center}.view-heading h2{margin:0}.view-heading p{margin:4px 0;color:var(--muted);font-size:11px}.view-heading button{min-height:30px}.subheading{font-size:11px;color:var(--muted);margin:10px 0}.snapshot{border:1px solid var(--line);border-radius:7px;margin:8px 0;background:white}.snapshot summary{display:flex;gap:14px;align-items:center;cursor:pointer;padding:10px;font-size:11px}.snapshot summary span{color:var(--muted)}.event-row{display:flex;align-items:center;gap:10px;min-height:34px;padding:6px 8px;border-bottom:1px solid var(--line);font-size:11px}.event-row:last-child{border-bottom:0}.event-row time{min-width:145px;color:var(--muted);font-size:10px}.event-row span:last-child{margin-left:auto}.setting-cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:10px 0}.setting-cards article{display:grid;gap:5px;padding:9px;border:1px solid var(--line);border-radius:7px;background:white;min-width:0}.setting-cards small{font-size:9px;color:var(--muted)}.setting-cards b{font-size:11px;overflow-wrap:anywhere}.profile-actions label,.profile-select{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted)}.profile-actions select,.profile-select select{min-height:30px!important;padding:5px!important}.hand-current{padding:10px 0;border-bottom:1px solid var(--line)}.hand-current h3,.section-heading{font-size:12px;margin:0 0 8px}.hand-current h3 small{margin-left:5px;color:var(--muted);font-weight:400}.hand-chips{display:flex;gap:6px;flex-wrap:wrap}.muted{font-size:11px;color:var(--muted)}
  @media(max-width:900px){.setting-cards{grid-template-columns:repeat(2,minmax(0,1fr))}.event-row{flex-wrap:wrap}.event-row time{min-width:110px}}
 </style>
