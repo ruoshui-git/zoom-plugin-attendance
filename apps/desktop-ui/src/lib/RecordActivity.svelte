@@ -19,7 +19,7 @@
  $: filtered=sortRows(filterRowsByTag(record.rows||[],tag).filter((r:any)=>!search||`${r.canonicalName||''} ${r.zoomName||''} ${(r.zoomNames||[]).join(' ')} ${r.pinyin||''}`.toLocaleLowerCase().includes(search.toLocaleLowerCase())),sort,direction);
  $: filteredMovement=filterEventsByType(movement,typeFilter).filter((e:any)=>!search||`${e.participant?.screenName||''} ${e.participant?.screenNamePinyin||''}`.toLowerCase().includes(search.toLowerCase())).sort((a:any,b:any)=>(Date.parse(a.timestamp)-Date.parse(b.timestamp))*(timeNewest?-1:1));
  const tabs=[['overview','Overview','概览'],['attendance','Auto Attendance','自动考勤'],['matching','Name Matching','昵称匹配'],['settings','Attendance Settings','考勤配置'],['names','Name Changes','名称变更'],['entry','Entry/Exit','进出记录'],['hands','Raise Hand','举手跟踪'],['manual','Manual Attendance Records','手动考勤']];
- const attendanceLabels:Record<string,string>={seen:'到过',full_present:'全程',late:'迟到',returned:'返回',left_early:'早退',missing:'缺席',ignored:'不计入',total:'共'};
+ const attendanceLabels:Record<string,string>={seen:'到过',full_present:'全程',late:'迟到',returned:'返回',left_early:'早退',missing:'缺席',ignored:'不计入',total:'总计'};
  const movementTypes=[['joinedBefore','Already in meeting at startup','启动时已加入'],['join','Joined meeting','进入会议'],['leave','Left meeting','离开会议'],['waitingRoomJoinFromOutside','Entered waiting room','进入等候室'],['waitingRoomJoinFromMeeting','Moved to waiting room','被移到等候室'],['waitingRoomJoinedBefore','In waiting room at startup','启动时已在等候室'],['waitingRoomLeave','Left waiting room','离开等候室']];
  $: visibleTabs=tabs.filter(([key])=>key!=='hands'||live||handEntries.length||state.raiseHandCaptures?.length);
 </script>

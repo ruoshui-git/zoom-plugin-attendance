@@ -55,7 +55,7 @@ export type MatchStatus =
  *   早退/Left    = currentStatus === 'leftEarly' && matched
  *   返回/Returned= isCurrentlyPresent && matched && currentStatus === 'returnedAfterLongAbsence'
  *   不计入/Ignored = isCurrentlyPresent && (unmatched || guest)   (roster mode only)
- *   共/Total   = all matched rows (seen + roster-expected missing, excludes unmatched/guest)
+ *   总计/Total   = all matched rows (seen + roster-expected missing, excludes unmatched/guest)
  */
 export type LiveStatus =
   | 'present'
