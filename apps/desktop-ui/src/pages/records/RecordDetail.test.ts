@@ -58,4 +58,22 @@ describe("RecordDetail attendance filters", () => {
     expect(container.textContent).not.toContain("not-applicable");
     expect(container.textContent).not.toContain("unknown-x");
   });
+
+  it("sorts attendance by minutes and restores filter-panel order on the third click", async () => {
+    record.set({ mode: "generic", rows: [
+      { canonicalName: "Long", totalPresenceMinutes: 30, currentStatus: "present", matchStatus: "matched" },
+      { canonicalName: "Short", totalPresenceMinutes: 10, currentStatus: "present", matchStatus: "matched" },
+      { canonicalName: "Medium", totalPresenceMinutes: 20, currentStatus: "present", matchStatus: "matched" },
+    ], summary: { total: 3 } });
+    const { container } = render(RecordDetail);
+    const order = () => Array.from(container.querySelectorAll(".table-wrap tbody tr td:nth-child(2) b"), (node) => node.textContent);
+    const originalOrder = order();
+    const minutesHeader = screen.getByRole("button", { name: /Minutes/ });
+    await fireEvent.click(minutesHeader);
+    expect(order()).toEqual(["Short", "Medium", "Long"]);
+    await fireEvent.click(minutesHeader);
+    expect(order()).toEqual(["Long", "Medium", "Short"]);
+    await fireEvent.click(minutesHeader);
+    expect(order()).toEqual(originalOrder);
+  });
 });
