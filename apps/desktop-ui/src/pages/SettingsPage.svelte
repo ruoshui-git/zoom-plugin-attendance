@@ -128,7 +128,7 @@
       <b>{t("Zoom 账号", "Zoom account")}</b>
       <p>{zoomSidebarLabel($zoom, $connected, t)}</p>
     </div>
-    {#if zoomSignedIn($zoom)}<button class="danger" onclick={async()=>{if(await confirmDialog({title:t('退出 Zoom 登录','Sign out of Zoom'),message:t('退出登录并移除 AttendFlow Desktop 的 Zoom 授权？考勤记录会保留在这台电脑上。','Sign out and remove AttendFlow Desktop from your Zoom account? Attendance records stay on this computer.'),destructive:true})){const r=await fetch('/api/zoom/sign-out',{method:'POST'});const d=await r.json().catch(()=>({}));if(r.ok)zoom.set(await get('/api/zoom').catch(()=>null));$toastMessage=r.ok?(d.revoked?t('已退出 Zoom 并移除授权','Signed out and access removed'):t('已退出 Zoom','Signed out of Zoom')):t('退出失败','Sign-out failed')}}}>
+    {#if zoomSignedIn($zoom)}<button class="danger" onclick={async()=>{if(await confirmDialog({title:t('退出 Zoom 登录','Sign out of Zoom'),message:t('退出登录并移除出勤助手桌面版的 Zoom 授权？考勤记录会保留在这台电脑上。','Sign out and remove AttendFlow Desktop from your Zoom account? Attendance records stay on this computer.'),destructive:true})){const r=await fetch('/api/zoom/sign-out',{method:'POST'});const d=await r.json().catch(()=>({}));if(r.ok)zoom.set(await get('/api/zoom').catch(()=>null));$toastMessage=r.ok?(d.revoked?t('已退出 Zoom 并移除授权','Signed out and access removed'):t('已退出 Zoom','Signed out of Zoom')):t('退出失败','Sign-out failed')}}}>
         {t("退出 Zoom 登录", "Sign out of Zoom")}
       </button>{:else if $zoom?.state !== "not_configured"}<button
         class="primary"

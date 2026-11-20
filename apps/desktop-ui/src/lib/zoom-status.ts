@@ -32,20 +32,20 @@ export function zoomBanner(s: ZoomStatus | null, t: T): ZoomBanner | null {
       return null;
     case 'signed_out': {
       if (s.reason === 'session_expired') return { tone: 'warn', title: t('Zoom 登录已过期', 'Your Zoom sign-in has expired'), body: t('请重新登录以继续记录考勤。', 'Sign in again to keep capturing attendance.') + sp + sameAccount, action: 'sign_in' };
-      if (s.reason === 'sign_in_denied') return { tone: 'warn', title: t('登录已取消', 'Sign-in was cancelled'), body: t('需要在浏览器中允许访问，AttendFlow Desktop 才能读取会议参与者。', 'AttendFlow Desktop needs your permission in the browser to read meeting participants.'), action: 'sign_in' };
+      if (s.reason === 'sign_in_denied') return { tone: 'warn', title: t('登录已取消', 'Sign-in was cancelled'), body: t('需要在浏览器中允许访问，出勤助手桌面版才能读取会议参与者。', 'AttendFlow Desktop needs your permission in the browser to read meeting participants.'), action: 'sign_in' };
       if (s.reason === 'sign_in_timeout' || s.reason === 'sign_in_failed') return { tone: 'warn', title: t('登录未完成', 'Sign-in did not finish'), body: t('请重试。', 'Please try again.') + sp + sameAccount, action: 'sign_in', detail: s.detail };
-      return { tone: 'info', title: t('使用 Zoom 登录', 'Sign in with Zoom'), body: t('登录后，AttendFlow Desktop 会在你参加会议时自动记录考勤。', 'After you sign in, AttendFlow Desktop records attendance automatically whenever you are in a meeting.') + sp + sameAccount, action: 'sign_in' };
+      return { tone: 'info', title: t('使用 Zoom 登录', 'Sign in with Zoom'), body: t('登录后，出勤助手桌面版会在你参加会议时自动记录考勤。', 'After you sign in, AttendFlow Desktop records attendance automatically whenever you are in a meeting.') + sp + sameAccount, action: 'sign_in' };
     }
     case 'signing_in':
       return { tone: 'info', title: t('请在浏览器中完成登录', 'Finish signing in in your browser'), body: t('浏览器中已打开 Zoom 登录页面。完成后回到这里即可。', 'A Zoom sign-in page opened in your browser. Come back here when you are done.'), action: 'reopen_sign_in' };
     case 'zoom_not_running':
-      return { tone: 'warn', title: t('请打开 Zoom 客户端', 'Open the Zoom app'), body: t('启动 Zoom Workplace 并登录后，AttendFlow Desktop 会自动连接。', 'Start Zoom Workplace and sign in. AttendFlow Desktop connects automatically.'), action: null };
+      return { tone: 'warn', title: t('请打开 Zoom 客户端', 'Open the Zoom app'), body: t('启动 Zoom Workplace 并登录后，出勤助手桌面版会自动连接。', 'Start Zoom Workplace and sign in. AttendFlow Desktop connects automatically.'), action: null };
     case 'not_configured':
       return { tone: 'error', title: t('此版本缺少 Zoom 应用配置', 'This build has no Zoom app configured'), body: t('请安装正式发布的版本。', 'Please install the released version of AttendFlow Desktop.'), action: null, detail: s.detail };
     case 'error':
-      if (s.reason === 'account_mismatch') return { tone: 'error', title: t('Zoom 账号不一致', 'Different Zoom accounts'), body: t('Zoom 客户端登录的账号与 AttendFlow Desktop 不同。请在 Zoom 客户端中切换账号，或在此使用另一个账号登录。', 'The Zoom app is signed in with a different account than AttendFlow Desktop. Switch accounts in the Zoom app, or sign in here with the other account.'), action: 'switch_account' };
+      if (s.reason === 'account_mismatch') return { tone: 'error', title: t('Zoom 账号不一致', 'Different Zoom accounts'), body: t('Zoom 客户端登录的账号与出勤助手桌面版不同。请在 Zoom 客户端中切换账号，或在此使用另一个账号登录。', 'The Zoom app is signed in with a different account than AttendFlow Desktop. Switch accounts in the Zoom app, or sign in here with the other account.'), action: 'switch_account' };
       if (s.reason === 'missing_scope') return { tone: 'error', title: t('缺少权限', 'Permission missing'), body: t('Zoom 没有授予所需的权限。请重新登录并允许访问。', 'Zoom did not grant the permission AttendFlow Desktop needs. Sign in again and allow access.'), action: 'switch_account', detail: s.detail };
-      if (s.reason === 'ipc_timeout') return { tone: 'warn', title: t('Zoom 客户端没有响应', 'The Zoom app did not respond'), body: t('请确认 Zoom 客户端已打开，并且登录的账号与 AttendFlow Desktop 相同。正在自动重试。', 'Make sure the Zoom app is open and signed in with the same Zoom account as AttendFlow Desktop. Retrying automatically.'), action: 'switch_account', detail: s.detail };
+      if (s.reason === 'ipc_timeout') return { tone: 'warn', title: t('Zoom 客户端没有响应', 'The Zoom app did not respond'), body: t('请确认 Zoom 客户端已打开，并且登录的账号与出勤助手桌面版相同。正在自动重试。', 'Make sure the Zoom app is open and signed in with the same Zoom account as AttendFlow Desktop. Retrying automatically.'), action: 'switch_account', detail: s.detail };
       if (s.reason === 'network') return { tone: 'warn', title: t('无法连接到 Zoom', 'Cannot reach Zoom'), body: t('请检查网络连接。正在自动重试。', 'Check your internet connection. Retrying automatically.'), action: null, detail: s.detail };
       return { tone: 'warn', title: t('无法连接到 Zoom 客户端', 'Cannot connect to the Zoom app'), body: t('正在自动重试。如果问题持续，请重新启动 Zoom 客户端。', 'Retrying automatically. If this continues, restart the Zoom app.'), action: null, detail: s.detail };
     default:

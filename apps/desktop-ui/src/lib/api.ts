@@ -581,7 +581,7 @@ export async function zoomSignOut() {
   if (
     !confirm(
       t(
-        "退出 Zoom 登录，并从你的 Zoom 账号中移除 AttendFlow Desktop？考勤记录会保留在这台电脑上。",
+        "退出 Zoom 登录，并从你的 Zoom 账号中移除出勤助手桌面版？考勤记录会保留在这台电脑上。",
         "Sign out and remove AttendFlow Desktop from your Zoom account? Your attendance records stay on this computer.",
       ),
     )
@@ -597,7 +597,7 @@ export async function zoomSignOut() {
       ? data.revoked
         ? t("已退出 Zoom 并移除授权", "Signed out and access removed")
         : t(
-            "已退出。请在 Zoom 网站的“已添加的应用”中移除 AttendFlow Desktop。",
+            "已退出。请在 Zoom 网站的“已添加的应用”中移除出勤助手桌面版。",
             "Signed out. Remove AttendFlow Desktop under Added apps on the Zoom website.",
           )
       : t("退出失败", "Sign-out failed"),
