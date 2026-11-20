@@ -4,8 +4,8 @@
  let expanded=new Set<string>(); let selected:Record<string,number>={}; let query:Record<string,string>={}; let splitIds:Record<string,number[]>={}; let busy=''; let error='';
  const t=(zh:string,en:string)=>language==='zh-CN'?zh:en;
  const norm=(s:string)=>s.toLocaleLowerCase().replace(/[\s\p{P}\p{S}\u3000]/gu,'');
- $: pending=rows.filter(r=>r.matchStatus==='unmatched');
- $: renamed=nameChanges.filter(n=>!decisions.some(d=>d.sessionParticipantId===n.sessionParticipantId&&Date.parse(d.createdAt||'')>=Date.parse(n.timestamp||''))).map(n=>({...rows.find(r=>r.sessionParticipantId===n.sessionParticipantId),...n,zoomName:n.nextScreenName,entityId:n.sessionParticipantId}));
+ $: pending=Array.from(new Map(rows.filter(r=>r.matchStatus==='unmatched').map(r=>[r.entityId||r.sessionParticipantId,r])).values());
+ $: renamed=(()=>{const byParticipant=new Map<string,any[]>();for(const change of nameChanges){const id=change.sessionParticipantId;if(!id||decisions.some(d=>d.sessionParticipantId===id&&Date.parse(d.createdAt||'')>=Date.parse(change.timestamp||'')))continue;byParticipant.set(id,[...(byParticipant.get(id)||[]),change]);}return Array.from(byParticipant,([id,changes])=>{const ordered=changes.slice().sort((a,b)=>Date.parse(a.timestamp||'')-Date.parse(b.timestamp||''));const earliest=ordered[0],latest=ordered[ordered.length-1];return {...rows.find(r=>r.sessionParticipantId===id),...earliest,...latest,previousScreenName:earliest.previousScreenName||earliest.previous_screen_name,nextScreenName:latest.nextScreenName||latest.next_screen_name,zoomName:latest.nextScreenName||latest.next_screen_name,entityId:id,sessionParticipantId:id}})})();
  $: resolved=decisions;
  function candidates(r:any){const n=norm(r.zoomName||'');return roster.filter(p=>p.active!==false&&(norm(p.canonicalName||'')===n||norm(p.pinyin||'')===n||aliases.some(a=>Number(a.personId)===Number(p.personId)&&norm(a.zoomName||a.alias||'')===n)));}
  function label(r:any){return r.zoomName||r.screenName||'—'}

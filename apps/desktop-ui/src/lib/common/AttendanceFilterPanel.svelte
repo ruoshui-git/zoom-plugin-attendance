@@ -2,6 +2,7 @@
   import { settings } from "../stores";
   import { filterRowsByTag } from "../record-tools";
   import { applyFilterDragEnd, sortGroupsByProfilePatterns, sortAttendanceRows } from "../attendance-filters";
+  import { groupKey } from "../group-label";
   import { DragDropProvider, DragOverlay, PointerSensor } from "@dnd-kit/svelte";
   import { PointerActivationConstraints } from "@dnd-kit/dom";
   import { createSortable } from "@dnd-kit/svelte/sortable";
@@ -24,7 +25,7 @@
   const sensors = [PointerSensor.configure({ activationConstraints: [new PointerActivationConstraints.Distance({ value: 5 })] })];
   const t = (zh: string, en: string) => language === "zh-CN" ? zh : en;
   $: rosterMode = mode === "roster" && roster.length > 0;
-  $: groupNames = [...new Set<string>([...configGroups, ...roster.map((p: any) => String(p.group || "未分组"))])];
+  $: groupNames = [...new Set<string>([...configGroups.map(groupKey), ...roster.map((p: any) => groupKey(p.group))])];
   $: profileGroupOrder = profile?.groupSortOrder?.length ? sortGroupsByProfilePatterns(groupNames, profile.groupSortOrder) : groupNames.slice().sort((a,b) => a.localeCompare(b, "zh-CN"));
   $: profileOrderKey = profileGroupOrder.join("\u0000");
   $: if (profileOrderKey !== lastProfileOrderKey) { lastProfileOrderKey = profileOrderKey; groupOrder = [...profileGroupOrder]; }
@@ -32,7 +33,7 @@
   $: if (groupNames.length && !selectedGroups.length) selectedGroups = [...groupNames];
   $: if ($settings.filterDefaultsClosed !== appliedFilterDefault) { appliedFilterDefault = $settings.filterDefaultsClosed; filterOpen = !$settings.filterDefaultsClosed; }
   $: sortedRows = sortAttendanceRows(rows, { sectionOrder: rosterMode ? sectionOrder : [], groups: groupOrder, expectations: expectationOrder, selectedGroups, selectedExpectations: expectations, ascending });
-  $: filteredRows = filterRowsByTag(sortedRows, activeFilter).filter((r: any) => (!rosterMode || selectedGroups.includes(r.group || "未分组")) && (!rosterMode || expectations.includes(r.isExpected === false ? "unexpected" : "expected")) && (!search || `${r.canonicalName || ""} ${r.zoomName || ""} ${r.pinyin || ""} ${r.zoomPinyin || ""} ${r.canonicalPinyin || ""}`.toLowerCase().includes(search.toLowerCase())));
+  $: filteredRows = filterRowsByTag(sortedRows, activeFilter).filter((r: any) => (!rosterMode || selectedGroups.includes(groupKey(r.group))) && (!rosterMode || expectations.includes(r.isExpected === false ? "unexpected" : "expected")) && (!search || `${r.canonicalName || ""} ${r.zoomName || ""} ${r.pinyin || ""} ${r.zoomPinyin || ""} ${r.canonicalPinyin || ""}`.toLowerCase().includes(search.toLowerCase())));
   $: onRows(filteredRows);
   function handleDragEnd(event: any) {
     const visible = sectionOrder.filter((section) => section !== "expectation" || rows.some((row: any) => row.isExpected === false));

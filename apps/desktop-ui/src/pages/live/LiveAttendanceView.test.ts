@@ -77,4 +77,16 @@ describe("LiveAttendanceView", () => {
     await fireEvent.click(late);
     expect(screen.getByText("On Time Member")).toBeTruthy();
   });
+
+  it("localizes ungrouped labels and constrains long group and participant names", () => {
+    const { container } = render(LiveAttendanceView, { view: "status", language: "en", record: { rows: [
+      { canonicalName: "A very long participant name that must be allowed to wrap", group: "__UNGROUPED__", currentStatus: "present" },
+    ] } });
+    const group = container.querySelector(".group-cell")!;
+    const name = container.querySelector(".participant-name")!;
+    expect(group.textContent).toBe("Ungrouped");
+    expect(group.getAttribute("title")).toBe("Ungrouped");
+    expect(group.className).toContain("group-cell");
+    expect(name.className).toContain("participant-name");
+  });
 });

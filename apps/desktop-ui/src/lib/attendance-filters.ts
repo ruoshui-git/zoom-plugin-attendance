@@ -1,5 +1,6 @@
 export const DEFAULT_FILTER_SECTION_ORDER = ['expectation', 'group'];
 export const STATUS_ORDER = ['present', 'late', 'returnedAfterLongAbsence', 'leftEarly', 'missing'];
+import { groupKey } from './group-label';
 
 export function sortGroupsByProfilePatterns(groups: string[], patterns: string[] = []) {
   const matches = (pattern: string, group: string) => {
@@ -61,8 +62,8 @@ export function sortAttendanceRows(rows: any[], options: { sectionOrder?: string
   const { sectionOrder = DEFAULT_FILTER_SECTION_ORDER, groups = [], expectations = ['expected', 'unexpected'], selectedGroups = [], selectedExpectations = ['expected', 'unexpected'], ascending = true } = options;
   return [...rows].sort((a, b) => {
     for (const section of sectionOrder) {
-      const aKey = section === 'group' ? (a.group || '未分组') : (a.isExpected === false ? 'unexpected' : 'expected');
-      const bKey = section === 'group' ? (b.group || '未分组') : (b.isExpected === false ? 'unexpected' : 'expected');
+      const aKey = section === 'group' ? groupKey(a.group) : (a.isExpected === false ? 'unexpected' : 'expected');
+      const bKey = section === 'group' ? groupKey(b.group) : (b.isExpected === false ? 'unexpected' : 'expected');
       const order = section === 'group' ? groups : expectations;
       const selected = section === 'group' ? selectedGroups : selectedExpectations;
       const diff = Number(selected.includes(bKey)) - Number(selected.includes(aKey)) || order.indexOf(aKey) - order.indexOf(bKey);
@@ -78,7 +79,7 @@ export function filterAttendanceRows(rows: any[], options: { status?: string; gr
   const needle = normalizeSearchName(options.search || '');
   return rows.filter((row) => {
     if (options.status && options.status !== 'total' && !(row.tags || []).includes(options.status)) return false;
-    if (options.roster && options.groups && !options.groups.includes(row.group || '未分组')) return false;
+    if (options.roster && options.groups && !options.groups.includes(groupKey(row.group))) return false;
     if (options.roster && options.expectations && !options.expectations.includes(row.isExpected === false ? 'unexpected' : 'expected')) return false;
     if (!needle) return true;
     const names = [row.canonicalName, row.zoomName, row.pinyin, row.zoomPinyin, row.canonicalPinyin, ...(Array.isArray(row.zoomNames) ? row.zoomNames : [])];
