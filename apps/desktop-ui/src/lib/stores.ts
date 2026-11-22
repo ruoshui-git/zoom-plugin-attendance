@@ -45,8 +45,10 @@ export const page = writable("live");
 export const requestedLiveSubtab = writable<string | null>(null);
 export const connected = writable(false);
 export const meeting = writable<Meeting | null>(null);
+export const viewedMeeting = writable<Meeting | null>(null);
 export const meetings = writable<Meeting[]>([]);
 export const record = writable<any>({ rows: [], summary: {} });
+export const viewedRecord = writable<any>({ rows: [], summary: {}, loading: false });
 export const recordCounts = writable<Record<string, number>>({});
 export const recordModes = writable<Record<string, string>>({});
 export const configs = writable<any>({});
@@ -59,10 +61,13 @@ export const stateValue = writable<any>({
   raiseHandEntries: [],
   raiseHandCaptures: [],
 });
+export const viewedState = writable<any>({ mode: "generic", reconciliationDecisions: [], manualSnapshots: [], raiseHandEntries: [], raiseHandCaptures: [] });
+export const viewedStateRevision = writable(0);
 export const stateRevision = writable(0);
 export const mode = writable("generic");
 export const language = writable("en");
 export const recordEvents = writable<any[]>([]);
+export const viewedEvents = writable<any[]>([]);
 export const recordSearch = writable("");
 export const selectedRecords = writable<string[]>([]);
 export const configTab = writable("roster");

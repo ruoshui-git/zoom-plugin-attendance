@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { meeting, record, meetings, recordCounts, recordModes, selectedRecords, recordImportPreview, language } from '../lib/stores';
-  import { get, exportRecords, deleteRecords, previewRecordImport, commitRecordImport, exportOne, exportAll, loadState, loadRecordEvents } from '../lib/api';
+  import { viewedMeeting, meetings, recordCounts, recordModes, selectedRecords, recordImportPreview, language } from '../lib/stores';
+  import { exportRecords, deleteRecords, previewRecordImport, commitRecordImport, loadViewedRecord } from '../lib/api';
   import { t, dateTime } from '../lib/ui';
   import { filterMeetings } from '../lib/record-tools';
   import DataTable from '../lib/common/DataTable.svelte';
@@ -27,9 +27,7 @@
   const statusOptions = [['all','全部','All status'],['ended','已结束','Ended'],['active','进行中','Active']];
   async function openRecord(item: any) {
     detailOpen = true;
-    meeting.set(item);
-    record.set(await get(`/api/meetings/${item.instanceId}/record`));
-    await Promise.all([loadState(), loadRecordEvents()]);
+    await loadViewedRecord(item);
   }
   function selectRecords(ids: string[]) { selectedRecords.set(ids); }
   async function exportSelection() { if ($selectedRecords.length) await exportRecords($selectedRecords); else await exportRecords(); }
@@ -48,8 +46,8 @@
   <DataTable items={filtered} {columns} selectedIds={$selectedRecords} rowId={(item) => String(item.instanceId)} emptyLabel={t('没有符合条件的会议记录','No matching meeting records')} selectAllLabel={t('全选','Select all')} onSelectionChange={selectRecords} onRowClick={openRecord}/>
 </section>
 
-<SlideOverPanel open={detailOpen && !!$meeting} title={t('考勤记录详情','Attendance Record Detail')} closeLabel={t('关闭','Close')} width={960} onClose={() => detailOpen = false}>
-  {#if $meeting}<RecordDetail />{/if}
+<SlideOverPanel open={detailOpen && !!$viewedMeeting} title={t('考勤记录详情','Attendance Record Detail')} closeLabel={t('关闭','Close')} width={960} onClose={() => detailOpen = false}>
+  {#if $viewedMeeting}<RecordDetail />{/if}
 </SlideOverPanel>
 
 <SlideOverPanel open={!!$recordImportPreview} title={t('会议记录导入预览','Import Attendance Records')} closeLabel={t('关闭','Close')} onClose={() => recordImportPreview.set(null)}>

@@ -8,11 +8,44 @@ const value = <T>(store: {
   subscribe: (run: (value: T) => void) => () => void;
 }) => read(store);
 const set = (store: any, next: any) => store.set(next);
+type DataTarget = "live" | "viewed";
+let viewedRequest = 0;
+function storesFor(target: DataTarget = "live") {
+  return target === "viewed"
+    ? { meeting: s.viewedMeeting, record: s.viewedRecord, state: s.viewedState, revision: s.viewedStateRevision, events: s.viewedEvents }
+    : { meeting: s.meeting, record: s.record, state: s.stateValue, revision: s.stateRevision, events: s.recordEvents };
+}
 
 export async function get(path: string) {
   const response = await fetch(path);
   if (!response.ok) throw Error(`${response.status}`);
   return response.json();
+}
+export async function loadViewedRecord(meeting: s.Meeting) {
+  const token = ++viewedRequest;
+  set(s.viewedMeeting, meeting);
+  set(s.viewedRecord, { rows: [], summary: {}, loading: true });
+  set(s.viewedState, { mode: "generic", reconciliationDecisions: [], manualSnapshots: [], raiseHandEntries: [], raiseHandCaptures: [] });
+  set(s.viewedStateRevision, 0);
+  set(s.viewedEvents, []);
+  const safe = async (path: string, fallback: any) => { try { return await get(path); } catch { return fallback; } };
+  const [record, state, events] = await Promise.all([
+    safe(`/api/meetings/${meeting.instanceId}/record`, { rows: [], summary: {} }),
+    safe(`/api/meetings/${meeting.instanceId}/state`, { value: {} }),
+    safe(`/api/meetings/${meeting.instanceId}/events`, []),
+  ]);
+  if (token !== viewedRequest || value(s.viewedMeeting)?.instanceId !== meeting.instanceId) return;
+  set(s.viewedRecord, { ...record, loading: false });
+  setViewedState(state);
+  set(s.viewedEvents, events);
+}
+// Applies a GET /state response to the viewed-record stores (revision included, so a
+// later saveRecordState(..., "viewed") is not rejected as a conflict).
+function setViewedState(data: any) {
+  const state = { mode: "generic", manualSnapshots: [], raiseHandEntries: [], raiseHandCaptures: [], ...(data?.value || {}) };
+  if (!state.reconciliationDecisions) state.reconciliationDecisions = state.decisions || [];
+  set(s.viewedStateRevision, data?.revision ?? 0);
+  set(s.viewedState, state);
 }
 export async function refresh() {
   try {
@@ -44,14 +77,17 @@ export async function refresh() {
       Object.fromEntries(stats.map(([id, , recordMode]) => [id, recordMode])),
     );
     let active = value(s.meeting);
+    let picked = false;
     if (active?.instanceId)
       set(s.record, await get(`/api/meetings/${active.instanceId}/record`));
     else {
       active = list.find((item: s.Meeting) => !item.endedAt) || null;
       set(s.meeting, active);
+      picked = true;
       if (active)
         set(s.record, await get(`/api/meetings/${active.instanceId}/record`));
     }
+    if (picked && active) await loadState("live");
   } catch {}
 }
 export async function loadConfig() {
@@ -126,8 +162,9 @@ export async function exportRecords(ids: string[] = []) {
     JSON.stringify({ version: 3, records }, null, 2),
   );
 }
-export async function exportOne(kind: string) {
-  const active = value(s.meeting);
+export async function exportOne(kind: string, target: DataTarget = "live") {
+  const targetStores = storesFor(target);
+  const active = value(targetStores.meeting);
   if (!active) return;
   const settings = value(s.settings);
   const response = await fetch(
@@ -144,13 +181,12 @@ export async function exportOne(kind: string) {
   anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(anchor.href);
-  await loadState();
-  await refresh();
+  if (target === "live") { await loadState("live"); await refresh(); }
 }
-export async function exportAll() {
-  for (const kind of ["json", "summary", "manual"]) await exportOne(kind);
+export async function exportAll(target: DataTarget = "live") {
+  for (const kind of ["json", "summary", "manual"]) await exportOne(kind, target);
 }
-export async function deleteRecords(ids: string[]) {
+export async function deleteRecords(ids: string[], target: DataTarget = "live") {
   if (!ids.length) return;
   const response = await fetch("/api/records/delete", {
     method: "POST",
@@ -162,7 +198,8 @@ export async function deleteRecords(ids: string[]) {
     return;
   }
   set(s.selectedRecords, []);
-  set(s.meeting, null);
+  if (target === "viewed") { set(s.viewedMeeting, null); set(s.viewedRecord, { rows: [], summary: {}, loading: false }); }
+  else set(s.meeting, null);
   await refresh();
 }
 export async function previewRecordImport(event: Event) {
@@ -320,27 +357,43 @@ export async function removeConfig(index: number) {
     alert(error.message);
   }
 }
-export async function loadState() {
-  const active = value(s.meeting);
+export async function loadState(target: DataTarget = "live") {
+  const stores = storesFor(target);
+  const active = value(stores.meeting);
   if (!active) return;
   try {
     const data = await get(`/api/meetings/${active.instanceId}/state`);
     const state = data.value;
     if (!state.reconciliationDecisions)
       state.reconciliationDecisions = state.decisions || [];
-    set(s.stateRevision, data.revision);
-    set(s.stateValue, state);
-    set(s.mode, state.mode || "generic");
+    if (value(stores.meeting)?.instanceId !== active.instanceId) return;
+    set(stores.revision, data.revision);
+    set(stores.state, state);
+    if (target === "live") set(s.mode, state.mode || "generic");
   } catch {}
 }
-export async function loadRecordEvents() {
-  const active = value(s.meeting);
+export async function loadRecordEvents(target: DataTarget = "live") {
+  const stores = storesFor(target);
+  const active = value(stores.meeting);
   if (!active) return;
   try {
-    set(s.recordEvents, await get(`/api/meetings/${active.instanceId}/events`));
+    const events = await get(`/api/meetings/${active.instanceId}/events`);
+    if (value(stores.meeting)?.instanceId === active.instanceId) set(stores.events, events);
   } catch {
-    set(s.recordEvents, []);
+    set(stores.events, []);
   }
+}
+export async function refreshViewedRecord(instanceId: string) {
+  if (value(s.viewedMeeting)?.instanceId !== instanceId) return;
+  const [record, state, events] = await Promise.all([
+    get(`/api/meetings/${instanceId}/record`).catch(() => null),
+    get(`/api/meetings/${instanceId}/state`).catch(() => null),
+    get(`/api/meetings/${instanceId}/events`).catch(() => null),
+  ]);
+  if (value(s.viewedMeeting)?.instanceId !== instanceId) return;
+  if (record) set(s.viewedRecord, { ...record, loading: false });
+  if (state) setViewedState(state);
+  if (events) set(s.viewedEvents, events);
 }
 export function currentUsers() {
   const users = new Map<string, any>();
@@ -360,25 +413,27 @@ export function currentUsers() {
   }
   return [...users.values()];
 }
-export async function saveRecordState(patch: any) {
-  const active = value(s.meeting);
+export async function saveRecordState(patch: any, target: DataTarget = "live") {
+  const stores = storesFor(target);
+  const active = value(stores.meeting);
   if (!active) return;
   const response = await fetch(`/api/meetings/${active.instanceId}/state`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      revision: value(s.stateRevision),
-      value: { ...value(s.stateValue), ...patch },
+      revision: value(stores.revision),
+      value: { ...value(stores.state), ...patch },
     }),
   });
   if (response.status === 409) {
-    await loadState();
+    await loadState(target);
     return;
   }
   if (!response.ok) throw Error(await response.text());
   const data = await response.json();
-  set(s.stateRevision, data.revision);
-  set(s.stateValue, data.value);
+  if (value(stores.meeting)?.instanceId !== active.instanceId) return;
+  set(stores.revision, data.revision);
+  set(stores.state, data.value);
 }
 export async function captureManual() {
   const active = value(s.meeting);

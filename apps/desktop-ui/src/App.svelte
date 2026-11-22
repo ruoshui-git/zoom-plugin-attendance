@@ -12,6 +12,7 @@
     loadConfig,
     loadState,
     loadRecordEvents,
+    refreshViewedRecord,
     zoomAction,
     chooseLanguage,
   } from "./lib/api";
@@ -24,6 +25,7 @@
     toastMessage,
     record,
     stateValue,
+    viewedMeeting,
   } from "./lib/stores";
   import { t, dateTime } from "./lib/ui";
   import appIcon from "./assets/app-icon.png";
@@ -84,6 +86,9 @@
       ) {
         refresh();
         loadRecordEvents();
+      }
+      if (message.type === "record_updated" && $viewedMeeting?.instanceId === message.instanceId) {
+        refreshViewedRecord(message.instanceId);
       }
     };
     refresh();

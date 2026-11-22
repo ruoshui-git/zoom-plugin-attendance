@@ -1,14 +1,14 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
-import { configs, language, meeting, record, recordEvents, settings, stateValue } from "../../lib/stores";
+import { configs, language, viewedMeeting as meeting, viewedRecord as record, viewedEvents as recordEvents, settings, viewedState as stateValue } from "../../lib/stores";
 import RecordDetail from "./RecordDetail.svelte";
 import { uiLanguage } from "../../lib/i18n-core";
 
 describe("RecordDetail attendance filters", () => {
   afterEach(() => {
     cleanup();
-    record.set({ rows: [], summary: {} });
+    record.set({ rows: [], summary: {}, loading: false });
     configs.set({});
     settings.set({});
     language.set("en");
@@ -75,5 +75,13 @@ describe("RecordDetail attendance filters", () => {
     expect(order()).toEqual(["Long", "Medium", "Short"]);
     await fireEvent.click(minutesHeader);
     expect(order()).toEqual(originalOrder);
+  });
+
+  it("shows loading text instead of stale record rows", () => {
+    language.set("en");
+    record.set({ rows: [{ canonicalName: "Old row" }], summary: { total: 1 }, loading: true });
+    const { container } = render(RecordDetail);
+    expect(container.textContent).toContain("Loading…");
+    expect(container.textContent).not.toContain("Old row");
   });
 });
