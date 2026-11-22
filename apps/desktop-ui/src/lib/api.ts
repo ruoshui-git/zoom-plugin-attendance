@@ -445,7 +445,8 @@ export async function saveRecordState(patch: any, target: DataTarget = "live") {
   if (value(stores.meeting)?.instanceId !== active.instanceId) return;
   set(stores.revision, data.revision);
   set(stores.state, data.value);
-  if (target === "live") { invalidateRecord(active.instanceId); await refresh({ changed: [active.instanceId] }); }
+  // Mode/decision changes alter the record (and its count in the Records list) for either target.
+  invalidateRecord(active.instanceId); await refresh({ changed: [active.instanceId] });
 }
 export async function captureManual() {
   const active = value(s.meeting);
