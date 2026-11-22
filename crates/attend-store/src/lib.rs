@@ -100,7 +100,7 @@ impl Store {
             let rows = st.query_map([], |r| {
                 let meta: Value = serde_json::from_str(&r.get::<_, String>(8)?).unwrap_or(Value::Null);
                 let state: Value = r.get::<_, Option<String>>(9)?.and_then(|s| serde_json::from_str(&s).ok()).unwrap_or(Value::Null);
-                Ok(serde_json::json!({"instanceId":r.get::<_,String>(0)?,"meetingNumber":r.get::<_,String>(1)?,"topic":r.get::<_,String>(2)?,"startedAt":r.get::<_,i64>(3)? as u64,"endedAt":r.get::<_,Option<i64>>(4)?.map(|x|x as u64),"endReason":r.get::<_,Option<String>>(5)?,"isHost":r.get::<_,i32>(6)?!=0,"lastSeq":r.get::<_,i64>(7)? as u64,"source":meta["source"],"exportedAt":state["exportedAt"],"needsExport":state["needsExport"]}))
+                Ok(serde_json::json!({"instanceId":r.get::<_,String>(0)?,"meetingNumber":r.get::<_,String>(1)?,"topic":r.get::<_,String>(2)?,"startedAt":r.get::<_,i64>(3)? as u64,"endedAt":r.get::<_,Option<i64>>(4)?.map(|x|x as u64),"endReason":r.get::<_,Option<String>>(5)?,"isHost":r.get::<_,i32>(6)?!=0,"lastSeq":r.get::<_,i64>(7)? as u64,"source":meta["source"],"mode":state["mode"],"exportedAt":state["exportedAt"],"needsExport":state["needsExport"]}))
             })?;
             Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
         })
@@ -368,6 +368,18 @@ mod tests {
         );
         assert_eq!(s.put_doc("roster", 0, &json!([]), 11).unwrap(), Err(1));
         assert_eq!(s.get_doc("roster").unwrap().0, 1);
+        clean(&p)
+    }
+    #[test]
+    fn meeting_summaries_include_state_mode_and_null_without_state() {
+        let p = temp("summary-mode"); clean(&p);
+        let s = Store::open(&p).unwrap();
+        s.upsert_meeting(&json!({"instanceId":"mode-1","meetingNumber":"1","startedAt":1}), None, 0).unwrap();
+        s.upsert_meeting(&json!({"instanceId":"mode-2","meetingNumber":"2","startedAt":2}), None, 0).unwrap();
+        s.put_state("mode-1", 0, &json!({"mode":"roster"}), 3).unwrap();
+        let summaries = s.meeting_summaries().unwrap();
+        assert_eq!(summaries.iter().find(|m| m["instanceId"] == "mode-1").unwrap()["mode"], "roster");
+        assert!(summaries.iter().find(|m| m["instanceId"] == "mode-2").unwrap()["mode"].is_null());
         clean(&p)
     }
     #[test]

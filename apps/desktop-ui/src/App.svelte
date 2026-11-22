@@ -84,7 +84,7 @@
         message.type === "record_updated" &&
         (!$meeting || message.instanceId === $meeting.instanceId)
       ) {
-        refresh();
+        refresh({ changed: [message.instanceId] });
         loadRecordEvents();
       }
       if (message.type === "record_updated" && $viewedMeeting?.instanceId === message.instanceId) {

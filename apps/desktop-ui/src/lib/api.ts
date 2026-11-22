@@ -10,6 +10,9 @@ const value = <T>(store: {
 const set = (store: any, next: any) => store.set(next);
 type DataTarget = "live" | "viewed";
 let viewedRequest = 0;
+const recordCache = new Map<string, any>();
+let refreshRun: Promise<void> | null = null;
+let queuedChanged = new Set<string>();
 function storesFor(target: DataTarget = "live") {
   return target === "viewed"
     ? { meeting: s.viewedMeeting, record: s.viewedRecord, state: s.viewedState, revision: s.viewedStateRevision, events: s.viewedEvents }
@@ -47,27 +50,34 @@ function setViewedState(data: any) {
   set(s.viewedStateRevision, data?.revision ?? 0);
   set(s.viewedState, state);
 }
-export async function refresh() {
+export function refresh(options: { changed?: string[] } = {}): Promise<void> {
+  for (const id of options.changed || []) queuedChanged.add(id);
+  if (refreshRun) return refreshRun;
+  refreshRun = (async () => {
+    do {
+      const changed = queuedChanged;
+      queuedChanged = new Set();
+      await refreshOnce(changed);
+    } while (queuedChanged.size);
+  })().finally(() => { refreshRun = null; });
+  return refreshRun;
+}
+async function refreshOnce(changed: Set<string>) {
   try {
     const list = await get("/api/meetings");
     set(s.meetings, list);
-    const stats = await Promise.all(
-      list.map(async (item: s.Meeting) => {
-        try {
-          const [data, state] = await Promise.all([
-            get(`/api/meetings/${item.instanceId}/record`),
-            get(`/api/meetings/${item.instanceId}/state`),
-          ]);
-          return [
-            item.instanceId,
-            Number(data.summary?.seen ?? data.summary?.fullPresent) || 0,
-            state.value?.mode || data.mode || "generic",
-          ] as const;
-        } catch {
-          return [item.instanceId, 0, "generic"] as const;
-        }
-      }),
-    );
+    const ids = new Set(list.map((item: s.Meeting) => item.instanceId));
+    for (const id of recordCache.keys()) if (!ids.has(id)) recordCache.delete(id);
+    const need = list.filter((item: s.Meeting) => !recordCache.has(item.instanceId) || !item.endedAt || changed.has(item.instanceId));
+    let cursor = 0;
+    await Promise.all(Array.from({ length: Math.min(4, need.length) }, async () => {
+      while (cursor < need.length) {
+        const item = need[cursor++];
+        try { recordCache.set(item.instanceId, await get(`/api/meetings/${item.instanceId}/record`)); }
+        catch { recordCache.set(item.instanceId, { rows: [], summary: {} }); }
+      }
+    }));
+    const stats: [string, number, string][] = list.map((item: s.Meeting) => [item.instanceId, Number(recordCache.get(item.instanceId)?.summary?.seen ?? recordCache.get(item.instanceId)?.summary?.fullPresent) || 0, item.mode || "generic"]);
     set(
       s.recordCounts,
       Object.fromEntries(stats.map(([id, count]) => [id, count])),
@@ -79,17 +89,18 @@ export async function refresh() {
     let active = value(s.meeting);
     let picked = false;
     if (active?.instanceId)
-      set(s.record, await get(`/api/meetings/${active.instanceId}/record`));
+      set(s.record, recordCache.get(active.instanceId) || await get(`/api/meetings/${active.instanceId}/record`));
     else {
       active = list.find((item: s.Meeting) => !item.endedAt) || null;
       set(s.meeting, active);
       picked = true;
       if (active)
-        set(s.record, await get(`/api/meetings/${active.instanceId}/record`));
+        set(s.record, recordCache.get(active.instanceId) || await get(`/api/meetings/${active.instanceId}/record`));
     }
     if (picked && active) await loadState("live");
   } catch {}
 }
+function invalidateRecord(id?: string) { if (id) recordCache.delete(id); }
 export async function loadConfig() {
   const configs: any = {};
   const revisions: any = {};
@@ -181,7 +192,7 @@ export async function exportOne(kind: string, target: DataTarget = "live") {
   anchor.download = filename;
   anchor.click();
   URL.revokeObjectURL(anchor.href);
-  if (target === "live") { await loadState("live"); await refresh(); }
+  if (target === "live") { await loadState("live"); invalidateRecord(active.instanceId); await refresh({ changed: [active.instanceId] }); }
 }
 export async function exportAll(target: DataTarget = "live") {
   for (const kind of ["json", "summary", "manual"]) await exportOne(kind, target);
@@ -200,7 +211,7 @@ export async function deleteRecords(ids: string[], target: DataTarget = "live") 
   set(s.selectedRecords, []);
   if (target === "viewed") { set(s.viewedMeeting, null); set(s.viewedRecord, { rows: [], summary: {}, loading: false }); }
   else set(s.meeting, null);
-  await refresh();
+  ids.forEach(invalidateRecord); await refresh({ changed: ids });
 }
 export async function previewRecordImport(event: Event) {
   const input = event.currentTarget as HTMLInputElement;
@@ -234,7 +245,7 @@ export async function commitRecordImport() {
     return;
   }
   set(s.recordImportPreview, null);
-  await refresh();
+  await refresh({ changed: (preview?.records || []).map((x: any) => x.meeting?.instanceId).filter(Boolean) });
 }
 export async function loadExampleData() {
   const language = value(s.language);
@@ -434,6 +445,7 @@ export async function saveRecordState(patch: any, target: DataTarget = "live") {
   if (value(stores.meeting)?.instanceId !== active.instanceId) return;
   set(stores.revision, data.revision);
   set(stores.state, data.value);
+  if (target === "live") { invalidateRecord(active.instanceId); await refresh({ changed: [active.instanceId] }); }
 }
 export async function captureManual() {
   const active = value(s.meeting);
@@ -504,6 +516,7 @@ export async function applyOverrides(patch: any = value(s.stagedState)) {
   set(s.stateValue, data.value);
   set(s.stagedState, {});
   set(s.record, await get(`/api/meetings/${active.instanceId}/record`));
+  invalidateRecord(active.instanceId); await refresh({ changed: [active.instanceId] });
 }
 export async function saveDecision(decision: any, revertId?: string) {
   const active = value(s.meeting);
@@ -546,6 +559,7 @@ export async function saveDecision(decision: any, revertId?: string) {
       );
     set(s.stateRevision, data.revision);
     set(s.stateValue, data.value);
+    invalidateRecord(active.instanceId);
     set(s.configRevision, {
       ...value(s.configRevision),
       aliases: data.aliasesRevision,
@@ -553,6 +567,7 @@ export async function saveDecision(decision: any, revertId?: string) {
     const aliases = await get("/api/config/aliases");
     set(s.configs, { ...value(s.configs), aliases: aliases.value });
     set(s.record, await get(`/api/meetings/${active.instanceId}/record`));
+    invalidateRecord(active.instanceId); await refresh({ changed: [active.instanceId] });
     set(
       s.toastMessage,
       revertId
