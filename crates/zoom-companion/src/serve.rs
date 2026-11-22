@@ -2607,7 +2607,13 @@ async fn api_record(
         .map(|x| x.1)
         .unwrap_or(json!({"mode":"generic"}));
     match a.provider.try_build_record(&meeting, &vals, &docs, &state, now()) {
-        Ok(record) => Json(record).into_response(),
+        Ok(mut record) => {
+            // The UI reads the top-level `rows`; the nested copy doubled the payload.
+            if let Some(nested) = record.get_mut("record").and_then(Value::as_object_mut) {
+                nested.remove("rows");
+            }
+            Json(record).into_response()
+        }
         Err(error) => {
             log::error!("record {id}: attendance engine failed: {error}");
             (

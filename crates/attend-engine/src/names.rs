@@ -134,6 +134,56 @@ pub fn candidate_people<'a>(
     out
 }
 
+/// Build a lookup with the same roster ordering and person-id de-duplication as
+/// `candidate_people`, for callers that resolve many names against one roster.
+pub(crate) fn candidate_people_index(
+    roster: &[RosterPerson],
+    aliases: &[AliasMapping],
+) -> HashMap<String, Vec<usize>> {
+    let mut aliases_by_person = HashMap::<u64, Vec<String>>::new();
+    for alias in aliases {
+        aliases_by_person
+            .entry(alias.person_id)
+            .or_default()
+            .push(normalize_name(&alias.zoom_name));
+    }
+    let mut index = HashMap::<String, Vec<usize>>::new();
+    for (person_index, person) in roster.iter().enumerate() {
+        let mut keys = vec![
+            normalize_name(&person.canonical_name),
+            normalize_name(&person.pinyin),
+        ];
+        if let Some(aliases) = aliases_by_person.get(&person.person_id) {
+            keys.extend(aliases.iter().cloned());
+        }
+        keys.sort();
+        keys.dedup();
+        for key in keys {
+            let matches = index.entry(key).or_default();
+            if !matches
+                .iter()
+                .any(|&i| roster[i].person_id == person.person_id)
+            {
+                matches.push(person_index);
+            }
+        }
+    }
+    index
+}
+
+pub(crate) fn candidate_people_from_index<'a>(
+    zoom_name: &str,
+    roster: &'a [RosterPerson],
+    index: &HashMap<String, Vec<usize>>,
+) -> Vec<&'a RosterPerson> {
+    index
+        .get(&normalize_name(zoom_name))
+        .into_iter()
+        .flatten()
+        .map(|&i| &roster[i])
+        .collect()
+}
+
 pub fn profile_includes_group(patterns: &[String], group: &str) -> bool {
     patterns.is_empty()
         || patterns

@@ -484,3 +484,34 @@ fn companion_late_leave_many_participants_and_non_host_streams() {
     );
     assert_eq!(non_host.rows[0].total_presence_minutes, 0);
 }
+
+#[test]
+fn snapshot_after_instance_end_keeps_the_last_processed_roster() {
+    // A rosterSnapshot logged after instance_ended is ignored (companion mode stops at
+    // the end), so the observed roster must come from the last snapshot before it.
+    let p = |uuid: &str, name: &str| json!({"participantUUID":uuid,"screenName":name,"role":"attendee","location":"meeting"});
+    let raw = vec![
+        json!({"eventType":"join","timestamp":"2026-11-20T10:00:00Z","participantUUID":"m:1","screenName":"Ada","role":"attendee","location":"meeting"}),
+        json!({"eventType":"rosterSnapshot","timestamp":"2026-11-20T10:00:00Z","participants":[p("m:1","Ada L")]}),
+        json!({"eventType":"instance_ended","timestamp":"2026-11-20T10:30:00Z"}),
+        json!({"eventType":"rosterSnapshot","timestamp":"2026-11-20T10:31:00Z","participants":[p("m:9","Late Ghost")]}),
+    ];
+    let record = build_record(
+        MeetingMeta {
+            meeting_id: "m".into(),
+            meeting_topic: "end".into(),
+            started_at: "2026-11-20T10:00:00Z".into(),
+            ended_at: Some("2026-11-20T10:30:00Z".into()),
+        },
+        &raw,
+        EngineConfig::default(),
+        EngineState::default(),
+        EngineOptions::default(),
+        "2026-11-20T10:30:00Z",
+    )
+    .unwrap();
+    let roster = serde_json::to_value(&record).unwrap()["latestRoster"].clone();
+    assert_eq!(roster.as_array().unwrap().len(), 1, "{roster}");
+    assert_eq!(roster[0]["screenName"], "Ada L");
+    assert_eq!(roster[0]["screenNamePinyin"], "ada l");
+}

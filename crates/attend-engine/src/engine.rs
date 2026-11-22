@@ -389,14 +389,29 @@ pub fn build_record(
         .unwrap_or_default();
     let mut events = Vec::<MovementEvent>::new();
     let mut participants = Vec::<SessionParticipant>::new();
+    let mut participant_indices = HashMap::<String, usize>::new();
+    let mut last_seen_event_indices = Vec::<usize>::new();
+    let mut normalized_participant_names = Vec::<String>::new();
     let mut name_changes = Vec::<NameChange>::new();
     let mut uuid_map = HashMap::<String, String>::new();
     let mut observed_roster: Option<HashMap<String, ZoomParticipant>> = None;
-    let mut snapshot_active = HashSet::<String>::new();
+    let mut snapshot_active = HashSet::<usize>::new();
+    let mut activity = HashMap::<String, bool>::new();
+    let roster_candidate_index = candidate_people_index(&config.roster, &config.aliases);
     let mut end = meta.ended_at.clone();
     let mut hands = Vec::new();
     let mut ordered = raw_events.to_vec();
     ordered.sort_by_key(|e| timestamp_ms(&e["timestamp"]).unwrap_or(0));
+    // Only the last snapshot the loop below actually processes becomes the observed
+    // roster; snapshots after a stopping instance_ended are skipped.
+    let mut last_snapshot_idx = None;
+    for (idx, event) in ordered.iter().enumerate() {
+        match event["eventType"].as_str().or_else(|| event["kind"].as_str()) {
+            Some("instance_ended") if options.stop_at_instance_end => break,
+            Some("rosterSnapshot") => last_snapshot_idx = Some(idx),
+            _ => {}
+        }
+    }
     let mut ended = false;
     for (idx, e) in ordered.iter().enumerate() {
         let ty = e["eventType"]
@@ -413,66 +428,73 @@ pub fn build_record(
             continue;
         }
         if ty == "rosterSnapshot" {
-            let mut snapshot = HashMap::new();
-            let mut next_active = HashSet::new();
+            let retain_snapshot = last_snapshot_idx == Some(idx);
+            let mut snapshot = retain_snapshot.then(HashMap::new);
+            snapshot_active.clear();
             if let Some(items) = e["participants"].as_array() {
                 for item in items {
-                    let uuid = item["participantUUID"]
-                        .as_str()
-                        .unwrap_or_default()
-                        .to_string();
+                    let Some(uuid) = item["participantUUID"].as_str() else {
+                        continue;
+                    };
                     if uuid.is_empty() {
                         continue;
                     }
-                    let name = item["screenName"].as_str().unwrap_or_default().to_string();
+                    let name = item["screenName"].as_str().unwrap_or_default();
                     let loc = if item["location"] == "waiting-room" {
                         ParticipantLocation::WaitingRoom
                     } else {
                         ParticipantLocation::Meeting
                     };
-                    let role = item["role"].as_str().unwrap_or("attendee").to_string();
-                    let ts = ts.clone();
-                    let Some(id) = uuid_map.get(&uuid).cloned() else {
+                    let role = item["role"].as_str().unwrap_or("attendee");
+                    let Some(id) = uuid_map.get(uuid) else {
                         continue;
                     };
-                    if let Some(p) = participants
-                        .iter_mut()
-                        .find(|p| p.session_participant_id == id)
-                    {
+                    if let Some(&participant_index) = participant_indices.get(id) {
+                        let p = &mut participants[participant_index];
                         if p.current_screen_name != name {
                             name_changes.push(NameChange {
                                 id: format!("rename-{}", name_changes.len() + 1),
                                 timestamp: ts.clone(),
                                 session_participant_id: id.clone(),
-                                participant_uuid: uuid.clone(),
+                                participant_uuid: uuid.to_owned(),
                                 previous_screen_name: p.current_screen_name.clone(),
-                                next_screen_name: name.clone(),
+                                next_screen_name: name.to_owned(),
                             });
-                            p.current_screen_name = name.clone();
-                            if !p.screen_names.contains(&name) {
-                                p.screen_names.push(name.clone());
+                            p.current_screen_name = name.to_owned();
+                            normalized_participant_names[participant_index] = normalize_name(name);
+                            if !p.screen_names.iter().any(|screen_name| screen_name == name) {
+                                p.screen_names.push(name.to_owned());
                             }
                         }
-                        p.current_participant_uuid = uuid.clone();
-                        p.current_location = loc.clone();
-                        p.role = role.clone();
-                        p.last_seen_at = ts;
+                        if p.current_participant_uuid != uuid {
+                            p.current_participant_uuid = uuid.to_owned();
+                        }
+                        if p.current_location != loc {
+                            p.current_location = loc.clone();
+                        }
+                        if p.role != role {
+                            p.role = role.to_owned();
+                        }
+                        last_seen_event_indices[participant_index] = idx;
+                        snapshot_active.insert(participant_index);
                     }
-                    snapshot.insert(
-                        uuid.clone(),
-                        ZoomParticipant {
-                            participant_uuid: uuid,
-                            screen_name: name.clone(),
-                            screen_name_pinyin: build_pinyin(&name),
-                            role,
-                            location: loc,
-                        },
-                    );
-                    next_active.insert(id);
+                    if let Some(snapshot) = snapshot.as_mut() {
+                        snapshot.insert(
+                            uuid.to_owned(),
+                            ZoomParticipant {
+                                participant_uuid: uuid.to_owned(),
+                                screen_name: name.to_owned(),
+                                screen_name_pinyin: String::new(),
+                                role: role.to_owned(),
+                                location: loc,
+                            },
+                        );
+                    }
                 }
             }
-            snapshot_active = next_active;
-            observed_roster = Some(snapshot);
+            if let Some(snapshot) = snapshot {
+                observed_roster = Some(snapshot);
+            }
             continue;
         }
         if ty == "hand" {
@@ -521,10 +543,9 @@ pub fn build_record(
         let role = e["role"].as_str().unwrap_or("attendee").to_string();
         if ty == "update" {
             if let Some(id) = uuid_map.get(&uuid).cloned() {
-                if let Some(p) = participants
-                    .iter_mut()
-                    .find(|p| p.session_participant_id == id)
-                {
+                if let Some(&participant_index) = participant_indices.get(&id) {
+                    let p = &mut participants[participant_index];
+                    last_seen_event_indices[participant_index] = idx;
                     if p.current_screen_name != name {
                         name_changes.push(NameChange {
                             id: format!("rename-{}", name_changes.len() + 1),
@@ -535,6 +556,7 @@ pub fn build_record(
                             next_screen_name: name.clone(),
                         });
                         p.current_screen_name = name.clone();
+                        normalized_participant_names[participant_index] = normalize_name(&name);
                         if !p.screen_names.contains(&name) {
                             p.screen_names.push(name.clone());
                         }
@@ -549,50 +571,38 @@ pub fn build_record(
         let participant_id = if let Some(id) = uuid_map.get(&uuid) {
             id.clone()
         } else {
-            let mut activity = HashMap::<String, bool>::new();
-            for event in &events {
-                if let Some(id) = &event.session_participant_id {
-                    match event.kind {
-                        MovementType::Join
-                        | MovementType::JoinedBefore
-                        | MovementType::WaitingRoomJoinFromOutside
-                        | MovementType::WaitingRoomJoinedBefore
-                        | MovementType::WaitingRoomJoinFromMeeting => {
-                            activity.insert(id.clone(), true);
-                        }
-                        MovementType::Leave | MovementType::WaitingRoomLeave => {
-                            activity.insert(id.clone(), false);
-                        }
-                    }
-                }
-            }
-            let active: HashSet<String> = activity
-                .into_iter()
-                .filter_map(|(id, yes)| yes.then_some(id))
-                .chain(snapshot_active.iter().cloned())
+            let active: HashSet<usize> = activity
+                .iter()
+                .filter_map(|(id, yes)| yes.then(|| participant_indices.get(id).copied()).flatten())
+                .chain(snapshot_active.iter().copied())
                 .collect();
+            let normalized_name = normalize_name(&name);
             let by_name: Vec<_> = participants
                 .iter()
-                .filter(|p| {
-                    normalize_name(&p.current_screen_name) == normalize_name(&name)
-                        && !active.contains(&p.session_participant_id)
+                .enumerate()
+                .filter(|(i, _)| {
+                    normalized_participant_names[*i] == normalized_name && !active.contains(i)
                 })
+                .map(|(_, p)| p)
                 .collect();
-            let by_roster: Vec<_> = candidate_people(&name, &config.roster, &config.aliases);
+            let by_roster =
+                candidate_people_from_index(&name, &config.roster, &roster_candidate_index);
             let target = if by_roster.len() == 1 {
                 let id = by_roster[0].person_id;
                 participants
                     .iter()
-                    .filter(|p| {
-                        !active.contains(&p.session_participant_id)
-                            && candidate_people(
+                    .enumerate()
+                    .filter(|(i, p)| {
+                        !active.contains(i)
+                            && candidate_people_from_index(
                                 &p.current_screen_name,
                                 &config.roster,
-                                &config.aliases,
+                                &roster_candidate_index,
                             )
                             .iter()
                             .any(|rp| rp.person_id == id)
                     })
+                    .map(|(_, p)| p)
                     .collect::<Vec<_>>()
             } else {
                 vec![]
@@ -628,14 +638,15 @@ pub fn build_record(
                     identity_resolution: resolution.into(),
                     has_ambiguous_name: resolution == "ambiguous",
                 });
+                participant_indices.insert(id.clone(), participants.len() - 1);
+                last_seen_event_indices.push(idx);
+                normalized_participant_names.push(normalize_name(&name));
                 uuid_map.insert(uuid.clone(), id.clone());
                 id
             }
         };
-        if let Some(p) = participants
-            .iter_mut()
-            .find(|p| p.session_participant_id == participant_id)
-        {
+        if let Some(&participant_index) = participant_indices.get(&participant_id) {
+            let p = &mut participants[participant_index];
             if p.current_screen_name != name && ty == "update" {
                 name_changes.push(NameChange {
                     id: format!("rename-{}", name_changes.len() + 1),
@@ -653,10 +664,13 @@ pub fn build_record(
                 p.screen_names.push(name.clone())
             }
             p.current_participant_uuid = uuid.clone();
-            p.current_screen_name = name.clone();
+            if p.current_screen_name != name {
+                p.current_screen_name = name.clone();
+                normalized_participant_names[participant_index] = normalize_name(&name);
+            }
             p.current_location = loc.clone();
             p.role = role.clone();
-            p.last_seen_at = ts.clone();
+            last_seen_event_indices[participant_index] = idx;
         }
         let mt = match ty {
             "leave" => MovementType::Leave,
@@ -671,6 +685,10 @@ pub fn build_record(
             "snapshot" => MovementType::JoinedBefore,
             _ => MovementType::Join,
         };
+        activity.insert(
+            participant_id.clone(),
+            !matches!(mt, MovementType::Leave | MovementType::WaitingRoomLeave),
+        );
         events.push(MovementEvent {
             id: format!("event-{}", idx + 1),
             timestamp: ts,
@@ -684,6 +702,9 @@ pub fn build_record(
                 location: loc,
             },
         });
+    }
+    for (participant, &event_index) in participants.iter_mut().zip(&last_seen_event_indices) {
+        participant.last_seen_at = event_timestamp(&ordered[event_index]);
     }
     // Flag identities when their active intervals overlap with the same
     // normalized name. A historical name reuse after a participant leaves is
@@ -719,10 +740,16 @@ pub fn build_record(
             participant.has_ambiguous_name = true;
         }
     }
-    let roster = observed_roster
+    if let Some(roster) = observed_roster.as_mut() {
+        for participant in roster.values_mut() {
+            participant.screen_name_pinyin = build_pinyin(&participant.screen_name);
+        }
+    }
+    let mut roster = observed_roster
         .as_ref()
-        .map(|m| m.values().cloned().collect())
+        .map(|m| m.values().cloned().collect::<Vec<_>>())
         .unwrap_or_else(|| latest_roster(&events));
+    roster.sort_by(|a, b| a.participant_uuid.cmp(&b.participant_uuid));
     let record_session = SessionRecord {
         session_id: meta.meeting_id.clone(),
         origin_session_key: meta.meeting_id.clone(),
@@ -827,6 +854,17 @@ pub fn derive(
     let start_ms = timestamp_ms(&json!(session.started_at)).unwrap_or(0);
     let reference_ms = timestamp_ms(&json!(reference_time)).unwrap_or(start_ms);
     let mut participants = session.session_participants.clone();
+    let participant_indices: HashMap<_, _> = participants
+        .iter()
+        .enumerate()
+        .map(|(i, p)| (p.session_participant_id.clone(), i))
+        .collect();
+    let mut latest_by_uuid = HashMap::<String, (usize, &ZoomParticipant)>::new();
+    for (index, latest) in session.latest_roster.iter().enumerate() {
+        latest_by_uuid
+            .entry(latest.participant_uuid.clone())
+            .or_insert((index, latest));
+    }
     let mut states: HashMap<String, State> = participants
         .iter()
         .map(|p| {
@@ -890,10 +928,8 @@ pub fn derive(
                 | MovementType::WaitingRoomJoinedBefore
         );
         let counts_as_presence = !waiting || options.waiting_room_counts_as_presence;
-        if let Some(p) = participants
-            .iter_mut()
-            .find(|p| p.session_participant_id == id)
-        {
+        if let Some(&participant_index) = participant_indices.get(id) {
+            let p = &mut participants[participant_index];
             p.current_participant_uuid = event.participant.participant_uuid.clone();
             if !p
                 .participant_uuids
@@ -977,11 +1013,13 @@ pub fn derive(
         {
             state.returned = *returned;
         }
-        if let Some(latest) = session
-            .latest_roster
+        let latest = participant
+            .participant_uuids
             .iter()
-            .find(|p| participant.participant_uuids.contains(&p.participant_uuid))
-        {
+            .filter_map(|uuid| latest_by_uuid.get(uuid).copied())
+            .min_by_key(|(index, _)| *index)
+            .map(|(_, latest)| latest);
+        if let Some(latest) = latest {
             participant.current_participant_uuid = latest.participant_uuid.clone();
             if !participant
                 .participant_uuids
@@ -1208,26 +1246,34 @@ fn derive_roster_rows(
         .unwrap_or(&[]);
     let mut output = Vec::new();
     let mut seen_people = HashSet::new();
+    let participant_by_id: HashMap<_, _> = participants
+        .iter()
+        .map(|p| (p.session_participant_id.as_str(), p))
+        .collect();
+    let roster_by_id: HashMap<_, _> = config.roster.iter().map(|p| (p.person_id, p)).collect();
+    let candidate_index = candidate_people_index(&config.roster, &config.aliases);
+    let mut latest_decision = HashMap::<&str, &ReconciliationDecision>::new();
+    for decision in decisions {
+        latest_decision.insert(&decision.session_participant_id, decision);
+    }
     for mut row in generic_rows {
-        let Some(participant) = participants.iter().find(|p| {
-            Some(p.session_participant_id.as_str()) == row.session_participant_id.as_deref()
-        }) else {
+        let Some(participant) = row
+            .session_participant_id
+            .as_deref()
+            .and_then(|id| participant_by_id.get(id).copied())
+        else {
             continue;
         };
-        let decision = decisions
-            .iter()
-            .rev()
-            .find(|d| d.session_participant_id == participant.session_participant_id);
+        let decision = latest_decision
+            .get(participant.session_participant_id.as_str())
+            .copied();
         let mut status = MatchStatus::Unmatched;
         let mut people: Vec<&RosterPerson> = Vec::new();
         if let Some(d) = decision {
             match d.action {
                 DecisionAction::Guest => status = MatchStatus::Guest,
                 DecisionAction::Match | DecisionAction::NameChangeKeepMatch => {
-                    if let Some(person) = config
-                        .roster
-                        .iter()
-                        .find(|p| Some(p.person_id) == d.person_id)
+                    if let Some(person) = d.person_id.and_then(|id| roster_by_id.get(&id).copied())
                     {
                         people.push(person);
                         status = MatchStatus::Matched;
@@ -1235,7 +1281,7 @@ fn derive_roster_rows(
                 }
                 DecisionAction::Split => {
                     for id in &d.split_person_ids {
-                        if let Some(person) = config.roster.iter().find(|p| p.person_id == *id) {
+                        if let Some(person) = roster_by_id.get(id).copied() {
                             if !people.iter().any(|p| p.person_id == person.person_id) {
                                 people.push(person);
                             }
@@ -1249,10 +1295,10 @@ fn derive_roster_rows(
             }
         }
         if people.is_empty() && status != MatchStatus::Guest {
-            let candidates = candidate_people(
+            let candidates = candidate_people_from_index(
                 &participant.current_screen_name,
                 &config.roster,
-                &config.aliases,
+                &candidate_index,
             );
             if candidates.len() > 1 {
                 return Err(EngineError::MultipleRosterMatches(

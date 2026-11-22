@@ -6,4 +6,5 @@ mod types;
 
 pub use engine::*;
 pub use names::*;
+pub(crate) use names::{candidate_people_from_index, candidate_people_index};
 pub use types::*;
