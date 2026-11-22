@@ -26,7 +26,7 @@ import { getLiveStatusLabel, getMatchStatusLabel, getParticipantLocationLabel, g
   $: names = $record.record?.nameChangeEvents || $record.nameChangeEvents || [];
   $: allRows = $record.rows || [];
   $: attendanceRows = allRows.filter((row: any) => !['unmatched', 'guest'].includes(row.matchStatus));
-  $: profile = ($configs.profiles || []).find((item: any) => item.id === $record.record?.selectedProfileId) || ($configs.profiles || []).find((item: any) => item.id === 'default-all');
+  $: profile = ($configs.profiles || []).find((item: any) => item.id === ($record.record?.selectedProfileId || $record.record?.guessedProfileId)) || ($configs.profiles || []).find((item: any) => item.id === 'default-all');
   $: mode = $record.mode || 'generic';
   $: groupNames = [...new Set<string>([...($configs.groups || []).map((g: any) => typeof g === 'string' ? g : g.name || g.group), ...($configs.roster || []).map((p: any) => p.group)].filter(Boolean))];
   $: rows = sortRecordRows(filteredRows, sortKey, sortDir);
