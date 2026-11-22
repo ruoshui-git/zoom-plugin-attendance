@@ -13,6 +13,7 @@ let viewedRequest = 0;
 const recordCache = new Map<string, any>();
 let refreshRun: Promise<void> | null = null;
 let queuedChanged = new Set<string>();
+let refreshQueued = false;
 function storesFor(target: DataTarget = "live") {
   return target === "viewed"
     ? { meeting: s.viewedMeeting, record: s.viewedRecord, state: s.viewedState, revision: s.viewedStateRevision, events: s.viewedEvents }
@@ -52,14 +53,15 @@ function setViewedState(data: any) {
 }
 export function refresh(options: { changed?: string[] } = {}): Promise<void> {
   for (const id of options.changed || []) queuedChanged.add(id);
-  if (refreshRun) return refreshRun;
+  if (refreshRun) { refreshQueued = true; return refreshRun; }
   refreshRun = (async () => {
     do {
       const changed = queuedChanged;
       queuedChanged = new Set();
+      refreshQueued = false;
       await refreshOnce(changed);
-    } while (queuedChanged.size);
-  })().finally(() => { refreshRun = null; });
+    } while (refreshQueued || queuedChanged.size);
+  })().finally(() => { refreshRun = null; refreshQueued = false; });
   return refreshRun;
 }
 async function refreshOnce(changed: Set<string>) {
@@ -637,6 +639,8 @@ export async function switchMode(next: string) {
     }
     const data = await response.json();
     set(s.stateRevision, data.revision);
+    invalidateRecord(active.instanceId);
+    await refresh({ changed: [active.instanceId] });
   } catch {}
 }
 export async function zoomSignIn() {

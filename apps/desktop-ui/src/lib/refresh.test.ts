@@ -70,4 +70,17 @@ describe("refresh", () => {
     await Promise.all(runs);
     expect(urls.filter((u) => u === "/api/meetings")).toHaveLength(2);
   });
+
+  it("runs a follow-up when a plain refresh arrives during a running one", async () => {
+    await api.refresh();
+    let release!: () => void;
+    gate = new Promise((r) => (release = r));
+    urls = [];
+    const first = api.refresh();
+    const second = api.refresh(); // e.g. a websocket "state" message mid-refresh
+    release();
+    gate = null;
+    await Promise.all([first, second]);
+    expect(urls.filter((u) => u === "/api/meetings")).toHaveLength(2);
+  });
 });
