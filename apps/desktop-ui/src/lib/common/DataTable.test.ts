@@ -25,4 +25,9 @@ describe('DataTable', () => {
     await fireEvent.click(screen.getByRole('checkbox', { name: 'Select all' }));
     expect(onSelectionChange).toHaveBeenLastCalledWith(['b', 'a']);
   });
+  it('keeps the full meeting topic in the topic cell title', () => {
+    const topic = 'A meeting topic long enough to be truncated in the records table';
+    render(DataTable, { props: { items: [{ id: 'topic', topic }], columns: [{ key: 'topic', label: 'Meeting', value: (row: any) => row.topic }] } });
+    expect(screen.getByRole('button', { name: topic }).getAttribute('title')).toBe(topic);
+  });
 });

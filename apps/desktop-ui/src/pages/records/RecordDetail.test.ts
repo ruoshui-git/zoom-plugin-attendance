@@ -84,4 +84,12 @@ describe("RecordDetail attendance filters", () => {
     expect(container.textContent).toContain("Loading…");
     expect(container.textContent).not.toContain("Old row");
   });
+
+  it("localizes the ungrouped attendance value", () => {
+    language.set("zh-CN");
+    uiLanguage.set("zh-CN");
+    record.set({ mode: "generic", rows: [{ canonicalName: "Ada", group: "__UNGROUPED__", currentStatus: "present", matchStatus: "matched" }], summary: { total: 1 }, loading: false });
+    const { container } = render(RecordDetail);
+    expect(container.querySelector(".group-cell")?.textContent).toBe("未分组");
+  });
 });
