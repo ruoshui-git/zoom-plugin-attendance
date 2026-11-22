@@ -2547,7 +2547,7 @@ async fn api_meetings(State(a): State<App>, headers: HeaderMap) -> Response {
     if let Some(r) = api_origin(&a, &headers) {
         return r;
     }
-    match a.store.meetings(){Ok(rows)=>Json(rows.iter().map(|m|{let meta=a.store.meeting(&m.instance_id).ok().flatten().unwrap_or(Value::Null);let (_,state)=a.store.get_state(&m.instance_id).unwrap_or((0,Value::Null));json!({"instanceId":m.instance_id,"meetingNumber":m.meeting_number,"topic":m.topic,"startedAt":m.started_at,"endedAt":m.ended_at,"endReason":m.end_reason,"isHost":m.is_host,"lastSeq":m.last_seq,"source":meta["source"],"exportedAt":state["exportedAt"],"needsExport":state["needsExport"]})}).collect::<Vec<_>>()).into_response(),Err(e)=>api_error(e)}
+    match a.store.meeting_summaries() { Ok(rows) => Json(rows).into_response(), Err(e) => api_error(e) }
 }
 async fn api_meeting(
     State(a): State<App>,
