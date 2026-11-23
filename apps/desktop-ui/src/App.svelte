@@ -37,8 +37,9 @@
   import Toast from "./lib/common/Toast.svelte";
   import { toast } from "./lib/toast";
   import { loadWindowState } from "./lib/window-control";
-  import { windowState, setPinned } from "./lib/window-control";
+  import { windowState, setPinned, setWindowMode } from "./lib/window-control";
   import Tooltip from "./lib/common/Tooltip.svelte";
+  import CompactLiveView from "./pages/live/CompactLiveView.svelte";
 
   $: $language = $uiLanguage;
   $: appTitle = $language ? t("出勤助手桌面版", "AttendFlow Desktop") : "AttendFlow Desktop";
@@ -104,7 +105,7 @@
 <svelte:head><title>{appTitle}</title></svelte:head>
 <Toast toasts={$toast} onDismiss={(id) => toast.dismiss(id)} />
 <ConfirmDialog />
-<div class="shell">
+{#if $windowState.available && $windowState.mode === "compact"}<CompactLiveView />{:else}<div class="shell">
   <aside>
     <div class="brand">
       <img class="mark" src={appIcon} alt="" width="35" height="35" />
@@ -135,6 +136,7 @@
       </div>
       <div class="header-actions">
         {#if $windowState.available}
+          <Tooltip text={t("紧凑模式", "Compact view")}><button class="pin-button" onclick={() => setWindowMode("compact").catch((e) => toast.error(String(e)))}>{t("紧凑", "Compact")}</button></Tooltip>
           <Tooltip text={$windowState.pinned ? t("取消置顶", "Stop keeping on top") : t("置顶窗口", "Keep window on top")}>
             <button class="pin-button" class:active={$windowState.pinned} aria-pressed={$windowState.pinned} onclick={async () => {
               try { const pinned = !$windowState.pinned; await setPinned(pinned); toast.success(pinned ? t("窗口已置顶", "Window kept on top") : t("已取消置顶", "Window no longer on top")); }
@@ -179,7 +181,7 @@
     {:else}<SettingsPage />
     {/if}
   </main>
-</div>
+</div>{/if}
 
 <style>
   .pin-button { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 6px; padding: 6px 9px; font-size: 12px; cursor: pointer; }
