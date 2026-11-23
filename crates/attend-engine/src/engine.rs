@@ -275,6 +275,7 @@ pub fn adapt_bridge_events(events: &[Value]) -> Result<Vec<Value>, EngineError> 
     let mut out = Vec::new();
     let mut names = HashMap::<String, String>::new();
     let mut live_roster = HashMap::<String, Value>::new();
+    let mut hand_state = HashMap::<String, bool>::new();
     for e in events {
         let kind = e.get("kind").and_then(Value::as_str).unwrap_or("");
         let at = e.get("at").and_then(Value::as_f64).unwrap_or(0.0) / 1000.0;
@@ -293,6 +294,7 @@ pub fn adapt_bridge_events(events: &[Value]) -> Result<Vec<Value>, EngineError> 
                     live_roster.clear();
                 }
                 let mut present = HashSet::<String>::new();
+                let mut synthetic_hands = Vec::new();
                 for u in users {
                     let uid = u
                         .get("userId")
@@ -311,6 +313,20 @@ pub fn adapt_bridge_events(events: &[Value]) -> Result<Vec<Value>, EngineError> 
                     );
                     let uuid = format!("{instance}:{uid}");
                     present.insert(uuid.clone());
+                    if let Some(flag) = u.get("raisedHand").and_then(Value::as_bool) {
+                        if action == "left" {
+                            if hand_state.get(&uuid) == Some(&true) || (flag && hand_state.get(&uuid) != Some(&false)) {
+                                synthetic_hands.push(json!({"eventType":"hand","timestamp":ts,"participantUUID":uuid,"screenName":u["name"],"raised":false,"reason":"left"}));
+                            }
+                            hand_state.remove(&uuid);
+                        } else if matches!(action, "sync_all" | "syncAll" | "add" | "update") {
+                            let old = hand_state.get(&uuid).copied().unwrap_or(false);
+                            if old != flag {
+                                synthetic_hands.push(json!({"eventType":"hand","timestamp":ts,"participantUUID":uuid,"screenName":u["name"],"raised":flag}));
+                            }
+                            hand_state.insert(uuid.clone(), flag);
+                        }
+                    }
                     let previous_location = previous_roster
                         .as_ref()
                         .and_then(|roster| roster.get(&uuid))
@@ -351,6 +367,7 @@ pub fn adapt_bridge_events(events: &[Value]) -> Result<Vec<Value>, EngineError> 
                 out.push(
                     json!({"eventType":"rosterSnapshot","timestamp":ts,"participants":snapshot}),
                 );
+                out.extend(synthetic_hands);
             }
         } else if kind == "hand" {
             if let Some(uid) = e.get("userId") {
@@ -359,7 +376,13 @@ pub fn adapt_bridge_events(events: &[Value]) -> Result<Vec<Value>, EngineError> 
                     .map(str::to_owned)
                     .unwrap_or_else(|| uid.to_string());
                 let uuid = format!("{instance}:{uid}");
-                out.push(json!({"eventType":"hand","timestamp":ts,"participantUUID":uuid,"screenName":names.get(&uuid).cloned().unwrap_or_default(),"raised":e["raised"].as_bool().unwrap_or(false)}));
+                let raised = e["raised"].as_bool().unwrap_or(false);
+                if hand_state.get(&uuid).copied().unwrap_or(false) != raised {
+                    hand_state.insert(uuid.clone(), raised);
+                    let mut event = json!({"eventType":"hand","timestamp":ts,"participantUUID":uuid,"screenName":names.get(&uuid).cloned().unwrap_or_default(),"raised":raised});
+                    if let Some(reason) = e.get("reason") { event["reason"] = reason.clone(); }
+                    out.push(event);
+                }
             }
         } else if kind == "instance_ended" {
             out.push(json!({"eventType":"instance_ended","timestamp":ts}));
@@ -512,6 +535,7 @@ pub fn build_record(
                     .into(),
                     sequence: idx as u64,
                     received_at: timestamp_ms(&e["timestamp"]).unwrap_or(0),
+                    reason: e.get("reason").and_then(Value::as_str).map(str::to_owned),
                 });
             }
             continue;
@@ -1679,6 +1703,16 @@ use serde_json::json;
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn hands(events: Vec<Value>) -> Vec<Value> { adapt_bridge_events(&events).unwrap().into_iter().filter(|e| e["eventType"] == "hand").collect() }
+    #[test] fn hand_left_with_raised_hand_yields_lower_reason_left() {
+        let h=hands(vec![json!({"kind":"users","action":"add","at":1,"instanceId":"i","users":[{"userId":1,"name":"A","raisedHand":true}]}),json!({"kind":"users","action":"left","at":2,"instanceId":"i","users":[{"userId":1,"name":"A","raisedHand":true}]})]);
+        assert_eq!(h.len(),2); assert_eq!(h[1]["raised"],false); assert_eq!(h[1]["reason"],"left");
+    }
+    #[test] fn hand_lower_all_dedups() {
+        let h=hands(vec![json!({"kind":"hand","at":1,"instanceId":"i","userId":1,"raised":true}),json!({"kind":"users","action":"update","at":2,"instanceId":"i","users":[{"userId":1,"name":"A","raisedHand":false}]}),json!({"kind":"hand","at":3,"instanceId":"i","userId":1,"raised":false}),json!({"kind":"all_hands_lowered","at":4,"instanceId":"i"}),json!({"kind":"all_hands_lowered","at":5,"instanceId":"i"})]); assert_eq!(h.len(),2);
+    }
+    #[test] fn hand_flag_only_lower() { let h=hands(vec![json!({"kind":"users","action":"update","at":1,"instanceId":"i","users":[{"userId":1,"name":"A","raisedHand":true}]}),json!({"kind":"users","action":"update","at":2,"instanceId":"i","users":[{"userId":1,"name":"A","raisedHand":false}]})]); assert_eq!(h.len(),2); assert_eq!(h[0]["raised"],true); assert_eq!(h[1]["raised"],false); }
+    #[test] fn hand_synthetic_left_event_not_duplicated() { let h=hands(vec![json!({"kind":"users","action":"add","at":1,"instanceId":"i","users":[{"userId":1,"name":"A","raisedHand":true}]}),json!({"kind":"users","action":"left","at":2,"instanceId":"i","users":[{"userId":1,"name":"A","raisedHand":true}]}),json!({"kind":"hand","at":2,"instanceId":"i","userId":1,"raised":false,"reason":"left"})]); assert_eq!(h.len(),2); }
     #[test]
     fn scoring_bands() {
         assert_eq!(score(9, 10).grade, AttendanceGrade::Excellent);

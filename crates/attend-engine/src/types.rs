@@ -340,6 +340,8 @@ pub struct RaiseHandEntry {
     pub action: String,
     pub sequence: u64,
     pub received_at: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]

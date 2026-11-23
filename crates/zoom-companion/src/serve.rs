@@ -313,6 +313,25 @@ impl Tracker {
         self.file = None;
         v
     }
+    /// R-A3.3: after "lower all hands", diff the re-read participant list's hand flags
+    /// against tracker state and log one `users` update with only the changed users.
+    fn hand_flag_refresh(&mut self, fresh: Vec<User>) -> Vec<Value> {
+        let mut changed = vec![];
+        for u in fresh {
+            if let Some(old) = self.users.iter_mut().find(|x| x.user_id == u.user_id) {
+                if old.raised_hand != u.raised_hand {
+                    old.raised_hand = u.raised_hand;
+                    changed.push(old.clone());
+                }
+            }
+        }
+        if changed.is_empty() {
+            return vec![];
+        }
+        self.emit("users", json!({"action":"update","users":changed,"source":"hand_refresh"}))
+            .into_iter()
+            .collect()
+    }
     fn apply(
         &mut self,
         e: Event,
@@ -362,6 +381,7 @@ impl Tracker {
             }
             Event::UserStatus { action, users, .. } => {
                 let us: Vec<_> = users.iter().map(user).collect();
+                let leaving_hands: Vec<u32> = if action == 3 { users.iter().filter(|p| p.flags.raised_hand() || self.users.iter().any(|old| old.user_id == p.user_id && old.raised_hand)).map(|p| p.user_id).collect() } else { Vec::new() };
                 let mut self_change = None;
                 match action {
                     1 => self.users = us.clone(),
@@ -411,6 +431,9 @@ impl Tracker {
                 };
                 if let Some(v) = self.emit("users", json!({"action":a,"users":us})) {
                     out.push(v)
+                }
+                for user_id in leaving_hands {
+                    if let Some(v) = self.emit("hand", json!({"userId":user_id,"raised":false,"reason":"left"})) { out.push(v); }
                 }
                 if let Some(me) = self_change {
                     if let Some(v) =
@@ -1020,6 +1043,18 @@ fn refresh_users(a: &App) {
         a.tracker.lock().unwrap().users = ps.iter().map(user).collect();
     }
 }
+fn refresh_hand_flags(a: &App) {
+    let fresh = {
+        let g = a.session.lock().unwrap();
+        let Some(s) = g.as_ref() else { return };
+        match s.participants(MeetingInstance::Default) {
+            Ok(ps) => ps.iter().map(user).collect::<Vec<_>>(),
+            Err(_) => return,
+        }
+    };
+    let out = a.tracker.lock().unwrap().hand_flag_refresh(fresh);
+    publish(a, out);
+}
 fn request_self_role(a: &App) {
     let id = a.tracker.lock().unwrap().meeting.as_ref()
         .and_then(|meeting| meeting.myself.as_ref()).map(|me| me.user_id);
@@ -1203,9 +1238,11 @@ fn sdk_loop(a: App) {
                                 }
                                 // Ask for our role only when the update touches us (or is a full sync), not for every participant event.
                                 let role_may_change = matches!(&e, Event::UserStatus { action, users, .. } if *action == 1 || users.iter().any(|u| u.flags.myself()));
+                                let all_hands_lowered = matches!(&e, Event::Other { name, .. } if name == "OnAllHandsLowered");
                                 let out = a.tracker.lock().unwrap().apply(e, None);
                                 publish(&a, out);
                                 if role_may_change { request_self_role(&a); }
+                                if all_hands_lowered { refresh_hand_flags(&a); }
                                 if lost {
                                     set_zoom(
                                         &a,
@@ -1728,6 +1765,115 @@ mod tests {
         assert_eq!(next["kind"], "instance_started");
         assert_ne!(next["instanceId"], id);
         let _ = fs::remove_dir_all(path);
+    }
+    fn hand_user(id: u32, raised: bool) -> Participant {
+        Participant {
+            user_id: id,
+            name: format!("U{id}"),
+            flags: zoom_bridge::ParticipantFlags(if raised { 1 << 5 } else { 0 }),
+            audio_type: 1,
+        }
+    }
+    fn hand_tracker() -> Tracker {
+        let mut t = Tracker::default();
+        t.start("7".into(), "".into(), 1, 3, None).unwrap();
+        t
+    }
+    fn status(action: i32, users: Vec<Participant>) -> Event {
+        Event::UserStatus { action, error_code: 0, instance: 1, users, thread_id: 0 }
+    }
+    fn other(name: &str, code: i32, value: i64) -> Event {
+        Event::Other { name: name.into(), code, value, instance: 1, thread_id: 0 }
+    }
+    fn hands_of(out: &[Value]) -> Vec<&Value> {
+        out.iter().filter(|v| v["kind"] == "hand").collect()
+    }
+    #[test]
+    fn tracker_left_with_hand_emits_lower_reason_left() {
+        let mut t = hand_tracker();
+        t.apply(status(2, vec![hand_user(5, true)]), None);
+        let out = t.apply(status(3, vec![hand_user(5, true)]), None);
+        let hands = hands_of(&out);
+        assert_eq!(hands.len(), 1);
+        assert_eq!(hands[0]["raised"], false);
+        assert_eq!(hands[0]["reason"], "left");
+        // The hand event follows the leave in the log.
+        assert_eq!(out[0]["kind"], "users");
+        // Leaving with the hand down gives no hand event.
+        t.apply(status(2, vec![hand_user(6, false)]), None);
+        assert!(hands_of(&t.apply(status(3, vec![hand_user(6, false)]), None)).is_empty());
+    }
+    #[test]
+    fn tracker_emoji_feedback_never_emits_hand() {
+        let mut t = hand_tracker();
+        t.apply(status(2, vec![hand_user(5, false)]), None);
+        for code in [1, 0, 2, 9] {
+            assert!(hands_of(&t.apply(other("OnEmojiFeedbackReceived", code, 5), None)).is_empty());
+        }
+    }
+    #[test]
+    fn tracker_hand_flag_refresh_emits_only_changes() {
+        let mut t = hand_tracker();
+        t.apply(status(2, vec![hand_user(5, true), hand_user(6, false)]), None);
+        assert!(t.hand_flag_refresh(vec![hand_user(5, true), hand_user(6, false)].iter().map(user).collect()).is_empty());
+        let out = t.hand_flag_refresh(vec![hand_user(5, false), hand_user(6, false)].iter().map(user).collect());
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0]["action"], "update");
+        assert_eq!(out[0]["users"].as_array().unwrap().len(), 1);
+        assert_eq!(out[0]["users"][0]["userId"], 5);
+        assert!(t.hand_flag_refresh(vec![hand_user(5, false)].iter().map(user).collect()).is_empty());
+    }
+    /// Replays the 2026-11-23 host lab run (raise, lower-all, leave with hand up, feedback)
+    /// through the tracker and the engine adapter, with and without the synthetic
+    /// leave lowers (old logs lack them).
+    #[test]
+    fn hand_old_log_rebuilt_from_host_lab() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../docs/live-tests/2026-11-23/host-lab.jsonl");
+        let text = fs::read_to_string(path).unwrap();
+        let mut t = hand_tracker();
+        let mut log = vec![];
+        for line in text.lines() {
+            let Ok(v) = serde_json::from_str::<Value>(line) else { continue };
+            let p = &v["payload"];
+            let e = match p["event"].as_str() {
+                Some("user_status") => status(
+                    p["action"].as_i64().unwrap_or(0) as i32,
+                    p["users"].as_array().into_iter().flatten().map(|u| Participant {
+                        user_id: u["user_id"].as_u64().unwrap_or(0) as u32,
+                        name: u["name"].as_str().unwrap_or("").into(),
+                        flags: zoom_bridge::ParticipantFlags(u["flags"].as_u64().unwrap_or(0) as u32),
+                        audio_type: u["audio_type"].as_i64().unwrap_or(0) as i32,
+                    }).collect(),
+                ),
+                Some("other") => other(
+                    p["name"].as_str().unwrap_or(""),
+                    p["code"].as_i64().unwrap_or(0) as i32,
+                    p["value"].as_i64().unwrap_or(0),
+                ),
+                _ => continue,
+            };
+            log.extend(t.apply(e, None));
+        }
+        let left_lowers = log.iter().filter(|v| v["kind"] == "hand" && v["reason"] == "left").count();
+        assert_eq!(left_lowers, 4, "host lab: 4 leaves with a hand up (docs/live-tests/2026-11-23)");
+        let old_log: Vec<Value> = log.iter().filter(|v| v["reason"] != "left").cloned().collect();
+        for events in [&log, &old_log] {
+            let adapted = attend_engine::adapt_bridge_events(events).unwrap();
+            let hands: Vec<&Value> = adapted.iter().filter(|e| e["eventType"] == "hand").collect();
+            assert_eq!(
+                hands.iter().filter(|h| h["reason"] == "left").count(),
+                left_lowers,
+                "every leave with a hand up is closed exactly once"
+            );
+            let mut last = std::collections::HashMap::<String, bool>::new();
+            for h in &hands {
+                let id = h["participantUUID"].as_str().unwrap().to_owned();
+                let raised = h["raised"].as_bool().unwrap();
+                assert_ne!(last.insert(id.clone(), raised), Some(raised), "repeated transition for {id}");
+            }
+            assert!(last.values().all(|raised| !raised), "no hand left open at the end of the lab run");
+        }
     }
     #[tokio::test]
     async fn websocket_streams_fake_source_event() {
