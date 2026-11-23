@@ -2,6 +2,9 @@
   import FormActions from "./common/FormActions.svelte";
   import { confirmDialog } from "./ui";
   import { saveConfig } from "./api";
+  import { tick } from "svelte";
+  import ImportPreviewSummary from "./common/ImportPreviewSummary.svelte";
+  import { toast } from "./toast";
   export let profiles: any[] = [];
   export let revision = 0;
   export let language = "en";
@@ -12,6 +15,7 @@
       case "add": case "added": case "create": case "created": return t("新增", "Add");
       case "update": case "updated": return t("更新", "Update");
       case "remove": case "removed": case "delete": case "deleted": return t("删除", "Delete");
+      case "reject": case "rejected": return t("拒绝", "Reject");
       default: return t("未知", "Unknown");
     }
   }
@@ -30,6 +34,12 @@
     bulkActive = "",
     bulkLate = "",
     bulkReturn = "";
+  let previewHeading: HTMLHeadingElement;
+  $: changes = preview?.changes || [];
+  $: applicableCount = changes.filter((c: any) => !["reject", "rejected"].includes(String(c.action || c.status).toLowerCase()) && c.rejected !== true).length;
+  function fields(value: any, before?: any) { if (!value || typeof value !== "object") return []; return Object.entries(value).filter(([key, val]) => key !== "id" && (!before || JSON.stringify(before[key]) !== JSON.stringify(val))); }
+  const display = (v: any) => v == null || v === "" ? "—" : Array.isArray(v) ? v.join(", ") : typeof v === "boolean" ? (v ? t("是", "Yes") : t("否", "No")) : String(v);
+  async function focusPreview() { await tick(); previewHeading?.scrollIntoView({ behavior: "smooth", block: "start" }); previewHeading?.focus(); }
   const split = (s: string, comma = false) =>
     s
       .split(comma ? /[,\n]/ : /[\n]/)
@@ -241,8 +251,10 @@
       });
       preview = await r.json();
       if (!r.ok) throw Error(preview.message || "Preview failed");
+      await focusPreview();
+      await focusPreview();
     } catch (e: any) {
-      error = e.message;
+      error = e.message; toast.error(e.message);
     } finally {
       (e.target as HTMLInputElement).value = "";
     }
@@ -259,8 +271,9 @@
       preview = null;
       revision = d.revision;
       onSaved();
+      toast.success(t("考勤配置导入成功。", "Attendance profiles imported successfully."));
     } catch (e: any) {
-      error = e.message;
+      error = e.message; toast.error(e.message);
     }
   }
   $: visible = profiles
@@ -488,7 +501,8 @@
   </div>{/if}
 {#if preview}<div class="overlay">
     <section class="slide-panel import-panel">
-      <h2>{t("配置导入预览", "Profile import preview")}</h2>
+      <h2 bind:this={previewHeading} tabindex="-1">{t("配置导入预览", "Profile import preview")}</h2>
+      <ImportPreviewSummary {changes} {t} />
       <div class="toolbar">
         <label>
           {t("批量启用", "Bulk active")}
@@ -517,18 +531,19 @@
           {t("应用批量编辑", "Apply bulk edit")}
         </button>
       </div>
+      <p class="import-help">{t("文件必须是 JSON 数组，每个对象至少包含 id 和 name。按 id 新增或更新；未出现在文件中的现有配置会保留。", "The file must be a JSON array. Each object needs id and name. Profiles are added or updated by id; existing profiles not in the file are kept.")}</p>
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
-              <th>{t("行", "Row")}</th><th>{t("配置", "Profile")}</th><th>
+              <th>{t("行", "Row")}</th><th>{t("配置", "Profile")}</th><th>{t("当前数据", "Current")}</th><th>{t("导入后", "After Import")}</th><th>
                 {t("操作", "Action")}
               </th><th>{t("原因", "Reason")}</th>
             </tr>
           </thead><tbody>
-            {#each preview.changes || [] as c}<tr>
-                <td>{c.row}</td><td>{c.id}</td><td>{importActionLabel(c.action)}</td><td>
-                  {c.reason || ""}
+            {#each changes as c}<tr class:rejected={["reject", "rejected"].includes(String(c.action || c.status).toLowerCase()) || c.rejected === true}>
+                <td>{c.row}</td><td>{c.id}</td><td>{#each fields(c.before) as [key, value]}<div><b>{key}:</b> {display(value)}</div>{/each}</td><td>{#each fields(c.after, c.action === "update" || c.action === "updated" ? c.before : null) as [key, value]}<div><b>{key}:</b> {display(value)}</div>{/each}</td><td>{importActionLabel(c.action || c.status)}</td><td>
+                  {#each fields(c.after, c.action === "update" || c.action === "updated" ? c.before : null) as [key, value]}<div><b>{key}:</b> {display(value)}</div>{/each}{c.reason || c.notes || ""}
                 </td>
               </tr>{/each}
           </tbody>
@@ -536,8 +551,8 @@
       </div>
       {#if error}<p class="error">{error}</p>{/if}
       <div class="actions">
-        <button class="primary" onclick={commit}>
-          {t("确认导入", "Confirm import")}
+        <button class="primary" onclick={commit} disabled={!applicableCount}>
+          {t(`确认导入 ${applicableCount} 条`, `Commit ${applicableCount} changes`)}
         </button><button onclick={() => (preview = null)}>
           {t("取消", "Cancel")}
         </button>
@@ -552,6 +567,8 @@
     border-radius: 14px;
     background: var(--surface);
   }
+  .rejected { background: #fff0f0; color: #8a1c1c; }
+  .import-help { color: #596273; font-size: 12px; line-height: 1.5; }
   .profile-workspace .panel-title {
     display: flex;
     align-items: center;

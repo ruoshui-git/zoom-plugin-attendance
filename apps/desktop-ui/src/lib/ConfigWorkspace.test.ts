@@ -52,7 +52,35 @@ describe("configuration import preview component", () => {
     );
     expect(await screen.findByText("Add")).toBeTruthy();
     expect(document.body.textContent).toContain("canonicalName");
-    expect(document.body.textContent).toContain('"Ada"');
+    expect(document.body.textContent).toContain("Total Rows");
+    expect(document.body.textContent).toContain("Applicable");
+  });
+
+  it("summarizes mixed changes and shows only changed update fields", async () => {
+    const preview = { revision: 1, value: [], changes: [
+      { row: 2, action: "add", id: 3, before: null, after: { canonicalName: "New" }, notes: "" },
+      { row: 3, action: "update", id: 1, before: { canonicalName: "Ada", group: "A" }, after: { canonicalName: "Ada", group: "B" }, notes: "" },
+      { row: 4, action: "reject", id: 0, reason: "Invalid row" },
+    ] };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => preview }));
+    render(ConfigWorkspace, { language: "en", roster: [], aliases: [] });
+    await fireEvent.click(screen.getByText("Import"));
+    await fireEvent.input(screen.getByPlaceholderText("Or paste CSV content here…"), { target: { value: "csv" } });
+    await fireEvent.click(screen.getByText("Preview"));
+    expect((await screen.findAllByText("3")).length).toBeGreaterThan(0);
+    expect(screen.getByText("Commit 2 changes")).toBeTruthy();
+    expect(document.body.textContent).toContain("group:");
+    expect(document.body.textContent).not.toContain('"canonicalName":"Ada"');
+  });
+
+  it("disables commit when there are no applicable rows", async () => {
+    const preview = { revision: 1, value: [], changes: [{ row: 2, action: "reject", id: 0, reason: "bad" }] };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => preview }));
+    render(ConfigWorkspace, { language: "en", roster: [], aliases: [] });
+    await fireEvent.click(screen.getByText("Import"));
+    await fireEvent.input(screen.getByPlaceholderText("Or paste CSV content here…"), { target: { value: "csv" } });
+    await fireEvent.click(screen.getByText("Preview"));
+    expect((await screen.findByText("Commit 0 changes") as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("only shows selection controls after enabling bulk select", async () => {
@@ -98,3 +126,5 @@ describe("configuration import preview component", () => {
     expect(screen.getByLabelText("Canonical name *")).toBeTruthy();
   });
 });
+
+
