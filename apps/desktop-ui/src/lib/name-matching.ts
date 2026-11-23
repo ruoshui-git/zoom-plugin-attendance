@@ -1,15 +1,32 @@
 export type RosterCandidate = { personId: number; canonicalName: string; pinyin?: string; active?: boolean };
 export type SplitDecision = { action: string; zoomName?: string; zoomNameAtDecision?: string; splitPersonIds?: number[]; createdAt?: string };
 
-const normalize = (value: string) => value.toLocaleLowerCase().replace(/[\s\p{P}\p{S}\u3000]/gu, '');
+/** Same as AttendFlow name-utils normalizeName. */
+const normalize = (value: string) => (value || '').trim().toLowerCase()
+  .replace(/[\s\u3000]+/g, '')
+  .replace(/[()（）[\]【】{}<>《》"'“”‘’.,，。!！?？、:：;；\-_]/g, '');
+const CHINESE_NAME_SPACE_PATTERN = /[\u4e00-\u9fff]+\s+[\u4e00-\u9fff]+/;
 
-/** Finds people named in a shared Zoom account (for example, "Ada & Grace"). */
+/** Same as AttendFlow name-utils isLikelySharedName. */
+export function isLikelySharedName(value: string): boolean {
+  return /[\/,&，、和|]|\band\b/i.test(value) || CHINESE_NAME_SPACE_PATTERN.test(value);
+}
+
+/** Same as AttendFlow name-utils parseSharedNameTokens. */
+export function parseSharedNameTokens(value: string): string[] {
+  if (!value) return [];
+  let parts = value.split(/(?:\s*[、，,\/&|]\s*|\s+和\s+|\s+and\s+|\s+AND\s+|\s+And\s+)/g).map((part) => part.trim()).filter(Boolean);
+  if (parts.length <= 1 && CHINESE_NAME_SPACE_PATTERN.test(value)) parts = value.split(/\s+/g).map((part) => part.trim()).filter(Boolean);
+  return parts;
+}
+
+/** Same as AttendFlow session-engine getSharedNameSplitCandidates. */
 export function getSharedNameSplitCandidates(name: string, roster: RosterCandidate[]): RosterCandidate[] {
-  const tokens = name.split(/\s*(?:&|\+|\/|、|和|及|,|，|\band\b)\s*/iu).map(normalize).filter(Boolean);
-  if (tokens.length < 2) return [];
+  if (!isLikelySharedName(name)) return [];
+  const tokens = parseSharedNameTokens(name).map(normalize).filter(Boolean);
   const matched: RosterCandidate[] = [];
   for (const token of tokens) {
-    const person = roster.find((entry) => entry.active !== false && (normalize(entry.canonicalName) === token || normalize(entry.pinyin || '') === token));
+    const person = roster.find((entry) => normalize(entry.canonicalName) === token || normalize(entry.pinyin || '') === token);
     if (person && !matched.some((entry) => entry.personId === person.personId)) matched.push(person);
   }
   return matched;
