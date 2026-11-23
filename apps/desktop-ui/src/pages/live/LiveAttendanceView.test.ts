@@ -89,4 +89,18 @@ describe("LiveAttendanceView", () => {
     expect(group.className).toContain("group-cell");
     expect(name.className).toContain("participant-name");
   });
+  it("shows Full Present in generic mode, hides zero counts and uses engine tags for badges", () => {
+    const { container } = render(LiveAttendanceView, { view: "status", mode: "generic", record: {
+      summary: { seen: 2, fullPresent: 1, late: 1, returned: 0, leftEarly: 1, missing: 0, ignored: 0, total: 2 },
+      rows: [
+        { canonicalName: "Ada Lovelace", currentStatus: "present", hasBeenSeen: true, isCurrentlyPresent: true, tags: ["seen", "full_present"] },
+        { canonicalName: "Grace Hopper", currentStatus: "leftEarly", hasBeenSeen: true, wasLate: true, tags: ["seen", "late", "left_early"] },
+      ] } });
+    const stats = [...container.querySelectorAll(".filter-stack button small")].map((n) => n.textContent);
+    expect(stats).toEqual(["Seen", "Full Present", "Late", "Left Early", "Total"]);
+    const badgeRows = [...container.querySelectorAll("tbody tr")].map((tr) => [...tr.querySelectorAll(".badges > *")].map((b) => b.textContent?.trim()));
+    expect(badgeRows[0]).toEqual(["Full Present"]);
+    expect(badgeRows[1]).toEqual(["Left Early", "Late", "Seen"]);
+    expect(container.querySelector("thead button")).toBeNull();
+  });
 });
