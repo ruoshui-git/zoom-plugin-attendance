@@ -32,7 +32,13 @@ use zoom_bridge::{Event, Participant, Session};
 use crate::config::Config;
 use crate::connection::{classify_start_error, ZoomLink, ZoomState, ZoomStatus};
 use crate::{open_browser, start_session};
+use crate::window_state::{self, Mode, Rect, WindowState};
 use anyhow::Context;
+use std::sync::OnceLock;
+
+#[derive(Clone, Debug)]
+enum AppEvent { Title(String), Window { mode: Option<Mode>, pinned: Option<bool> } }
+static WINDOW: OnceLock<Mutex<Option<(tao::event_loop::EventLoopProxy<AppEvent>, WindowState)>>> = OnceLock::new();
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct User {
@@ -801,6 +807,7 @@ pub fn run(
             .route("/api/config/example-data", post(api_example_data_commit))
             .route("/api/meetings", get(api_meetings))
             .route("/api/zoom", get(api_zoom_status))
+            .route("/api/window", get(api_window_get).post(api_window_post))
             .route("/api/zoom/sign-in", post(api_zoom_sign_in))
             .route("/api/zoom/sign-out", post(api_zoom_sign_out))
             .route("/api/records/export", get(api_export_records))
@@ -869,18 +876,25 @@ pub fn app() -> anyhow::Result<()> {
         }
         std::thread::sleep(Duration::from_millis(100));
     }
-    let event_loop = EventLoopBuilder::<String>::with_user_event().build();
+    let event_loop = EventLoopBuilder::<AppEvent>::with_user_event().build();
     let title_proxy = event_loop.create_proxy();
+    let mut state = window_state::load(window_state_path());
+    let proxy = event_loop.create_proxy();
+    *WINDOW.get_or_init(|| Mutex::new(None)).lock().unwrap() = Some((proxy, state.clone()));
     // Icon resource 1 is embedded by build.rs (packaging/assets/app.ico).
     let icon = {
         use tao::platform::windows::IconExtWindows;
         tao::window::Icon::from_resource(1, None).ok()
     };
-    let window = WindowBuilder::new()
+    let (w,h) = match state.mode { Mode::Full => window_state::full_default(), Mode::Compact => window_state::compact_default() };
+    let mut builder = WindowBuilder::new()
         .with_title("AttendFlow Desktop")
         .with_window_icon(icon)
-        .with_inner_size(tao::dpi::LogicalSize::new(1280.0, 820.0))
-        .build(&event_loop)?;
+        .with_inner_size(tao::dpi::LogicalSize::new(w as f64, h as f64));
+    if let Some(r) = match state.mode { Mode::Full => state.full, Mode::Compact => state.compact } { builder = builder.with_position(tao::dpi::LogicalPosition::new(r.x as f64, r.y as f64)).with_inner_size(tao::dpi::LogicalSize::new(r.width as f64,r.height as f64)); }
+    let window = builder.build(&event_loop)?;
+    window.set_always_on_top(state.pinned);
+    window.set_min_inner_size(Some(match state.mode { Mode::Full => tao::dpi::LogicalSize::new(900.0,600.0), Mode::Compact => { let (w,h)=window_state::compact_min(); tao::dpi::LogicalSize::new(w as f64,h as f64) }}));
     // WebView2 profile in LOCALAPPDATA: the default (next to the exe) is read-only
     // when installed under Program Files or as an MSIX package.
     let mut web_context = wry::WebContext::new(
@@ -891,7 +905,7 @@ pub fn app() -> anyhow::Result<()> {
     let _webview = wry::WebViewBuilder::new_with_web_context(&mut web_context)
         .with_url(&url)
         .with_document_title_changed_handler(move |title| {
-            let _ = title_proxy.send_event(title);
+            let _ = title_proxy.send_event(AppEvent::Title(title));
         })
         .with_download_started_handler(|download_url, suggested_path| {
             if !download_url.contains("/api/config/roster/export")
@@ -931,7 +945,12 @@ pub fn app() -> anyhow::Result<()> {
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
         match event {
-            Event::UserEvent(title) => window.set_title(&title),
+            Event::UserEvent(AppEvent::Title(title)) => window.set_title(&title),
+            Event::UserEvent(AppEvent::Window { mode, pinned }) => {
+                if let Some(m) = mode { state.mode = m; let size = match m { Mode::Full => window_state::full_default(), Mode::Compact => window_state::compact_default() }; window.set_inner_size(tao::dpi::LogicalSize::new(size.0 as f64,size.1 as f64)); window.set_min_inner_size(Some(match m { Mode::Full => tao::dpi::LogicalSize::new(900.0,600.0), Mode::Compact => {let z=window_state::compact_min();tao::dpi::LogicalSize::new(z.0 as f64,z.1 as f64)}})); }
+                if let Some(p) = pinned { window.set_always_on_top(p); }
+                window_state::save(window_state_path(), &state);
+            }
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
                 ..
@@ -1349,6 +1368,29 @@ async fn api_zoom_status(State(a): State<App>, headers: HeaderMap) -> Response {
     }
     Json(a.link.status.lock().unwrap().wire()).into_response()
 }
+
+fn window_json(state: &WindowState) -> Value { json!({"available":true,"mode":state.mode,"pinned":state.pinned}) }
+fn apply_request(state: &mut WindowState, mode: Option<Mode>, pinned: Option<bool>) -> bool {
+    let before = state.clone();
+    if let Some(mode) = mode { state.mode = mode; }
+    if let Some(pinned) = pinned { state.pinned = pinned; }
+    *state != before
+}
+async fn api_window_get() -> Response {
+    let guard = WINDOW.get_or_init(|| Mutex::new(None)).lock().unwrap();
+    match guard.as_ref() { Some((_, state)) => Json(window_json(state)).into_response(), None => Json(json!({"available":false,"mode":"full","pinned":false})).into_response() }
+}
+#[derive(Deserialize)] struct WindowRequest { mode: Option<Mode>, pinned: Option<bool> }
+async fn api_window_post(headers: HeaderMap, Json(request): Json<WindowRequest>) -> Response {
+    let Some(origin) = headers.get("origin").and_then(|v| v.to_str().ok()) else { return StatusCode::FORBIDDEN.into_response(); };
+    if !origin.starts_with("http://127.0.0.1:47812") && !origin.starts_with("http://localhost:47812") { return StatusCode::FORBIDDEN.into_response(); }
+    let mut guard = WINDOW.get_or_init(|| Mutex::new(None)).lock().unwrap();
+    let Some((proxy, state)) = guard.as_mut() else { return (StatusCode::CONFLICT, Json(json!({"error":"no_window"}))).into_response(); };
+    let changed = apply_request(state, request.mode, request.pinned);
+    if changed { let _ = proxy.send_event(AppEvent::Window { mode: request.mode, pinned: request.pinned }); window_state::save(window_state_path(), state); }
+    Json(window_json(state)).into_response()
+}
+fn window_state_path() -> PathBuf { std::env::var_os("LOCALAPPDATA").map(PathBuf::from).unwrap_or_else(std::env::temp_dir).join("zoom-companion").join("window.json") }
 
 /// Starts the browser sign-in (PKCE, loopback on an ephemeral port) and returns at
 /// once; progress arrives as `zoom_status` messages. One sign-in waits for its
