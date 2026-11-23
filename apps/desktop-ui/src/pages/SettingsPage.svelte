@@ -67,7 +67,7 @@
   import { confirmDialog } from "../lib/ui";
   import { toast } from "../lib/toast";
   import { getScrollDelta } from "../lib/ui-scale-scroll";
-  import { busyKeys, runBusy } from "../lib/busy-config";
+  import { busyKeys, runBusy } from "../lib/busy";
   $: backupBusy = $busyKeys.has("settings-backup");
   $: exampleBusy = $busyKeys.has("settings-example");
   $: restoreBusy = $busyKeys.has("settings-restore");

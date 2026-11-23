@@ -155,7 +155,7 @@ export async function saveSettings() {
     if (before.filterDefaultsClosed !== settings.filterDefaultsClosed) toast.success(settings.filterDefaultsClosed ? t("筛选器默认关闭。", "Filters default to closed.") : t("筛选器默认打开。", "Filters default to open."));
     savedSettingsSnapshot = { ...settings };
   } catch (error: any) {
-    toast.error(`${t("保存失败：", "Save failed:")}${error.message}`);
+    toast.error(`${t("保存失败：", "Save failed: ")}${error.message}`);
   }
 }
 export function download(filename: string, data: string) {
@@ -169,7 +169,7 @@ export function download(filename: string, data: string) {
 }
 export async function downloadBackup() {
   try { download("attendflow-backup-v3.json", JSON.stringify(await get("/api/backup"), null, 2)); toast.success(t("完整备份已导出：attendflow-backup-v3.json", "Full app backup exported: attendflow-backup-v3.json")); }
-  catch (error: any) { toast.error(`${t("导出备份失败：", "Backup export failed:")}${error.message}`); throw error; }
+  catch (error: any) { toast.error(`${t("导出备份失败：", "Backup export failed: ")}${error.message}`); throw error; }
 }
 export async function exportRecords(ids: string[] = []) {
   const data = await get("/api/records/export");

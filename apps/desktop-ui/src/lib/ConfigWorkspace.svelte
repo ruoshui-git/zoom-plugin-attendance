@@ -8,7 +8,7 @@
   import { tick } from "svelte";
   import ImportPreviewSummary from "./common/ImportPreviewSummary.svelte";
   import { toast } from "./toast";
-  import { busyKeys, runBusy } from "./busy-config";
+  import { busyKeys, runBusy } from "./busy";
   $: saving = $busyKeys.has(`config-${tab}-save`);
   $: deleting = $busyKeys.has(`config-${tab}-delete`);
   $: bulkSaving = $busyKeys.has(`config-${tab}-bulk-save`);
@@ -177,7 +177,7 @@
       });
     } catch (e: any) {
       error = e.message;
-      toast.error(`${t("保存失败：", "Save failed:")}${e.message}`);
+      toast.error(`${t("保存失败：", "Save failed: ")}${e.message}`);
     }
   }
   async function remove(item: any) {
@@ -218,7 +218,7 @@
       });
     } catch (e: any) {
       error = e.message;
-      toast.error(`${t("删除失败：", "Delete failed:")}${e.message}`);
+      toast.error(`${t("删除失败：", "Delete failed: ")}${e.message}`);
     }
   }
   function bulkEdit() {
@@ -251,7 +251,7 @@
       ); bulkOpen = false; toast.success(t(`已批量更新 ${selected.length} 位${tab === "roster" ? "花名册人员" : "名称匹配"}。`, `Bulk updated ${selected.length} ${tab === "roster" ? "roster row(s)" : "name match(es)"}.`)); });
     } catch (e: any) {
       error = e.message;
-      toast.error(`${t("批量更新失败：", "Bulk update failed:")}${e.message}`);
+      toast.error(`${t("批量更新失败：", "Bulk update failed: ")}${e.message}`);
     }
   }
   async function bulkDelete() {
@@ -286,7 +286,7 @@
       toast.success(tab === "roster" ? t(`已删除 ${count} 位花名册人员，并级联删除 ${cascadeCount} 条昵称匹配。`, `Deleted ${count} roster row(s) and ${cascadeCount} linked name match(es).`) : t(`已删除 ${count} 条名称匹配。`, `Deleted ${count} name match(es).`)); });
     } catch (e: any) {
       error = e.message;
-      toast.error(`${t("批量删除失败：", "Bulk delete failed:")}${e.message}`);
+      toast.error(`${t("批量删除失败：", "Bulk delete failed: ")}${e.message}`);
     }
   }
   async function exportCsv(ids: (number | string)[] = []) {

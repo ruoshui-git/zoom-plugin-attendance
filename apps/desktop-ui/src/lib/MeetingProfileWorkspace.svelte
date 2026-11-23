@@ -6,7 +6,7 @@
   import { tick } from "svelte";
   import ImportPreviewSummary from "./common/ImportPreviewSummary.svelte";
   import { toast } from "./toast";
-  import { busyKeys, runBusy } from "./busy-config";
+  import { busyKeys, runBusy } from "./busy";
   $: saving = $busyKeys.has("profile-save");
   $: deleting = $busyKeys.has("profile-delete");
   $: bulkSaving = $busyKeys.has("profile-bulk-save");
@@ -116,7 +116,7 @@
       ); open = false; toast.success(editing ? t("考勤配置已更新。", "Attendance profile updated.") : t("已新增考勤配置。", "Attendance profile added.")); });
     } catch (e: any) {
       error = e.message;
-      toast.error(`${t("保存失败：", "Save failed:")}${e.message}`);
+      toast.error(`${t("保存失败：", "Save failed: ")}${e.message}`);
     }
   }
   async function remove() {
@@ -139,7 +139,7 @@
       selected = [];
     } catch (e: any) {
       error = e.message;
-      toast.error(`${t("批量删除失败：", "Bulk delete failed:")}${e.message}`);
+      toast.error(`${t("批量删除失败：", "Bulk delete failed: ")}${e.message}`);
     }
   }
   async function removeEditing() {
@@ -161,7 +161,7 @@
       editing = null;
     } catch (e: any) {
       error = e.message;
-      toast.error(`${t("删除失败：", "Delete failed:")}${e.message}`);
+      toast.error(`${t("删除失败：", "Delete failed: ")}${e.message}`);
     }
   }
   async function bulkEdit() {
@@ -191,7 +191,7 @@
       bulkReturn = "";
     } catch (e: any) {
       error = e.message;
-      toast.error(`${t("批量更新失败：", "Bulk update failed:")}${e.message}`);
+      toast.error(`${t("批量更新失败：", "Bulk update failed: ")}${e.message}`);
     }
   }
   async function reset() {
@@ -228,7 +228,7 @@
       ); toast.success(t("默认配置已重置为出厂设置。", "Default profile reset to factory settings.")); });
     } catch (e: any) {
       error = e.message;
-      toast.error(`${t("保存失败：", "Save failed:")}${e.message}`);
+      toast.error(`${t("保存失败：", "Save failed: ")}${e.message}`);
     }
   }
   async function exportJson(ids: string[] = []) {
