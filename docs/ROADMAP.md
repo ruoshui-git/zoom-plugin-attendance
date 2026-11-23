@@ -1,8 +1,23 @@
 # AttendFlow Desktop — roadmap (data collection & analysis)
 
 Owner's ideas from 2026-11-23, organised and checked against the repo, the Plugin SDK 7.2.0.3001
-headers, and a live test run the same day (see "Live test results" below). **Nothing here is
-implemented yet.** Before calling something a gap or regression, also check `docs/PARITY.md`.
+headers, and a live test run the same day (see "Live test results" below). **All requirements
+below are implemented** on branch `roadmap-2026-11` (see "Implementation status"). Before calling
+something a gap or regression, also check `docs/PARITY.md`.
+
+## Implementation status (2026-11-23, branch `roadmap-2026-11`)
+
+| Group | Status | Still to verify live (owner) |
+|---|---|---|
+| R-A1 camera | Done: per-row camera on/off minutes and %, live camera dot and camera-off count, manual snapshots keep `videoOn`, export columns; rebuilt from old logs | — |
+| R-A2 mic proxy + audio type | Done: "Mic opened N× · M min unmuted", no-audio / phone markers, live column off by default, export columns | `audioType` only exists in logs from now on |
+| R-A3 hands | Done: lower on leave (`reason: left`), flag is source of truth, re-read after lower-all, feedback 0/1 ignored; replay of `host-lab.jsonl` closes all 4 leave-with-hand cases once | — |
+| R-A4 feedback / reactions | Done: `feedback` / `reaction` log events, record tab with log, per-person counts and "Yes since" check-in | Real meeting with Yes/No/Away clicks |
+| R-B1 new record | Done: confirm → `manual_split`, new instance seeded as joined-before; new record resumes after restart | — |
+| R-B2 rename | Done: `customName` in record state, list/detail/live titles, search, export file name + JSON, backup | — |
+| R-C1/C2 compact + pin | Done: `/api/window`, compact 380×260 view, pin with accent edge + badge + toast, mode/size/position/pin remembered (verified on the native window). No tray exists, so no tray menu | — |
+| R-D proof screenshots | Done (experimental): UIAction bridge (ABI 3), Windows Graphics Capture, tile-load wait, page-repeat stop, PNGs under `captures\<instance>`, Proof tab | **Untested in a meeting by design.** Check `GET /api/proof/windows` on your machine (meeting window class) before the first try |
+
 
 Ground rules for everything below:
 
