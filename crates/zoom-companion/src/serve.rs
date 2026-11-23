@@ -988,7 +988,7 @@ pub fn app() -> anyhow::Result<()> {
                         state.mode=m;
                     }
                 }
-                if let Some(p) = pinned { window.set_always_on_top(p); }
+                if let Some(p) = pinned { window.set_always_on_top(p); state.pinned = p; }
                 window_state::save(window_state_path(), &state);
                 sync_window_state(&state);
             }

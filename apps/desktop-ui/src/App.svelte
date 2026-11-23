@@ -37,8 +37,8 @@
   import Toast from "./lib/common/Toast.svelte";
   import { toast } from "./lib/toast";
   import { loadWindowState } from "./lib/window-control";
-  import { windowState, setPinned, setWindowMode } from "./lib/window-control";
-  import Tooltip from "./lib/common/Tooltip.svelte";
+  import { windowState } from "./lib/window-control";
+  import WindowControls from "./lib/common/WindowControls.svelte";
   import CompactLiveView from "./pages/live/CompactLiveView.svelte";
 
   $: $language = $uiLanguage;
@@ -135,16 +135,7 @@
         </h1>
       </div>
       <div class="header-actions">
-        {#if $windowState.available}
-          <Tooltip text={t("紧凑模式", "Compact view")}><button class="pin-button" onclick={() => setWindowMode("compact").catch((e) => toast.error(String(e)))}>{t("紧凑", "Compact")}</button></Tooltip>
-          <Tooltip text={$windowState.pinned ? t("取消置顶", "Stop keeping on top") : t("置顶窗口", "Keep window on top")}>
-            <button class="pin-button" class:active={$windowState.pinned} aria-pressed={$windowState.pinned} onclick={async () => {
-              try { const pinned = !$windowState.pinned; await setPinned(pinned); toast.success(pinned ? t("窗口已置顶", "Window kept on top") : t("已取消置顶", "Window no longer on top")); }
-              catch (error) { toast.error(error instanceof Error ? error.message : t("操作失败", "Could not update window")); }
-            }}>{$windowState.pinned ? "📌" : "♧"}</button>
-          </Tooltip>
-          {#if $windowState.pinned}<span class="pinned-badge">{t("已置顶", "Pinned")}</span><span class="pin-edge" aria-hidden="true"></span>{/if}
-        {/if}
+        <WindowControls />
         {#if $meeting}<span class="live-pill">
             <i></i>{$meeting.topic ||
               $meeting.meetingNumber ||
@@ -183,9 +174,3 @@
   </main>
 </div>{/if}
 
-<style>
-  .pin-button { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 6px; padding: 6px 9px; font-size: 12px; cursor: pointer; }
-  .pin-button.active { background: var(--accent); color: var(--accent-contrast, white); }
-  .pinned-badge { font-size: 11px; color: var(--accent); }
-  .pin-edge { position: fixed; inset: 0; z-index: 9999; pointer-events: none; box-shadow: inset 0 0 0 3px var(--accent); }
-</style>
