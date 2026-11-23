@@ -11,6 +11,8 @@
   import SortableFilterStack from "../lib/common/SortableFilterStack.svelte";
   import { statusStyle } from "../lib/status-style";
   import { filterRowsByTag } from "../lib/record-tools";
+  import { busyKeys, runBusy } from "../lib/busy";
+  import { toast } from "../lib/toast";
 
   let primary = "attendance";
   let secondary = "status";
@@ -44,6 +46,19 @@
     activeFilter = activeFilter === id ? '' : id;
     primary = 'attendance'; secondary = 'status';
   }
+  async function changeMode(next: string) {
+    if (next === "roster" && !($configs.roster || []).length) { toast.warning(t("当前尚未导入花名册，不能切换到花名册模式。", "Roster not loaded yet, cannot switch to roster mode.")); return; }
+    await runBusy("live-mode", async () => {
+      try { if (await switchMode(next)) toast.success(next === "roster" ? t("已切换到花名册模式。", "Switched to roster mode.") : t("已切换到通用模式。", "Switched to generic mode.")); }
+      catch (error) { toast.error(`${t("切换模式失败：", "Failed to switch mode: ")}${error instanceof Error ? error.message : String(error)}`); }
+    });
+  }
+  async function changeProfile(id: string) {
+    await runBusy("live-profile", async () => {
+      try { if (await selectProfile(id)) toast.success(t("已更新考勤配置。", "Attendance profile updated.")); else toast.error(t("保存失败：", "Save failed:")); }
+      catch (error) { toast.error(`${t("保存失败：", "Save failed:")}${error instanceof Error ? error.message : String(error)}`); }
+    });
+  }
 </script>
 
 {#if $meeting}
@@ -51,19 +66,19 @@
     <div class="meeting-title"><b title={$meeting.topic || t("未命名会议", "Untitled meeting")}>{$meeting.topic || t("未命名会议", "Untitled meeting")}</b><span class="meeting-number">#{ $meeting.meetingNumber || "—" }</span><span>{dateTime($meeting.startedAt)}</span></div>
     <div class="head-controls">
       <span class="live-status"><i></i>{liveLabel}</span>
-      <label class="profile"><span>{t("配置", "Profile")}</span><select aria-label={t("考勤配置", "Attendance profile")} value={$stateValue.selectedProfileId || profileGuess()?.id || "default-all"} onchange={(e) => selectProfile(e.currentTarget.value)}>
+      <label class="profile"><span>{t("配置", "Profile")}</span><select aria-label={t("考勤配置", "Attendance profile")} disabled={$busyKeys.has("live-profile")} value={$stateValue.selectedProfileId || profileGuess()?.id || "default-all"} onchange={(e) => changeProfile(e.currentTarget.value)}>
         {#each ($configs.profiles || []).filter((p: any) => p.active) as p}<option value={p.id}>{p.name}</option>{/each}
       </select></label>
       <details class="overrides"><summary>{t("阈值", "Overrides")}</summary><div class="override-pop"><p>{t("迟到", "Late")}: {$record.record?.lateAfterMinutes ?? profileGuess()?.lateAfterMinutes ?? 10} {t("分钟", "min")} · {t("返回", "Return")}: {$record.record?.returnWindowMinutes ?? profileGuess()?.returnWindowMinutes ?? 8} {t("分钟", "min")}</p><ProfileOverrideForm initialLate={$stateValue.lateAfterMinutesOverride ?? null} initialReturn={$stateValue.returnWindowMinutesOverride ?? null} language={$language} onApply={applyOverrides} /></div></details>
     </div>
   </section>
-  <div class="summary-row"><SortableFilterStack items={liveStatItems} active={activeFilter} onSelect={selectStat} /><div class="mode-switch" aria-label={t("考勤模式", "Attendance mode")}><button class:chosen={$mode === 'generic'} onclick={() => switchMode('generic')}>{t("普通模式", "Generic")}</button><button class:chosen={$mode === 'roster'} onclick={() => switchMode('roster')}>{t("花名册", "Roster")}</button></div></div>
+  <div class="summary-row"><SortableFilterStack items={liveStatItems} active={activeFilter} onSelect={selectStat} /><div class="mode-switch" aria-label={t("考勤模式", "Attendance mode")}><button disabled={$busyKeys.has("live-mode")} class:chosen={$mode === 'generic'} onclick={() => changeMode('generic')}>{t("普通模式", "Generic")}</button><button disabled={$busyKeys.has("live-mode")} class:chosen={$mode === 'roster'} onclick={() => changeMode('roster')}>{t("花名册", "Roster")}</button></div></div>
   <PrimaryTabs items={primaryTabs} active={primary} onSelect={pickPrimary} />
   {#if primary === "attendance"}<SecondaryTabs items={attendanceTabs.map((x) => ({ ...x, label: x.id === "matching" && unmatchedCount ? `${x.label} · ${unmatchedCount}` : x.id === "names" && nameChanges.length ? `${x.label} · ${nameChanges.length}` : x.label }))} active={secondary} onSelect={(id) => { secondary = id; }} />{/if}
   {#if primary === "attendance" && secondary === "matching"}
     <NameMatchingPanel rows={$record.rows || []} decisions={$stateValue.reconciliationDecisions || []} roster={$configs.roster || []} aliases={$configs.aliases || []} nameChanges={nameChanges} language={$language} onDecision={(d) => saveDecision(d)} onRevert={(id) => saveDecision(null, id)} />
   {:else}
-    <LiveAttendanceView view={primary === "attendance" ? secondary : primary} record={$record} state={$stateValue} events={$recordEvents} users={currentUsers()} language={$language} configs={$configs} mode={$mode} bind:activeFilter showSummary={false} onModeChange={switchMode} profile={profileGuess()} onCaptureManual={captureManual} onCaptureHands={captureHands} onDecision={(d: any) => saveDecision(d)} onRevert={(id: string) => saveDecision(null, id)} onOverrides={applyOverrides} onSelectProfile={selectProfile} />
+    <LiveAttendanceView view={primary === "attendance" ? secondary : primary} record={$record} state={$stateValue} events={$recordEvents} users={currentUsers()} language={$language} configs={$configs} mode={$mode} bind:activeFilter showSummary={false} onModeChange={changeMode} profile={profileGuess()} onCaptureManual={captureManual} onCaptureHands={captureHands} onDecision={(d: any) => saveDecision(d)} onRevert={(id: string) => saveDecision(null, id)} onOverrides={applyOverrides} onSelectProfile={selectProfile} />
   {/if}
 {:else}
   <section class="empty-card"><span>◉</span><h2>{t("尚未加入会议", "No active meeting")}</h2><p>{t("连接后，会议记录会自动显示在这里。", "When you join a meeting, its attendance record will appear here.")}</p></section>

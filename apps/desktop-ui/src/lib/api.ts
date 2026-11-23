@@ -467,7 +467,7 @@ export async function saveRecordState(patch: any, target: DataTarget = "live") {
 }
 export async function captureManual() {
   const active = value(s.meeting);
-  if (!active) return;
+  if (!active) throw Error(t("没有活动会议", "No active meeting"));
   const record = value(s.record);
   const participants = currentUsers().map((user: any) => {
     const row = (record.rows || []).find(
@@ -491,15 +491,26 @@ export async function captureManual() {
     timestamp: new Date().toISOString(),
     participants,
   };
-  await saveRecordState({
-    manualSnapshots: [...(value(s.stateValue).manualSnapshots || []), snapshot],
+  const nextState = { ...value(s.stateValue), manualSnapshots: [...(value(s.stateValue).manualSnapshots || []), snapshot] };
+  const response = await fetch(`/api/meetings/${active.instanceId}/state`, {
+    method: "PUT", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ revision: value(s.stateRevision), value: nextState }),
   });
+  if (response.status === 409) { await loadState(); throw Error(t("数据已被修改，请重试", "Data changed; please retry")); }
+  if (!response.ok) throw Error(await response.text());
+  const data = await response.json();
+  if (value(s.meeting)?.instanceId !== active.instanceId) throw Error(t("会议已切换，请重试", "Meeting changed; please retry"));
+  set(s.stateRevision, data.revision); set(s.stateValue, data.value);
+  invalidateRecord(active.instanceId); await refresh({ changed: [active.instanceId] });
+  return { timestamp: snapshot.timestamp, count: participants.length };
 }
 export async function captureHands() {
+  const active = value(s.meeting);
+  if (!active) throw Error(t("没有活动会议", "No active meeting"));
   const raised = currentUsers().filter(
     (user: any) => user.raisedHand || user.raised_hand,
   );
-  if (!raised.length) return;
+  if (!raised.length) return false;
   const capture = {
     id: `hands-${Date.now()}`,
     timestamp: new Date().toISOString(),
@@ -507,12 +518,18 @@ export async function captureHands() {
     screenNames: raised.map((user: any) => user.name || "Unknown"),
     totalCount: raised.length,
   };
-  await saveRecordState({
-    raiseHandCaptures: [
-      ...(value(s.stateValue).raiseHandCaptures || []),
-      capture,
-    ],
+  const nextState = { ...value(s.stateValue), raiseHandCaptures: [...(value(s.stateValue).raiseHandCaptures || []), capture] };
+  const response = await fetch(`/api/meetings/${active.instanceId}/state`, {
+    method: "PUT", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ revision: value(s.stateRevision), value: nextState }),
   });
+  if (response.status === 409) { await loadState(); throw Error(t("数据已被修改，请重试", "Data changed; please retry")); }
+  if (!response.ok) throw Error(await response.text());
+  const data = await response.json();
+  if (value(s.meeting)?.instanceId !== active.instanceId) throw Error(t("会议已切换，请重试", "Meeting changed; please retry"));
+  set(s.stateRevision, data.revision); set(s.stateValue, data.value);
+  invalidateRecord(active.instanceId); await refresh({ changed: [active.instanceId] });
+  return true;
 }
 /** Saves meeting-state changes; resolves true when saved, false when the save failed. */
 export async function applyOverrides(patch: any = value(s.stagedState)): Promise<boolean> {
@@ -638,7 +655,9 @@ export function resetOverrides() {
 }
 export async function switchMode(next: string) {
   const active = value(s.meeting);
-  if (!active) return;
+  if (!active) return false;
+  const previousMode = value(s.mode);
+  if (next === "roster" && !(value(s.configs).roster || []).length) return false;
   set(s.mode, next);
   const state = { ...value(s.stateValue), mode: next };
   set(s.stateValue, state);
@@ -650,13 +669,19 @@ export async function switchMode(next: string) {
     });
     if (response.status === 409) {
       await loadState();
-      return;
+      throw Error(t("数据已被修改，请重试", "Data changed; please retry"));
     }
+    if (!response.ok) throw Error(await response.text());
     const data = await response.json();
     set(s.stateRevision, data.revision);
     invalidateRecord(active.instanceId);
     await refresh({ changed: [active.instanceId] });
-  } catch {}
+    return true;
+  } catch (error) {
+    set(s.mode, previousMode);
+    set(s.stateValue, { ...value(s.stateValue), mode: previousMode });
+    throw Error(error instanceof Error ? error.message : String(error));
+  }
 }
 export async function zoomSignIn() {
   const response = await fetch("/api/zoom/sign-in", { method: "POST" }).catch(
