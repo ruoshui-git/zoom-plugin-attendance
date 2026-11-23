@@ -64,13 +64,14 @@ describe("RecordDetail attendance filters", () => {
     configs.set({ profiles: [{ id: "p1", name: "Staff Profile" }] });
     record.set({ rows: [
       { matchStatus: "unmatched" }, { matchStatus: "guest" }, { matchStatus: "matched" },
-    ], durationMinutes: 90, record: { selectedProfileId: "p1", revision: 4 } });
+    ], durationMinutes: 89.7, record: { selectedProfileId: "p1", revision: 4 } });
     stateValue.set({ manualSnapshots: [{}, {}], reconciliationDecisions: [{}, {}, {}] });
     recordEvents.set([{ type: "join" }, { type: "leave" }] as any);
     const { container } = render(RecordDetail);
     await fireEvent.click(screen.getByRole("tab", { name: /Overview/ }));
     expect(container.textContent).toContain("Staff Profile");
-    expect(container.textContent).toContain("1:30");
+    expect(container.textContent).toContain("01:29");
+    expect(container.textContent).not.toContain("1:30");
     expect(container.textContent).toContain("Pending Export");
     expect(container.textContent).toContain("Manual Attendance Records");
     expect(container.textContent).toContain("Matching Decisions");

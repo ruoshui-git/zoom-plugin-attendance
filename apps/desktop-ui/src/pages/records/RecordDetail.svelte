@@ -28,7 +28,8 @@ import { getLiveStatusLabel, getMatchStatusLabel, getParticipantLocationLabel, g
   $: attendanceRows = allRows.filter((row: any) => !['unmatched', 'guest'].includes(row.matchStatus));
   $: profile = ($configs.profiles || []).find((item: any) => item.id === ($record.record?.selectedProfileId || $record.record?.guessedProfileId)) || ($configs.profiles || []).find((item: any) => item.id === 'default-all');
   $: durationMinutes = Number($record.durationMinutes ?? $record.record?.durationMinutes ?? 0);
-  $: durationText = `${Math.floor(durationMinutes / 60)}:${String(Math.round(durationMinutes % 60)).padStart(2, '0')}`;
+  $: durationWhole = Math.max(0, Math.floor(durationMinutes));
+  $: durationText = `${String(Math.floor(durationWhole / 60)).padStart(2, '0')}:${String(durationWhole % 60).padStart(2, '0')}`;
   $: manualCount = $stateValue.manualSnapshots?.length || 0;
   $: decisionCount = $stateValue.reconciliationDecisions?.length || 0;
   $: unmatchedCount = allRows.filter((row: any) => row.matchStatus === 'unmatched').length;
