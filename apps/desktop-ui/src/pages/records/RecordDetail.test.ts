@@ -59,6 +59,40 @@ describe("RecordDetail attendance filters", () => {
     expect(container.textContent).not.toContain("unknown-x");
   });
 
+  it("shows overview metadata and operator action counts with profile names", async () => {
+    meeting.set({ meetingNumber: "123456", startedAt: "2026-01-01T10:00:00Z", endedAt: "2026-01-01T11:30:00Z", source: "imported" } as any);
+    configs.set({ profiles: [{ id: "p1", name: "Staff Profile" }] });
+    record.set({ rows: [
+      { matchStatus: "unmatched" }, { matchStatus: "guest" }, { matchStatus: "matched" },
+    ], durationMinutes: 90, record: { selectedProfileId: "p1", revision: 4 } });
+    stateValue.set({ manualSnapshots: [{}, {}], reconciliationDecisions: [{}, {}, {}] });
+    recordEvents.set([{ type: "join" }, { type: "leave" }] as any);
+    const { container } = render(RecordDetail);
+    await fireEvent.click(screen.getByRole("tab", { name: /Overview/ }));
+    expect(container.textContent).toContain("Staff Profile");
+    expect(container.textContent).toContain("1:30");
+    expect(container.textContent).toContain("Pending Export");
+    expect(container.textContent).toContain("Manual Attendance Records");
+    expect(container.textContent).toContain("Matching Decisions");
+    expect(container.textContent).toContain("Entry/Exit");
+    expect(container.textContent).toContain("Unmatched");
+    expect(container.textContent).toContain("Guests");
+    expect(container.textContent).toMatch(/Manual Attendance Records\s*2/);
+    expect(container.textContent).toMatch(/Matching Decisions\s*3/);
+    expect(container.textContent).toMatch(/Unmatched\s*1/);
+    expect(container.textContent).toMatch(/Guests\s*1/);
+    await fireEvent.click(screen.getByRole("tab", { name: /Auto Attendance/ }));
+    await fireEvent.click(screen.getByRole("tab", { name: /Attendance Profile/ }));
+    expect(container.textContent).toContain("Staff Profile");
+  });
+
+  it("shows exported status when the record has an export timestamp", async () => {
+    record.set({ rows: [], record: { exportedAt: "2026-01-02T12:00:00Z" } });
+    const { container } = render(RecordDetail);
+    await fireEvent.click(screen.getByRole("tab", { name: /Overview/ }));
+    expect(container.textContent).toContain("Exported");
+  });
+
   it("sorts attendance by minutes and restores filter-panel order on the third click", async () => {
     record.set({ mode: "generic", rows: [
       { canonicalName: "Long", totalPresenceMinutes: 30, currentStatus: "present", matchStatus: "matched" },
