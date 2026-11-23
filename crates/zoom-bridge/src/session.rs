@@ -50,7 +50,15 @@ enum Command {
 
 #[derive(Clone, Copy)]
 enum UserQuery { Attendees, Spotlighted, WaitingRoom, One(u32) }
-enum AsyncCall { Start(i64, bool, bool), Join(String, i64, String), Leave(MeetingInstance), End(MeetingInstance), Role(MeetingInstance, u32), MakeHost(MeetingInstance, u32), Reclaim(MeetingInstance), AssignCoHost(MeetingInstance, u32), RevokeCoHost(MeetingInstance, u32), Unread(MeetingInstance), Admit(MeetingInstance, u32), PutWaiting(MeetingInstance, u32), Expel(MeetingInstance, u32), AdmitAll(MeetingInstance), EnableWaitingRoom(MeetingInstance, bool), WaitingRoomOn(MeetingInstance) }
+enum AsyncCall { Start(i64, bool, bool), Join(String, i64, String), Leave(MeetingInstance), End(MeetingInstance), Role(MeetingInstance, u32), MakeHost(MeetingInstance, u32), Reclaim(MeetingInstance), AssignCoHost(MeetingInstance, u32), RevokeCoHost(MeetingInstance, u32), Unread(MeetingInstance), Admit(MeetingInstance, u32), PutWaiting(MeetingInstance, u32), Expel(MeetingInstance, u32), AdmitAll(MeetingInstance), EnableWaitingRoom(MeetingInstance, bool), WaitingRoomOn(MeetingInstance), ViewType(MeetingInstance), SwitchView(MeetingInstance, MeetingViewType), WallPage(MeetingInstance, bool) }
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[repr(i32)]
+pub enum MeetingViewType { ActiveSpeaker = 0, Wall = 1, MultiSpeaker = 2, Other = 3 }
+impl MeetingViewType {
+    pub fn from_i32(value: i32) -> Self { match value { 0 => Self::ActiveSpeaker, 1 => Self::Wall, 2 => Self::MultiSpeaker, _ => Self::Other } }
+    pub fn to_i32(self) -> i32 { self as i32 }
+}
 
 /// A running SDK session. Dropping it uninitialises the SDK.
 pub struct Session {
@@ -147,6 +155,9 @@ impl Session {
     pub fn admit_all(&self, inst: MeetingInstance) -> Result<(), BridgeError> { self.call(AsyncCall::AdmitAll(inst)) }
     pub fn enable_waiting_room(&self, inst: MeetingInstance, on: bool) -> Result<(), BridgeError> { self.call(AsyncCall::EnableWaitingRoom(inst, on)) }
     pub fn is_waiting_room_on(&self, inst: MeetingInstance) -> Result<(), BridgeError> { self.call(AsyncCall::WaitingRoomOn(inst)) }
+    pub fn meeting_view_type(&self, inst: MeetingInstance) -> Result<(), BridgeError> { self.call(AsyncCall::ViewType(inst)) }
+    pub fn switch_meeting_view(&self, inst: MeetingInstance, view: MeetingViewType) -> Result<(), BridgeError> { self.call(AsyncCall::SwitchView(inst, view)) }
+    pub fn wall_view_page(&self, inst: MeetingInstance, next: bool) -> Result<(), BridgeError> { self.call(AsyncCall::WallPage(inst, next)) }
 
     /// Orderly shutdown (also performed on drop).
     pub fn shutdown(mut self) -> Result<(), BridgeError> {
@@ -302,6 +313,7 @@ fn handle(cmd: Command) {
                 AsyncCall::RevokeCoHost(i, id) => ffi::zc_revoke_cohost(i as i32, id), AsyncCall::Unread(i) => ffi::zc_get_unread_chat_count(i as i32),
                 AsyncCall::Admit(i, id) => ffi::zc_admit_user(i as i32, id), AsyncCall::PutWaiting(i, id) => ffi::zc_put_into_waiting_room(i as i32, id), AsyncCall::Expel(i, id) => ffi::zc_expel_user(i as i32, id), AsyncCall::AdmitAll(i) => ffi::zc_admit_all(i as i32),
                 AsyncCall::EnableWaitingRoom(i, on) => ffi::zc_enable_waiting_room(i as i32, on as i32), AsyncCall::WaitingRoomOn(i) => ffi::zc_is_waiting_room_on(i as i32),
+                AsyncCall::ViewType(i) => ffi::zc_get_meeting_view_type(i as i32), AsyncCall::SwitchView(i, view) => ffi::zc_switch_meeting_view(i as i32, view.to_i32()), AsyncCall::WallPage(i, next) => ffi::zc_wall_view_page(i as i32, next as i32),
             }};
             let _ = reply.send(check(r));
         }
