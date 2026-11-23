@@ -39,6 +39,19 @@ fn safe_file_part(value: &str) -> String {
 fn number(v: &Value, key: &str) -> f64 {
     v[key].as_f64().unwrap_or(0.0)
 }
+fn optional_number(v: &Value, key: &str) -> String {
+    v[key].as_number().map(ToString::to_string).unwrap_or_default()
+}
+fn audio_label(row: &Value, en: bool) -> String {
+    let media = &row["media"];
+    if !media.is_object() { return String::new(); }
+    if media["phone"].as_bool().unwrap_or(false) { return if en { "phone" } else { "电话" }.into(); }
+    match media["lastAudioType"].as_i64() {
+        Some(0) => if en { "no audio" } else { "无音频" }.into(),
+        Some(1) => if en { "computer" } else { "电脑" }.into(),
+        _ => String::new(),
+    }
+}
 fn bool_text(v: &Value, key: &str, en: bool) -> String {
     if v[key].as_bool().unwrap_or(false) {
         (if en { "Yes" } else { "是" }).into()
@@ -173,6 +186,12 @@ pub fn artifacts(
                 "sharedName",
                 "notes",
                 "waitingRoomMinutes",
+                "cameraOnMinutes",
+                "cameraOffMinutes",
+                "cameraOnPercent",
+                "micOpenedCount",
+                "micUnmutedMinutes",
+                "audio",
             ]
         } else {
             vec![
@@ -195,6 +214,12 @@ pub fn artifacts(
                 "是否疑似共用名称",
                 "备注",
                 "等候室分钟",
+                "开摄像头分钟",
+                "关摄像头分钟",
+                "开摄像头比例",
+                "开麦次数",
+                "开麦分钟",
+                "音频",
             ]
         };
         let mut rows = record["rows"].as_array().cloned().unwrap_or_default();
@@ -241,6 +266,12 @@ pub fn artifacts(
                     bool_text(r, "sharedName", en),
                     text(r, "notes").into(),
                     format!("{:.2}", number(r, "waitingRoomMinutes")),
+                    optional_number(r, "cameraOnMinutes"),
+                    optional_number(r, "cameraOffMinutes"),
+                    optional_number(r, "cameraOnPercent"),
+                    optional_number(&r["media"], "unmuteCount"),
+                    optional_number(r, "unmutedMinutes"),
+                    audio_label(r, en),
                 ]
             })
             .collect::<Vec<_>>();
@@ -260,6 +291,7 @@ pub fn artifacts(
                 "matchedPersonId",
                 "matchedCanonicalName",
                 "matchStatus",
+                "cameraOn",
             ]
         } else {
             vec![
@@ -270,6 +302,7 @@ pub fn artifacts(
                 "匹配固定编号",
                 "匹配姓名",
                 "匹配状态",
+                "摄像头",
             ]
         };
         let data = state["manualSnapshots"]
@@ -293,6 +326,7 @@ pub fn artifacts(
                                 .unwrap_or_default(),
                             text(p, "matchedCanonicalName").into(),
                             text(p, "matchStatus").into(),
+                            p["videoOn"].as_bool().map(|on| if en { if on { "on" } else { "off" } } else if on { "开" } else { "关" }).unwrap_or("").into(),
                         ]
                     })
             })
@@ -363,7 +397,7 @@ mod tests {
         let f = artifacts(&m, &r, &json!({}), &[], "now", "en", "summary").remove(0);
         assert_eq!(&f.bytes[..3], &[0xef, 0xbb, 0xbf]);
         let s = String::from_utf8(f.bytes[3..].to_vec()).unwrap();
-        assert!(s.starts_with("#,id,canonicalName,zoomName,zoomNameHistory,group,role,statusTags,location,matchStatus,attendanceScore,attendanceGrade,firstJoinAt,lastSeenAt,totalPresenceMinutes,absenceCount,sharedName,notes,waitingRoomMinutes\r\n"));
+        assert!(s.starts_with("#,id,canonicalName,zoomName,zoomNameHistory,group,role,statusTags,location,matchStatus,attendanceScore,attendanceGrade,firstJoinAt,lastSeenAt,totalPresenceMinutes,absenceCount,sharedName,notes,waitingRoomMinutes,cameraOnMinutes,cameraOffMinutes,cameraOnPercent,micOpenedCount,micUnmutedMinutes,audio\r\n"));
         assert!(s.find("Excellent").unwrap() < s.find("Moderate").unwrap());
         assert!(s.find(",A,").unwrap() < s.find(",B,").unwrap());
     }
@@ -382,14 +416,41 @@ mod tests {
         .remove(0);
         assert_eq!(&summary.bytes[..3], &[0xef, 0xbb, 0xbf]);
         let summary_text = String::from_utf8(summary.bytes[3..].to_vec()).unwrap();
-        assert!(summary_text.starts_with("#,固定编号,姓名,Zoom名称,改名历史,组别,角色,状态标签,当前位置,匹配状态,出勤分数,出勤等级,首次进入时间,最后出现时间,累计在线分钟,离开次数,是否疑似共用名称,备注,等候室分钟\r\n"));
+        assert!(summary_text.starts_with("#,固定编号,姓名,Zoom名称,改名历史,组别,角色,状态标签,当前位置,匹配状态,出勤分数,出勤等级,首次进入时间,最后出现时间,累计在线分钟,离开次数,是否疑似共用名称,备注,等候室分钟,开摄像头分钟,关摄像头分钟,开摄像头比例,开麦次数,开麦分钟,音频\r\n"));
         let f=artifacts(&m,&json!({}),&json!({"manualSnapshots":[{"timestamp":"t","participants":[{"screenName":"Ada","participantUUID":"u","location":"meeting","matchStatus":"matched"}]}]}),&[],"x","zh-CN","manual").remove(0);
         assert_eq!(&f.bytes[..3], &[0xef, 0xbb, 0xbf]);
         let s = String::from_utf8(f.bytes).unwrap();
         assert!(s.starts_with(
-            "\u{feff}手动考勤时间,Zoom名称,参与者标识,位置,匹配固定编号,匹配姓名,匹配状态\r\n"
+            "\u{feff}手动考勤时间,Zoom名称,参与者标识,位置,匹配固定编号,匹配姓名,匹配状态,摄像头\r\n"
         ));
         assert!(s.contains("Ada"));
+    }
+    #[test]
+    fn attendance_csv_has_camera_and_mic_columns() {
+        let meeting = json!({"instanceId":"id","startedAt":0});
+        let record = json!({"rows":[
+            {"zoomName":"A","media":{"unmuteCount":3,"lastAudioType":1,"phone":false},"cameraOnMinutes":4,"cameraOffMinutes":2,"cameraOnPercent":66,"unmutedMinutes":5},
+            {"zoomName":"B"}
+        ]});
+        for (lang, audio) in [("en", "computer"), ("zh-CN", "电脑")] {
+            let out=artifacts(&meeting,&record,&json!({}),&[],"x",lang,"summary").remove(0);
+            let s=String::from_utf8(out.bytes[3..].to_vec()).unwrap();
+            let filled=s.lines().find(|l|l.contains(",A,")).unwrap();
+            assert!(filled.ends_with(&format!(",4,2,66,3,5,{audio}")));
+            let empty=s.lines().find(|l|l.contains(",B,")).unwrap();
+            assert!(empty.ends_with(",,,,,,"));
+        }
+    }
+    #[test]
+    fn manual_csv_has_camera_column() {
+        let meeting=json!({"instanceId":"id","startedAt":0});
+        let state=json!({"manualSnapshots":[{"participants":[{"screenName":"A","videoOn":true},{"screenName":"B","videoOn":false},{"screenName":"C"}]}]});
+        for (lang, yes, no) in [("en","on","off"),("zh-CN","开","关")] {
+            let s=String::from_utf8(artifacts(&meeting,&json!({}),&state,&[],"x",lang,"manual")[0].bytes.clone()).unwrap();
+            assert!(s.contains(&format!("A,,,,,,{yes}")));
+            assert!(s.contains(&format!("B,,,,,,{no}")));
+            assert!(s.contains("C,,,,,,\r\n"));
+        }
     }
     #[test]
     fn json_bundle_shape() {
