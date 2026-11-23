@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { language, settings } from "../../lib/stores";
 import { uiLanguage } from "../../lib/i18n-core";
 import LiveAttendanceView from "./LiveAttendanceView.svelte";
@@ -48,6 +48,30 @@ describe("LiveAttendanceView", () => {
     render(LiveAttendanceView, { view: "manual", state: { manualSnapshots: [] }, onCaptureManual: capture });
     await fireEvent.click(screen.getByRole("button", { name: "Capture Attendance" }));
     expect(capture).toHaveBeenCalledOnce();
+  });
+
+  it("deduplicates manual capture and reports the participant count", async () => {
+    const { toast } = await import("../../lib/toast");
+    toast.clear();
+    let release!: (value: any) => void;
+    const capture = vi.fn(() => new Promise((resolve) => { release = resolve; }));
+    render(LiveAttendanceView, { view: "manual", state: {}, onCaptureManual: capture });
+    let messages: any[] = [];
+    const unsubscribe = toast.subscribe((value) => { messages = value; });
+    const button = screen.getByRole("button", { name: "Capture Attendance" });
+    await fireEvent.click(button);
+    await fireEvent.click(button);
+    expect(capture).toHaveBeenCalledOnce();
+    expect(button.hasAttribute("disabled")).toBe(true);
+    release({ timestamp: "2026-01-01T12:34:56.000Z", count: 3 });
+    await waitFor(() => expect(messages.some((item) => item.message.includes("3 participants.") && item.message.startsWith("Manual snapshot recorded:"))).toBe(true));
+    unsubscribe();
+    toast.clear();
+  });
+
+  it("disables raise hand capture when no participant has a raised hand", () => {
+    render(LiveAttendanceView, { view: "hands", users: [{ name: "Ada", raisedHand: false }] });
+    expect(screen.getByRole("button", { name: "Capture Raise Hand Records" }).hasAttribute("disabled")).toBe(true);
   });
 
   it("localizes manual attendance values and hides unknown raw values in Chinese", () => {
