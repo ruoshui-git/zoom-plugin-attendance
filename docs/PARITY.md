@@ -226,5 +226,7 @@ Tick items off here as they land.
 - Hand log closes raises when a participant leaves with a hand up, and lowers from the participant
   flag (lower-all, flag-only).
 - Custom record names (rename any record; default title stays visible).
+- Camera on/off minutes and %, mic unmute count and unmuted minutes (a proxy, not speech), audio
+  type markers (no audio / phone) per person; also rebuilt from logs recorded before this change.
 - Planned (P3): auto-admit roster matches from the waiting room (host), unknown-arrival
   alerts, autostart, notifications.

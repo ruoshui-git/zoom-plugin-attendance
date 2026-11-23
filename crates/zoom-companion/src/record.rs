@@ -202,6 +202,7 @@ impl RecordProvider for EngineRecordProvider {
         )
         .map_err(|error| error.to_string())?;
         let duration_minutes = (reference_ms.saturating_sub(started_ms) as f64 / 60_000.0).max(0.0);
+        let media = attend_engine::media_by_participant(events, reference_ms);
         let mut rows = serde_json::to_value(&record.rows).map_err(|error| error.to_string())?;
         if let Some(rows) = rows.as_array_mut() {
             for row in rows.iter_mut() {
@@ -214,6 +215,21 @@ impl RecordProvider for EngineRecordProvider {
                 if never_in_meeting && waited && row["currentStatus"] != "missing" {
                     row["currentStatus"] = json!("waitingRoomOnly");
                     row["tags"] = json!(["waiting_room_only"]);
+                }
+                let mut ids = row["participantUUIDs"].as_array().cloned().unwrap_or_default();
+                if let Some(id)=row["participantUUID"].as_str(){ids.push(json!(id));}
+                // participantUUID is usually also in participantUUIDs: count each id once.
+                let mut unique: Vec<&str> = ids.iter().filter_map(Value::as_str).collect();
+                unique.sort_unstable();
+                unique.dedup();
+                let stats: Vec<_> = unique.into_iter().filter_map(|id| media.get(id)).collect();
+                if !stats.is_empty() {
+                    let m=attend_engine::merge_media(&stats);
+                    row["cameraOnMinutes"]=json!((m.camera_on_ms as f64/60000.0).round() as u64);
+                    row["cameraOffMinutes"]=json!(((m.camera_known_ms.saturating_sub(m.camera_on_ms)) as f64/60000.0).round() as u64);
+                    row["cameraOnPercent"]=if m.camera_known_ms==0 {Value::Null} else {json!((m.camera_on_ms as f64*100.0/m.camera_known_ms as f64).round() as u64)};
+                    row["unmutedMinutes"]=json!((m.unmuted_ms as f64/60000.0).round() as u64);
+                    row["media"]=json!(m);
                 }
             }
             for row in rows {
@@ -376,6 +392,17 @@ mod tests {
             )
             .unwrap_err();
         assert!(error.starts_with("invalid attendance config:"));
+    }
+
+    #[test]
+    fn record_rows_include_media_from_old_log() {
+        let start=1_794_893_640_000_u64;
+        let meeting=json!({"instanceId":"legacy","meetingNumber":"1","topic":"T","startedAt":start});
+        let events=vec![json!({"kind":"users","action":"sync_all","instanceId":"legacy","at":start,"users":[{"userId":9,"name":"Ada","videoOn":true,"audioMuted":true}]}),json!({"kind":"users","action":"update","instanceId":"legacy","at":start+60_000,"users":[{"userId":9,"name":"Ada","videoOn":false,"audioMuted":true}]})];
+        let record=EngineRecordProvider.try_build_record(&meeting,&events,&json!({}),&json!({"mode":"generic"}),start+120_000).unwrap();
+        let row=record["rows"].as_array().unwrap().iter().find(|r|r["zoomName"]=="Ada").unwrap();
+        assert_eq!(row["cameraOnMinutes"],json!(1)); assert_eq!(row["cameraOffMinutes"],json!(1));
+        assert_eq!(row["cameraOnPercent"],json!(50)); assert!(row["media"].is_object());
     }
 
     #[test]

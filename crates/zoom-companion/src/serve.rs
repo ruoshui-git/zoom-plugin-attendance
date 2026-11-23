@@ -47,6 +47,8 @@ struct User {
     audio_muted: bool,
     #[serde(rename = "videoOn")]
     video_on: bool,
+    #[serde(rename = "audioType", default)]
+    audio_type: i32,
     #[serde(rename = "raisedHand")]
     raised_hand: bool,
     talking: bool,
@@ -62,6 +64,7 @@ fn user(p: &Participant) -> User {
         waiting_room: f.in_waiting_room(),
         audio_muted: f.audio_muted(),
         video_on: f.video_on(),
+        audio_type: p.audio_type,
         raised_hand: f.raised_hand(),
         talking: f.talking(),
         spotlighted: f.spotlighted(),
@@ -1635,7 +1638,8 @@ mod tests {
     #[test]
     fn role_replies_emit_role_changed_once_and_host_flag_counts_as_host() {
         let mut t = Tracker::default();
-        let me = User { user_id: 1, name: "me".into(), host: false, myself: true, waiting_room: false, audio_muted: false, video_on: false, raised_hand: false, talking: false, spotlighted: false };
+        let me = User { user_id: 1, name: "me".into(), host: false, myself: true, waiting_room: false, audio_muted: false, video_on: false,
+            audio_type: 0, raised_hand: false, talking: false, spotlighted: false };
         t.start("1".into(), "".into(), 1, 3, Some(me));
         let reply = |code: i32, value: i64| Event::AsyncResult { operation: "GetUserRoleByUserID".into(), code, value, thread_id: 0 };
         let roles = |out: &Vec<Value>| out.iter().filter(|v| v["kind"] == "role_changed").map(|v| v["role"].as_str().unwrap().to_owned()).collect::<Vec<_>>();
@@ -1658,6 +1662,7 @@ mod tests {
             waiting_room: false,
             audio_muted: false,
             video_on: false,
+            audio_type: 0,
             raised_hand: false,
             talking: false,
             spotlighted: false,
@@ -4114,6 +4119,7 @@ fn seed_fake_meeting(a: &App) {
             waiting_room: false,
             audio_muted: false,
             video_on: true,
+            audio_type: 0,
             raised_hand: false,
             talking: false,
             spotlighted: false,
@@ -4126,6 +4132,7 @@ fn seed_fake_meeting(a: &App) {
             waiting_room: false,
             audio_muted: true,
             video_on: false,
+            audio_type: 0,
             raised_hand: false,
             talking: false,
             spotlighted: false,
@@ -4936,3 +4943,4 @@ async fn zoom_endpoints_report_status_and_reject_foreign_origins() {
     assert_eq!(app.link.status.lock().unwrap().state, ZoomState::SignedOut);
     assert!(!app.link.sign_out.load(Ordering::SeqCst));
 }
+
