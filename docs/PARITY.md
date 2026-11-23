@@ -140,28 +140,30 @@ Tick items off here as they land.
 - [x] Summary hides zero counts except 总计.
 - [x] Summary visible above every live tab; clicking a count opens Status filtered by it; clicking 不计入 opens Name Matching.
 - [x] Remove the stray ↕ in the 状态 header (name sort lives in the filter panel as A→Z/Z→A).
-- [ ] Duplicate-name banner (⚠ 重复姓名).
-- [ ] Generic mode: "Zoom 名称" column title and `#XXXX` suffixes for same-name people.
-- [ ] Roster mode: ⚠️ marker for people outside the profile's groups; "疑似重名或共用账号名" note.
-- [ ] Row tints per status, flash on update, waiting-room highlight.
-- [ ] 分组 column in roster mode only; times as HH:mm:ss; header "在线分钟".
-- [ ] Entry/Exit: one chip per event type with counts, and "Clear filters".
-- [ ] Pinyin search in Entry/Exit, Raise Hand and Name Changes.
-- [ ] Name Changes as a searchable Previous/New table (live and record detail).
-- [ ] Settings & Info: record ID, current mode, plain-language late/return rules, Restore default; fix the "Apply profile overrides" button that sends no values.
-- [ ] Manual attendance: Participant ID and match-status columns.
+- [x] Duplicate-name banner (⚠ 重复姓名).
+- [x] Generic mode: "Zoom 名称" column title and `name · abcd` suffixes for same-name people (the `#XXXX` form is only in the name-matching panel).
+- [x] Roster mode: ⚠️ marker for people outside the profile's groups; "疑似重名或共用账号名" note.
+- [x] Row tints per status, waiting-room highlight. (AttendFlow flashes the table only after ↻ Refresh, which is not applicable; no flash.)
+- [x] 分组 column in roster mode only; times as HH:mm:ss; header "在线分钟".
+- [x] Entry/Exit: one chip per event type with counts, and "Clear filters".
+- [x] Pinyin search in Entry/Exit, Raise Hand and Name Changes.
+- [x] Name Changes as a searchable Previous/New table (live and record detail).
+- [x] Settings & Info: record ID, current mode, plain-language late/return rules, Restore default; fix the "Apply profile overrides" button that sends no values.
+- [x] Manual attendance: Participant ID and match-status columns.
 - [x] Name matching: one-click "拆分共用 (N)" suggestions (shared name and past meetings), "Current match:" line.
+
+- [ ] Host/co-host privilege: record role and when it was acquired; show it in the record overview (AttendFlow "权限获取时间 / Privilege Acquired"); clear notes in Live, record detail and exports that waiting-room data is missing while the user is not host/co-host (owner 2026-11-23).
 
 ### Records
 
 - [x] Record overview: duration, profile name (not ID), revision, export status, meeting UUID, operator-action counts (manual records, decisions, unmatched, guests).
-- [ ] Record import: several files or pasted JSON.
-- [ ] Records list uses the same "Bulk Select" mode as the Configuration tables.
-- [ ] Remove the Mode, Source and Status dropdown filters from the Records list (added by Codex in `63dd3a8` without an owner decision; owner 2026-11-23: remove).
+- [x] Record import: several files or pasted JSON.
+- [x] Records list uses the same "Bulk Select" mode as the Configuration tables.
+- [x] Remove the Mode, Source and Status dropdown filters from the Records list (added by Codex in `63dd3a8` without an owner decision; owner 2026-11-23: remove).
 
 ### Configuration
 
-- [ ] Import preview: summary counts (total, adds, updates, deletes, rejected, warnings, applicable) and readable Before/After instead of raw JSON; scroll to the preview when it opens.
+- [x] Import preview: summary counts (total, adds, updates, deletes, rejected, warnings, applicable) and readable Before/After instead of raw JSON; scroll to the preview when it opens.
 
 ### Settings
 
