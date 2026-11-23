@@ -1392,6 +1392,33 @@ async fn api_window_post(headers: HeaderMap, Json(request): Json<WindowRequest>)
 }
 fn window_state_path() -> PathBuf { std::env::var_os("LOCALAPPDATA").map(PathBuf::from).unwrap_or_else(std::env::temp_dir).join("zoom-companion").join("window.json") }
 
+#[cfg(test)]
+mod window_route_tests {
+    use super::*;
+    use axum::body::Body;
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+    #[test]
+    fn apply_request_changes_only_requested_values() {
+        let mut state = WindowState::default();
+        assert!(apply_request(&mut state, Some(Mode::Compact), Some(true)));
+        assert_eq!(state.mode, Mode::Compact);
+        assert!(state.pinned);
+        assert!(!apply_request(&mut state, None, None));
+    }
+    #[tokio::test]
+    async fn window_route_unavailable_without_native_window() {
+        *WINDOW.get_or_init(|| Mutex::new(None)).lock().unwrap() = None;
+        let app = Router::new().route("/api/window", get(api_window_get).post(api_window_post));
+        let response = app.clone().oneshot(axum::http::Request::builder().uri("/api/window").body(Body::empty()).unwrap()).await.unwrap();
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let value: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(value["available"], false);
+        let response = app.oneshot(axum::http::Request::builder().method("POST").uri("/api/window").header("origin", "http://127.0.0.1:47812").header("content-type", "application/json").body(Body::from("{\"pinned\":true}")).unwrap()).await.unwrap();
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+    }
+}
+
 /// Starts the browser sign-in (PKCE, loopback on an ephemeral port) and returns at
 /// once; progress arrives as `zoom_status` messages. One sign-in waits for its
 /// redirect at a time: clicking again while it is pending reopens the same
