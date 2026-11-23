@@ -19,11 +19,19 @@ describe('DataTable', () => {
   });
   it('reports individual and select all changes', async () => {
     const onSelectionChange = vi.fn();
-    render(DataTable, { props: { items, columns, selectedIds: [], emptyLabel: 'Nothing here', selectAllLabel: 'Select all', onSelectionChange } });
+    render(DataTable, { props: { items, columns, bulkMode: true, selectedIds: [], emptyLabel: 'Nothing here', selectAllLabel: 'Select all', onSelectionChange } });
     await fireEvent.click(screen.getByRole('checkbox', { name: 'a' }));
     expect(onSelectionChange).toHaveBeenLastCalledWith(['a']);
     await fireEvent.click(screen.getByRole('checkbox', { name: 'Select all' }));
     expect(onSelectionChange).toHaveBeenLastCalledWith(['b', 'a']);
+  });
+  it('hides selection controls until bulk mode and toggles a row when clicked', async () => {
+    const onSelectionChange = vi.fn();
+    const view = render(DataTable, { props: { items, columns, selectedIds: [], onSelectionChange } });
+    expect(screen.queryByRole('checkbox')).toBeNull();
+    await view.rerender({ items, columns, selectedIds: [], bulkMode: true, onSelectionChange });
+    await fireEvent.click(screen.getByText('Bee').closest('tr')!);
+    expect(onSelectionChange).toHaveBeenLastCalledWith(['b']);
   });
   it('keeps the full meeting topic in the topic cell title', () => {
     const topic = 'A meeting topic long enough to be truncated in the records table';

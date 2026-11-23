@@ -209,19 +209,26 @@ export async function deleteRecords(ids: string[], target: DataTarget = "live") 
   });
   if (!response.ok) {
     toast.error(t("无法删除正在进行的会议。", "Active meetings cannot be deleted."));
-    return;
+    throw Error("Record deletion failed");
   }
   set(s.selectedRecords, []);
   if (target === "viewed") { set(s.viewedMeeting, null); set(s.viewedRecord, { rows: [], summary: {}, loading: false }); }
   else set(s.meeting, null);
   ids.forEach(invalidateRecord); await refresh({ changed: ids });
 }
-export async function previewRecordImport(event: Event) {
-  const input = event.currentTarget as HTMLInputElement;
-  const file = input.files?.[0];
-  if (!file) return;
+export async function previewRecordImport(eventOrData: Event | unknown) {
+  let data: unknown;
   try {
-    const data = JSON.parse(await file.text());
+    if (eventOrData instanceof Event) {
+      const input = eventOrData.currentTarget as HTMLInputElement;
+      const files = Array.from(input.files || []);
+      if (!files.length) return;
+      const bundles = await Promise.all(files.map(async (file) => {
+        const parsed = JSON.parse(await file.text());
+        return Array.isArray(parsed) ? parsed : parsed.records || parsed.sessions || [parsed];
+      }));
+      data = bundles.flat();
+    } else data = eventOrData;
     const response = await fetch("/api/records/import/preview", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -232,9 +239,7 @@ export async function previewRecordImport(event: Event) {
     if (!response.ok) throw Error(preview.message || "Preview failed");
   } catch (error: any) {
     toast.error(error.message);
-  } finally {
-    input.value = "";
-  }
+  } finally { if (eventOrData instanceof Event) (eventOrData.currentTarget as HTMLInputElement).value = ""; }
 }
 export async function commitRecordImport() {
   const preview = value(s.recordImportPreview);
@@ -248,7 +253,9 @@ export async function commitRecordImport() {
     return;
   }
   set(s.recordImportPreview, null);
-  await refresh({ changed: (preview?.records || []).map((x: any) => x.meeting?.instanceId).filter(Boolean) });
+  const imported = (await response.clone().json().catch(() => ({}))).imported;
+  toast.success(t(`成功导入 ${imported ?? preview?.plans?.length ?? 0} 份考勤记录。`, `Imported ${imported ?? preview?.plans?.length ?? 0} attendance record(s).`));
+  await refresh({ changed: (preview?.plans || []).map((x: any) => x.value?.meeting?.instanceId).filter(Boolean) });
 }
 export async function loadExampleData() {
   const language = value(s.language);
