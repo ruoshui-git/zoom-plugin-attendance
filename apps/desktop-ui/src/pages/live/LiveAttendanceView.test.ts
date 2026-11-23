@@ -78,17 +78,42 @@ describe("LiveAttendanceView", () => {
     expect(screen.getByText("On Time Member")).toBeTruthy();
   });
 
-  it("localizes ungrouped labels and constrains long group and participant names", () => {
-    const { container } = render(LiveAttendanceView, { view: "status", language: "en", record: { rows: [
+  it("hides group in generic mode and localizes it in roster mode", async () => {
+    const { container, rerender } = render(LiveAttendanceView, { view: "status", mode: "generic", language: "en", record: { rows: [
       { canonicalName: "A very long participant name that must be allowed to wrap", group: "__UNGROUPED__", currentStatus: "present" },
     ] } });
+    expect(container.querySelector(".group-cell")).toBeNull();
+    await rerender({ view: "status", mode: "roster", configs: { roster: [{}] }, language: "en", record: { rows: [{ canonicalName: "A very long participant name that must be allowed to wrap", group: "__UNGROUPED__", currentStatus: "present" }] } });
     const group = container.querySelector(".group-cell")!;
-    const name = container.querySelector(".participant-name")!;
     expect(group.textContent).toBe("Ungrouped");
     expect(group.getAttribute("title")).toBe("Ungrouped");
-    expect(group.className).toContain("group-cell");
-    expect(name.className).toContain("participant-name");
+    expect(container.querySelector(".participant-name")!.className).toContain("participant-name");
   });
+
+  it("shows live duplicate warnings and disambiguated generic names with status table columns", () => {
+    const { container } = render(LiveAttendanceView, { view: "status", language: "en", record: { rows: [
+      { zoomName: "Alex", participantUUID: "participant-1234-abcd", isCurrentlyPresent: true, currentStatus: "late", firstJoinAt: "2026-01-01T12:34:56", lastSeenAt: "2026-01-01T13:02:03", totalPresenceMinutes: 12.7 },
+      { zoomName: "Alex", participantUUID: "participant-5678-efgh", isCurrentlyPresent: true, currentStatus: "present" },
+    ] } });
+    expect(screen.getByText(/Duplicate names:/)).toBeTruthy();
+    expect(container.querySelector("thead")?.textContent).toContain("Zoom Name");
+    expect(screen.getByText("Alex · abcd")).toBeTruthy();
+    expect(screen.getByText("Alex · efgh")).toBeTruthy();
+    expect(container.querySelector(".group-cell")).toBeNull();
+    expect(container.querySelector("tbody tr.status-late")?.className).toContain("status-late");
+    expect(container.querySelector("tbody tr.status-late")?.textContent).toContain("12:34:56");
+    expect(container.querySelector("tbody tr.status-late")?.textContent).toContain("13:02:03");
+  });
+
+  it("marks unexpected roster participants and shows roster group column", () => {
+    const { container } = render(LiveAttendanceView, { view: "status", mode: "roster", configs: { roster: [{}] }, language: "en", record: { rows: [
+      { canonicalName: "Visitor", zoomName: "V", isExpected: false, group: "__UNGROUPED__", currentStatus: "leftEarly" },
+    ] } });
+    expect(screen.getByLabelText("Unexpected roster participant")).toBeTruthy();
+    expect(container.querySelector("thead")?.textContent).toContain("Group");
+    expect(container.querySelector("tbody tr")?.className).toContain("status-leftEarly");
+  });
+
   it("shows Full Present in generic mode, hides zero counts and uses engine tags for badges", () => {
     const { container } = render(LiveAttendanceView, { view: "status", mode: "generic", record: {
       summary: { seen: 2, fullPresent: 1, late: 1, returned: 0, leftEarly: 1, missing: 0, ignored: 0, total: 2 },
