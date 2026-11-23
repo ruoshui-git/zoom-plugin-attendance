@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import {
     meeting,
     record,
@@ -65,6 +66,7 @@
   import ToggleSwitch from "../lib/common/ToggleSwitch.svelte";
   import { confirmDialog } from "../lib/ui";
   import { toast } from "../lib/toast";
+  import { getScrollDelta } from "../lib/ui-scale-scroll";
 
   let fileInput: HTMLInputElement;
   let restorePreview: any = null;
@@ -73,14 +75,45 @@
     ["紧凑", "Compact"], ["中等", "Medium"], ["大号", "Large"],
     ["超大", "Extra Large"], ["特大", "Maximum"],
   ];
+  let pendingIndex: number | null = null;
   $: uiScaleIndex = Math.max(0, UI_SCALE_STEPS.indexOf($uiScale));
-  function changeUiScale(event: Event) {
+  $: displayedScaleIndex = pendingIndex ?? uiScaleIndex;
+  function trackUiScale(event: Event) {
+    pendingIndex = Number((event.currentTarget as HTMLInputElement).value);
+  }
+  function getScrollContainer(element: HTMLElement): HTMLElement | Element {
+    const main = element.closest("main");
+    if (
+      main &&
+      ["auto", "scroll"].includes(getComputedStyle(main).overflowY) &&
+      main.scrollHeight > main.clientHeight
+    ) return main;
+    return document.scrollingElement ?? document.documentElement;
+  }
+  async function changeUiScale(event: Event) {
     const index = Number((event.currentTarget as HTMLInputElement).value);
     const scale = UI_SCALE_STEPS[index];
-    if (!scale || scale === $uiScale) return;
+    if (!scale) return;
+    const previousScale = $uiScale;
+    const slider = event.currentTarget as HTMLInputElement;
+    const previousTop = slider.getBoundingClientRect().top;
+    const scrollContainer = getScrollContainer(slider);
     uiScale.set(scale);
+    pendingIndex = null;
     const [zh, en] = scaleLabels[index];
-    toast.success(t(`设置端界面字号已设为${zh}。`, `Settings panel UI size set to ${en}.`));
+    if (scale !== previousScale) {
+      toast.success(t(`设置端界面字号已设为${zh}。`, `Settings panel UI size set to ${en}.`));
+    }
+    await tick();
+    requestAnimationFrame(() => {
+      const currentTop = slider.getBoundingClientRect().top;
+      const delta = getScrollDelta(previousTop, currentTop);
+      if (scrollContainer === document.scrollingElement || scrollContainer === document.documentElement) {
+        window.scrollBy(0, delta);
+      } else {
+        (scrollContainer as HTMLElement).scrollTop += delta;
+      }
+    });
   }
   async function restoreBackup(event: Event) {
     const input=event.currentTarget as HTMLInputElement; const file=input.files?.[0]; if(!file)return;
@@ -130,10 +163,10 @@
       <option value="en">English</option><option value="zh">简体中文</option>
     </select>
   </label><div class="ui-scale-control">
-    <div class="ui-scale-heading"><span>{t("大小", "UI size")}</span><b>{t(scaleLabels[uiScaleIndex][0], scaleLabels[uiScaleIndex][1])}</b></div>
+    <div class="ui-scale-heading"><span>{t("大小", "UI size")}</span><b>{t(scaleLabels[displayedScaleIndex][0], scaleLabels[displayedScaleIndex][1])}</b></div>
     <div class="ui-scale-ends" aria-hidden="true"><span>A-</span><span>A+</span></div>
-    <input class="ui-scale-slider" type="range" min="0" max="4" step="1" value={uiScaleIndex} aria-label={t("设置端界面字号", "Settings panel UI size")} oninput={changeUiScale} />
-    <div class="ui-scale-ticks" aria-hidden="true">{#each UI_SCALE_STEPS as scale, index}<span class:active={index <= uiScaleIndex}></span>{/each}</div>
+    <input class="ui-scale-slider" type="range" min="0" max="4" step="1" value={displayedScaleIndex} aria-label={t("设置端界面字号", "Settings panel UI size")} oninput={trackUiScale} onchange={changeUiScale} />
+    <div class="ui-scale-ticks" aria-hidden="true">{#each UI_SCALE_STEPS as scale, index}<span class:active={index <= displayedScaleIndex}></span>{/each}</div>
   </div><div class="settings-toggle"><ToggleSwitch label={t("默认折叠筛选器", "Collapse filters by default")} bind:checked={$settings.filterDefaultsClosed} onChange={saveSettings}/></div>
   <div class="zoom-account">
     <div>
