@@ -828,6 +828,7 @@ pub fn run(
             .route("/api/meetings", get(api_meetings))
             .route("/api/live/new-record", post(api_new_record))
             .route("/api/zoom", get(api_zoom_status))
+            .route("/api/proof/windows", get(api_proof_windows))
             .route("/api/window", get(api_window_get).post(api_window_post))
             .route("/api/zoom/sign-in", post(api_zoom_sign_in))
             .route("/api/zoom/sign-out", post(api_zoom_sign_out))
@@ -1426,6 +1427,36 @@ async fn api_zoom_status(State(a): State<App>, headers: HeaderMap) -> Response {
         return r;
     }
     Json(a.link.status.lock().unwrap().wire()).into_response()
+}
+
+async fn api_proof_windows(State(a): State<App>, headers: HeaderMap) -> Response {
+    if let Some(r) = api_origin(&a, &headers) { return r; }
+    let candidates = crate::capture::list_zoom_windows();
+    Json(proof_windows_json(&candidates)).into_response()
+}
+
+fn proof_windows_json(candidates: &[crate::capture::WindowCandidate]) -> Value {
+    let picked = crate::capture::pick_meeting_window(candidates).map(|c| c.hwnd);
+    json!({"windows": candidates.iter().map(|c| json!({
+        "pid": c.pid, "process": c.process, "class": c.class, "title": c.title,
+        "size": {"width": c.width, "height": c.height}, "minimized": c.minimized,
+        "visible": c.visible, "picked": Some(c.hwnd) == picked
+    })).collect::<Vec<_>>() })
+}
+
+#[cfg(test)]
+mod proof_windows_tests {
+    use super::proof_windows_json;
+    use crate::capture::WindowCandidate;
+    #[test]
+    fn proof_windows_json_marks_picked_and_reports_window_fields() {
+        let candidate = WindowCandidate { hwnd: 9, pid: 42, process: "Zoom.exe".into(), class: "VideoFrameWnd".into(), title: "Reunión 中文".into(), width: 640, height: 480, minimized: false, visible: true };
+        let value = proof_windows_json(&[candidate]);
+        assert_eq!(value["windows"][0]["picked"], true);
+        assert_eq!(value["windows"][0]["pid"], 42);
+        assert_eq!(value["windows"][0]["size"]["width"], 640);
+        assert_eq!(value["windows"][0]["title"], "Reunión 中文");
+    }
 }
 
 fn window_json(state: &WindowState) -> Value { json!({"available":true,"mode":state.mode,"pinned":state.pinned}) }

@@ -48,9 +48,9 @@ mod copy_tests {
 #[cfg(windows)]
 pub(crate) fn list_zoom_windows() -> Vec<WindowCandidate> {
     use std::mem::zeroed;
-    use windows_sys::Win32::{Foundation::*, System::{Threading::*, ProcessStatus::*}, UI::WindowsAndMessaging::*};
+    use windows_sys::Win32::{Foundation::*, UI::WindowsAndMessaging::*};
     unsafe extern "system" fn callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
-        use windows_sys::Win32::{Foundation::*, System::{Threading::*, ProcessStatus::*}, UI::WindowsAndMessaging::*};
+        use windows_sys::Win32::{Foundation::*, System::Threading::*, UI::WindowsAndMessaging::*};
         let list = &mut *(lparam as *mut Vec<WindowCandidate>);
         let mut pid = 0; GetWindowThreadProcessId(hwnd, &mut pid);
         let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
