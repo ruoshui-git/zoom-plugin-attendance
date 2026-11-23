@@ -74,7 +74,6 @@ export const configTab = writable("roster");
 export const stagedState = writable<any>({});
 export const recordImportPreview = writable<any>(null);
 export const zoom = writable<any>(null);
-export const toastMessage = writable("");
 export const filter = writable("");
 export const activeFilter = writable("");
 export const fileInput = writable<HTMLInputElement | null>(null);

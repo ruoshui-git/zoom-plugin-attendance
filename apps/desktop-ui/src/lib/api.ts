@@ -3,6 +3,7 @@ import { getExampleConfigBundle } from "./example-config-data";
 import { setUiLanguage } from "./i18n-core";
 import * as s from "./stores";
 import { t } from "./ui";
+import { toast } from "./toast";
 
 const value = <T>(store: {
   subscribe: (run: (value: T) => void) => () => void;
@@ -147,7 +148,7 @@ export async function saveSettings() {
   try {
     await saveConfig("settings", value(s.settings));
   } catch (error: any) {
-    alert(error.message);
+    toast.error(error.message);
   }
 }
 export function download(filename: string, data: string) {
@@ -207,7 +208,7 @@ export async function deleteRecords(ids: string[], target: DataTarget = "live") 
     body: JSON.stringify({ instanceIds: ids }),
   });
   if (!response.ok) {
-    alert(t("无法删除正在进行的会议。", "Active meetings cannot be deleted."));
+    toast.error(t("无法删除正在进行的会议。", "Active meetings cannot be deleted."));
     return;
   }
   set(s.selectedRecords, []);
@@ -230,7 +231,7 @@ export async function previewRecordImport(event: Event) {
     set(s.recordImportPreview, preview);
     if (!response.ok) throw Error(preview.message || "Preview failed");
   } catch (error: any) {
-    alert(error.message);
+    toast.error(error.message);
   } finally {
     input.value = "";
   }
@@ -243,7 +244,7 @@ export async function commitRecordImport() {
     body: JSON.stringify(preview),
   });
   if (!response.ok) {
-    alert((await response.json()).message || "Import failed");
+    toast.error((await response.json()).message || "Import failed");
     return;
   }
   set(s.recordImportPreview, null);
@@ -284,7 +285,7 @@ export async function loadExampleData() {
   });
   const data = await response.json();
   if (!response.ok) {
-    alert(
+    toast.error(
       t(
         "示例数据冲突，未添加任何数据：",
         "Example data conflict; nothing was added: ",
@@ -293,7 +294,7 @@ export async function loadExampleData() {
     return;
   }
   await loadConfig();
-  alert(
+  toast.success(
     t(
       "已导入示例数据。",
       "Example roster, aliases, and four profiles loaded.",
@@ -338,7 +339,7 @@ export async function addConfig() {
   try {
     await saveConfig(configTab, [...(configs[configTab] || []), item]);
   } catch (error: any) {
-    alert(error.message);
+    toast.error(error.message);
   }
 }
 export async function editConfig(index: number, item: any) {
@@ -356,7 +357,7 @@ export async function editConfig(index: number, item: any) {
   try {
     await saveConfig(configTab, next);
   } catch (error: any) {
-    alert(error.message);
+    toast.error(error.message);
   }
 }
 export async function removeConfig(index: number) {
@@ -367,7 +368,7 @@ export async function removeConfig(index: number) {
   try {
     await saveConfig(configTab, next);
   } catch (error: any) {
-    alert(error.message);
+    toast.error(error.message);
   }
 }
 export async function loadState(target: DataTarget = "live") {
@@ -571,13 +572,11 @@ export async function saveDecision(decision: any, revertId?: string) {
     set(s.configs, { ...value(s.configs), aliases: aliases.value });
     set(s.record, await get(`/api/meetings/${active.instanceId}/record`));
     invalidateRecord(active.instanceId); await refresh({ changed: [active.instanceId] });
-    set(
-      s.toastMessage,
+    toast.success(
       revertId
         ? t("已撤销决定", "Decision reverted")
         : t("名称匹配已保存", "Name matching saved"),
     );
-    setTimeout(() => set(s.toastMessage, ""), 2600);
     return;
   }
   throw Error(t("数据已被修改，请重试", "Data changed; please retry"));
@@ -648,8 +647,7 @@ export async function zoomSignIn() {
     () => null,
   );
   if (!response?.ok) {
-    set(s.toastMessage, t("无法开始登录", "Could not start sign-in"));
-    setTimeout(() => set(s.toastMessage, ""), 2600);
+    toast.error(t("无法开始登录", "Could not start sign-in"));
   }
 }
 export async function zoomSignOut() {
@@ -666,8 +664,7 @@ export async function zoomSignOut() {
     () => null,
   );
   const data = response ? await response.json().catch(() => ({})) : {};
-  set(
-    s.toastMessage,
+  (response?.ok ? toast.success : toast.error)(
     response?.ok
       ? data.revoked
         ? t("已退出 Zoom 并移除授权", "Signed out and access removed")
@@ -677,7 +674,6 @@ export async function zoomSignOut() {
           )
       : t("退出失败", "Sign-out failed"),
   );
-  setTimeout(() => set(s.toastMessage, ""), 4000);
   return !!response?.ok;
 }
 export async function zoomAction(action: string) {
@@ -705,10 +701,10 @@ export async function importBackup(event: Event) {
     });
     if (response.ok) {
       await loadConfig();
-      alert(t("备份配置已导入", "Backup configuration imported"));
-    } else alert(t("导入失败：", "Import failed: ") + (await response.text()));
+      toast.success(t("备份配置已导入", "Backup configuration imported"));
+    } else toast.error(t("导入失败：", "Import failed: ") + (await response.text()));
   } catch (error: any) {
-    alert(error.message);
+    toast.error(error.message);
   } finally {
     input.value = "";
   }
@@ -735,6 +731,5 @@ export async function loadExampleDataQuiet() {
   const data = await response.json();
   if (!response.ok) throw Error(data.message || t("示例数据冲突，未添加任何数据", "Example data conflict; nothing was added"));
   await loadConfig();
-  set(s.toastMessage, t("已导入示例数据。", "Example roster, aliases, and four profiles loaded."));
-  setTimeout(() => set(s.toastMessage, ""), 3000);
+  toast.success(t("已导入示例数据。", "Example roster, aliases, and four profiles loaded."));
 }

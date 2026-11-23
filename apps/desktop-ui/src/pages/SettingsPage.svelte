@@ -14,7 +14,6 @@
     settings,
     zoom,
     connected,
-    toastMessage,
     selectedRecords,
     configTab,
     recordImportPreview,
@@ -67,6 +66,7 @@
   import ConfirmDialog from "../lib/common/ConfirmDialog.svelte";
   import ToggleSwitch from "../lib/common/ToggleSwitch.svelte";
   import { confirmDialog } from "../lib/ui";
+  import { toast } from "../lib/toast";
 
   let fileInput: HTMLInputElement;
   const scaleLabels = [
@@ -80,15 +80,15 @@
     if (!scale || scale === $uiScale) return;
     uiScale.set(scale);
     const [zh, en] = scaleLabels[index];
-    $toastMessage = t(`设置端界面字号已设为${zh}。`, `Settings panel UI size set to ${en}.`);
+    toast.success(t(`设置端界面字号已设为${zh}。`, `Settings panel UI size set to ${en}.`));
   }
   async function restoreBackup(event: Event) {
     const input=event.currentTarget as HTMLInputElement; const file=input.files?.[0]; if(!file)return;
     try { const data=JSON.parse(await file.text()); const counts=`${data.rosterPeople?.length||0} roster · ${data.aliasMappings?.length||0} aliases · ${data.attendanceProfiles?.length||0} profiles`;
-      if(await confirmDialog({title:t('恢复备份','Restore backup'),message:`${t('将导入以下配置：','Import this backup configuration:')} ${counts}`})){const response=await fetch('/api/backup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});if(response.ok){await loadConfig();$toastMessage=t('备份配置已导入','Backup configuration imported')}else $toastMessage=t('导入失败：','Import failed: ')+(await response.text())}
-    } catch(error:any){$toastMessage=error.message} finally {input.value=''}
+      if(await confirmDialog({title:t('恢复备份','Restore backup'),message:`${t('将导入以下配置：','Import this backup configuration:')} ${counts}`})){const response=await fetch('/api/backup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});if(response.ok){await loadConfig();toast.success(t('备份配置已导入','Backup configuration imported'))}else toast.error(t('导入失败：','Import failed: ')+(await response.text()))}
+    } catch(error:any){toast.error(error.message)} finally {input.value=''}
   }
-  async function clearLocalRecords(){if(!await confirmDialog({title:t('清除本地记录','Clear local records'),message:t('确定清除所有本地记录？','Clear all local records?'),destructive:true}))return;const r=await fetch('/api/local-data',{method:'DELETE'});if(r.ok){$meeting=null;await refresh()}else $toastMessage=t('会议进行时不能清除数据。','Cannot clear while a meeting is live.')}
+  async function clearLocalRecords(){if(!await confirmDialog({title:t('清除本地记录','Clear local records'),message:t('确定清除所有本地记录？','Clear all local records?'),destructive:true}))return;const r=await fetch('/api/local-data',{method:'DELETE'});if(r.ok){$meeting=null;await refresh()}else toast.error(t('会议进行时不能清除数据。','Cannot clear while a meeting is live.'))}
 </script>
 
 <section class="panel settings">
@@ -128,7 +128,7 @@
       <b>{t("Zoom 账号", "Zoom account")}</b>
       <p>{zoomSidebarLabel($zoom, $connected, t)}</p>
     </div>
-    {#if zoomSignedIn($zoom)}<button class="danger" onclick={async()=>{if(await confirmDialog({title:t('退出 Zoom 登录','Sign out of Zoom'),message:t('退出登录并移除出勤助手桌面版的 Zoom 授权？考勤记录会保留在这台电脑上。','Sign out and remove AttendFlow Desktop from your Zoom account? Attendance records stay on this computer.'),destructive:true})){const r=await fetch('/api/zoom/sign-out',{method:'POST'});const d=await r.json().catch(()=>({}));if(r.ok)zoom.set(await get('/api/zoom').catch(()=>null));$toastMessage=r.ok?(d.revoked?t('已退出 Zoom 并移除授权','Signed out and access removed'):t('已退出 Zoom','Signed out of Zoom')):t('退出失败','Sign-out failed')}}}>
+    {#if zoomSignedIn($zoom)}<button class="danger" onclick={async()=>{if(await confirmDialog({title:t('退出 Zoom 登录','Sign out of Zoom'),message:t('退出登录并移除出勤助手桌面版的 Zoom 授权？考勤记录会保留在这台电脑上。','Sign out and remove AttendFlow Desktop from your Zoom account? Attendance records stay on this computer.'),destructive:true})){const r=await fetch('/api/zoom/sign-out',{method:'POST'});const d=await r.json().catch(()=>({}));if(r.ok)zoom.set(await get('/api/zoom').catch(()=>null));(r.ok?toast.success:toast.error)(r.ok?(d.revoked?t('已退出 Zoom 并移除授权','Signed out and access removed'):t('已退出 Zoom','Signed out of Zoom')):t('退出失败','Sign-out failed'))}}}>
         {t("退出 Zoom 登录", "Sign out of Zoom")}
       </button>{:else if $zoom?.state !== "not_configured"}<button
         class="primary"
@@ -138,7 +138,7 @@
       </button>{/if}
   </div>
   <div class="settings-actions">
-    <button onclick={async()=>{try{await loadExampleDataQuiet()}catch(e:any){$toastMessage=e.message}}}>
+    <button onclick={async()=>{try{await loadExampleDataQuiet()}catch(e:any){toast.error(e.message)}}}>
       {t("导入示例数据", "Load example data")}
     </button><button onclick={downloadBackup}>
       {t("导出完整备份", "Export full backup")}

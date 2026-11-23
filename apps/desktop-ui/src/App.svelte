@@ -22,7 +22,6 @@
     meeting,
     language,
     zoom,
-    toastMessage,
     record,
     stateValue,
     viewedMeeting,
@@ -36,6 +35,7 @@
   import SettingsPage from "./pages/SettingsPage.svelte";
   import ConfirmDialog from "./lib/common/ConfirmDialog.svelte";
   import Toast from "./lib/common/Toast.svelte";
+  import { toast } from "./lib/toast";
 
   $: $language = $uiLanguage;
   $: appTitle = $language ? t("出勤助手桌面版", "AttendFlow Desktop") : "AttendFlow Desktop";
@@ -98,7 +98,7 @@
 </script>
 
 <svelte:head><title>{appTitle}</title></svelte:head>
-<Toast message={$toastMessage} />
+<Toast toasts={$toast} onDismiss={(id) => toast.dismiss(id)} />
 <ConfirmDialog />
 <div class="shell">
   <aside>
