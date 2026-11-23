@@ -103,4 +103,33 @@ describe("LiveAttendanceView", () => {
     expect(badgeRows[1]).toEqual(["Left Early", "Late", "Seen"]);
     expect(container.querySelector("thead button")).toBeNull();
   });
+
+  it("renders late rules using the computed meeting time for positive and negative offsets", () => {
+    const props = { view: "info", record: { instanceId: "instance-1", meetingNumber: "123", startedAt: "2026-01-01T10:00:00Z", record: { lateAfterMinutes: 10, returnWindowMinutes: 8, selectedProfileId: "default-all" } }, state: { selectedProfileId: "default-all" }, configs: { profiles: [{ id: "default-all", name: "All", lateAfterMinutes: 10, returnWindowMinutes: 8, active: true }] } };
+    const first = render(LiveAttendanceView, props);
+    expect(first.container.textContent).toContain("Arriving after 06:10 will count as late");
+    first.unmount();
+    render(LiveAttendanceView, { ...props, record: { ...props.record, record: { ...props.record.record, lateAfterMinutes: -10 } }, state: { selectedProfileId: "default-all", lateAfterMinutesOverride: -10 } });
+    expect(screen.getByText(/10 minutes before the meeting starts/)).toBeTruthy();
+    expect(screen.getByText(/05:50/)).toBeTruthy();
+  });
+
+  it("applies entered values, rejects invalid values, and restores the default profile", async () => {
+    const onOverrides = vi.fn().mockResolvedValue(undefined);
+    const onSelectProfile = vi.fn().mockResolvedValue(undefined);
+    const profiles = [{ id: "default-all", name: "All", lateAfterMinutes: 0, returnWindowMinutes: 8, active: true }];
+    render(LiveAttendanceView, { view: "info", language: "en", record: { startedAt: "2026-01-01T10:00:00Z", record: { lateAfterMinutes: 0, returnWindowMinutes: 8, selectedProfileId: "default-all" } }, state: { selectedProfileId: "default-all" }, configs: { profiles }, onOverrides, onSelectProfile });
+    const numbers = screen.getAllByRole("spinbutton");
+    await fireEvent.input(numbers[0], { target: { value: "12" } });
+    await fireEvent.input(numbers[1], { target: { value: "9" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    expect(onOverrides).toHaveBeenCalledWith({ lateAfterMinutesOverride: 12, returnWindowMinutesOverride: 9 });
+    await fireEvent.input(numbers[0], { target: { value: "121" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    expect(screen.getByText("Late override must be between −60 and 120 minutes")).toBeTruthy();
+    expect(onOverrides).toHaveBeenCalledOnce();
+    await fireEvent.click(screen.getByRole("button", { name: "Restore Default" }));
+    expect(onSelectProfile).toHaveBeenCalledWith("default-all");
+  });
 });
+
