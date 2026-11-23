@@ -2596,6 +2596,13 @@ async fn api_config_import_preview(
                 }
             } else if name.is_empty() {
                 note = "canonical name is required".into();
+            } else if next.iter().enumerate().any(|(k, p)| {
+                Some(k) != existing_pos
+                    && norm_config_name(p["canonicalName"].as_str().unwrap_or(""))
+                        == norm_config_name(&name)
+            }) {
+                // Same rule as the commit validation, so the preview never offers a failing save.
+                note = format!("duplicate canonical name: {name}");
             } else {
                 let pos = existing_pos;
                 let pinyin = get(&["pinyin/拼音", "pinyin", "拼音"]);
@@ -3743,7 +3750,7 @@ async fn roster_csv_preview_api_decodes_and_returns_commit_plan() {
         .uri("/api/config/roster/import/preview")
         .header("content-type", "application/json")
         .body(axum::body::Body::from(
-            json!({"csv":"id,姓名,分组,delete\n,张三,一组,\n99,,,1"}).to_string(),
+            json!({"csv":"id,姓名,分组,delete\n,张三,一组,\n99,,,1\n,张三,二组,"}).to_string(),
         ))
         .unwrap();
     let response = api.clone().oneshot(req).await.unwrap();
@@ -3754,6 +3761,8 @@ async fn roster_csv_preview_api_decodes_and_returns_commit_plan() {
     // The second row (delete of an unknown id) is rejected and skipped, like AttendFlow.
     assert_eq!(body["changes"][1]["action"], "Reject");
     assert_eq!(body["value"].as_array().unwrap().len(), 1);
+    assert_eq!(body["changes"][2]["action"], "Reject");
+    assert!(body["changes"][2]["notes"].as_str().unwrap_or("").contains("duplicate canonical name") || body["changes"][2]["reason"].as_str().unwrap_or("").contains("duplicate canonical name"), "{}", body["changes"][2]);
     assert_eq!(body["value"][0]["canonicalName"], "张三");
     let req = axum::http::Request::builder()
         .method("POST")
