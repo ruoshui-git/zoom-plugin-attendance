@@ -4,6 +4,9 @@
   import ImportWorkflowPanel from "./common/ImportWorkflowPanel.svelte";
   import { confirmDialog } from "./ui";
   import { saveConfig } from "./api";
+  import { tick } from "svelte";
+  import ImportPreviewSummary from "./common/ImportPreviewSummary.svelte";
+  import { toast } from "./toast";
   export let language = "en";
   export let exportLanguage = "en";
   export let roster: any[] = [];
@@ -32,6 +35,15 @@
   let pasteOpen = false;
   let importBytes: number[] | null = null;
   let file: HTMLInputElement;
+  let previewHeading: HTMLHeadingElement;
+  $: changes = preview?.changes || [];
+  $: applicableCount = changes.filter((c: any) => !["reject", "rejected"].includes(String(c.action || c.status).toLowerCase()) && c.rejected !== true).length;
+  function fields(value: any, before?: any) {
+    if (!value || typeof value !== "object") return [];
+    return Object.entries(value).filter(([key, val]) => key !== "id" && key !== "personId" && (!before || JSON.stringify(before[key]) !== JSON.stringify(val)));
+  }
+  const display = (v: any) => v == null || v === "" ? "—" : Array.isArray(v) ? v.join(", ") : typeof v === "boolean" ? (v ? t("是", "Yes") : t("否", "No")) : String(v);
+  async function focusPreview() { await tick(); previewHeading?.scrollIntoView({ behavior: "smooth", block: "start" }); previewHeading?.focus(); }
   onMount(() => {
     const keydown = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || !preview) return;
@@ -49,6 +61,7 @@
       case "add": case "added": case "create": case "created": return t("新增", "Add");
       case "update": case "updated": return t("更新", "Update");
       case "remove": case "removed": case "delete": case "deleted": return t("删除", "Delete");
+      case "reject": case "rejected": return t("拒绝", "Reject");
       default: return t("未知", "Unknown");
     }
   }
@@ -281,8 +294,9 @@
       });
       preview = await r.json();
       if (!r.ok) throw Error(preview.message || "Preview failed");
+      await focusPreview();
     } catch (e: any) {
-      error = e.message;
+      error = e.message; toast.error(e.message);
     }
   }
   async function commitImport() {
@@ -302,8 +316,9 @@
       importBytes = null;
       pasteOpen = false;
       onSaved();
+      toast.success(importType === "roster" ? t("花名册导入成功。", "Roster imported successfully.") : t("名称匹配导入成功。", "Name matching imported successfully."));
     } catch (e: any) {
-      error = e.message;
+      error = e.message; toast.error(e.message);
     }
   }
   async function readFile(e: Event) {
@@ -589,6 +604,7 @@
       "Choose a CSV file or paste CSV content. Preview changes before confirming the import.",
     )}
   </p>
+  <p class="import-help">{#if tab === "roster"}{t("支持表头：id、canonicalName/姓名、pinyin/拼音、group/分组、active/启用、delete/删除。更新时可选列留空表示保持原值；新增必须有姓名；delete 需要 id 并会级联删除昵称。", "Supported headers: id, canonicalName/姓名, pinyin/拼音, group/分组, active/启用, delete/删除. Blank optional cells keep current values on update; adds need a name; delete requires id and removes linked aliases.")}{:else}{t("支持表头：id、canonicalName/姓名、nickname/昵称、delete/删除、lastUsed/最后使用时间。新增或更新需要昵称及 id 或姓名；delete 需要 id。", "Supported headers: id, canonicalName/姓名, nickname/昵称, delete/删除, lastUsed/最后使用时间. Adds and updates need a nickname and either id or canonical name; delete requires id.")}{/if}</p>
   <button onclick={() => file?.click()}>
     {t("选择 CSV 文件", "Choose CSV file")}
   </button><textarea
@@ -619,7 +635,8 @@
 </ImportWorkflowPanel>
 {#if preview}<div class="overlay">
     <section class="slide-panel import-panel">
-      <h2>{t("导入预览", "Import preview")}</h2>
+      <h2 bind:this={previewHeading} tabindex="-1">{t("导入预览", "Import preview")}</h2>
+      <ImportPreviewSummary {changes} {t} />
       <div class="table-wrap">
         <table>
           <thead>
@@ -629,10 +646,10 @@
                 </th>{/each}
             </tr>
           </thead><tbody>
-            {#each preview.changes || [] as c}<tr>
+            {#each changes as c}<tr class:rejected={["reject", "rejected"].includes(String(c.action || c.status).toLowerCase()) || c.rejected === true}>
                 <td>{c.row}</td><td>{importActionLabel(c.action)}</td><td>{c.id}</td><td>
-                  {JSON.stringify(c.before)}
-                </td><td>{JSON.stringify(c.after)}</td><td>{c.notes}</td><td>
+                  {#each fields(c.before) as [key, value]}<div><b>{key}:</b> {display(value)}</div>{/each}
+                </td><td>{#each fields(c.after, c.action === "update" || c.action === "updated" ? c.before : null) as [key, value]}<div><b>{key}:</b> {display(value)}</div>{/each}</td><td>{c.notes || c.reason}</td><td>
                   {c.aliasImpact || 0}
                 </td>
               </tr>{/each}
@@ -641,8 +658,8 @@
       </div>
       {#if error}<p class="error">{error}</p>{/if}
       <div class="actions">
-        <button class="primary" onclick={commitImport}>
-          {t("确认导入", "Commit import")}
+        <button class="primary" onclick={commitImport} disabled={!applicableCount}>
+          {t(`确认导入 ${applicableCount} 条`, `Commit ${applicableCount} changes`)}
         </button><button onclick={() => (preview = null)}>
           {t("返回", "Back")}
         </button>
@@ -651,6 +668,8 @@
   </div>{/if}
 
 <style>
+  .rejected { background: #fff0f0; color: #8a1c1c; }
+  .import-help { color: #596273; font-size: 12px; line-height: 1.5; }
   .config-workspace {
     padding: 18px;
     border: 1px solid var(--line);
