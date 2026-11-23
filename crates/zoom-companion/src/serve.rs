@@ -948,6 +948,7 @@ pub fn app() -> anyhow::Result<()> {
             }
         })
         .build(&window)?;
+    let mut last_geometry_save = std::time::Instant::now();
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
         match event {
@@ -976,17 +977,28 @@ pub fn app() -> anyhow::Result<()> {
                 }
                 if let Some(p) = pinned { window.set_always_on_top(p); }
                 window_state::save(window_state_path(), &state);
+                sync_window_state(&state);
+            }
+            Event::WindowEvent {
+                event: WindowEvent::Moved(_) | WindowEvent::Resized(_),
+                ..
+            } => {
+                if let Some(r)=logical_window_rect(&window) { match state.mode { Mode::Full=>state.full=Some(r), Mode::Compact=>state.compact=Some(r) } }
+                if last_geometry_save.elapsed() >= Duration::from_secs(2) { window_state::save(window_state_path(),&state); sync_window_state(&state); last_geometry_save=std::time::Instant::now(); }
             }
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
                 ..
             } => {
+                if let Some(r)=logical_window_rect(&window) { match state.mode { Mode::Full=>state.full=Some(r), Mode::Compact=>state.compact=Some(r) } }
+                window_state::save(window_state_path(),&state); sync_window_state(&state);
                 *control_flow = ControlFlow::Exit;
             }
             _ => {}
         }
     });
 }
+fn sync_window_state(state: &WindowState) { if let Some((_, shared))=WINDOW.get_or_init(||Mutex::new(None)).lock().unwrap().as_mut() { *shared=state.clone(); } }
 fn publish(a: &App, events: Vec<Value>) {
     let changed = events.iter().any(|e| {
         e["kind"] == "instance_started"
