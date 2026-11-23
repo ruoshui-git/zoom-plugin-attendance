@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/svelte';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import NameMatchingPanel from './NameMatchingPanel.svelte';
 
 const roster = [
@@ -17,15 +17,15 @@ describe('NameMatchingPanel action visibility', () => {
     expect(screen.queryByRole('button', { name: 'Mark Guest' })).toBeNull();
   });
 
-  it('shows Mark Guest only when there are no candidates and Split Shared only for shared names', () => {
+  it('shows Mark Guest only when there are no candidates and Split Shared only for confirmed shared-name candidates', () => {
     render(NameMatchingPanel, { rows: [
       { entityId: 'guest', zoomName: 'Unknown', matchStatus: 'unmatched' },
-      { entityId: 'shared', zoomName: 'Shared', matchStatus: 'unmatched', sharedName: true },
+      { entityId: 'shared', zoomName: 'Ada Lovelace & Grace Hopper', matchStatus: 'unmatched', sharedName: true },
     ], roster, decisions: [] });
     const cards = screen.getAllByRole('article');
     expect(within(cards[0]).getByRole('button', { name: 'Mark Guest' })).toBeTruthy();
     expect(within(cards[0]).queryByRole('button', { name: /Split Shared/ })).toBeNull();
-    expect(within(cards[1]).getByRole('button', { name: 'Split Shared (0)' })).toBeTruthy();
+    expect(within(cards[1]).getByRole('button', { name: 'Split Shared (2)' })).toBeTruthy();
   });
 
   it('renders resolved decisions and hides Revert in read-only mode', () => {
@@ -36,9 +36,9 @@ describe('NameMatchingPanel action visibility', () => {
 
   it('expands searchable manual match only after More is opened', async () => {
     render(NameMatchingPanel, { rows: [{ entityId: 'p1', sessionParticipantId: 'p1', zoomName: 'Unknown', matchStatus: 'unmatched' }], roster, decisions: [] });
-    expect(screen.queryByRole('textbox', { name: 'Search roster' })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Search roster' })).toBeNull();
     await fireEvent.click(screen.getByRole('button', { name: 'More ▾' }));
-    expect(screen.getByRole('textbox', { name: 'Search roster' })).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Search roster' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Confirm Match' }).hasAttribute('disabled')).toBe(true);
   });
 
@@ -57,6 +57,13 @@ describe('NameMatchingPanel action visibility', () => {
     ] });
     expect(screen.getAllByText('A → C')).toHaveLength(1);
     expect(screen.getByTestId('name-matching-panel')).toBeTruthy();
+  });
+
+  it('one-click split submits both people for a shared-name row', async () => {
+    const onDecision = vi.fn(async () => {});
+    render(NameMatchingPanel, { rows: [{ entityId: 'shared', sessionParticipantId: 'shared', zoomName: 'Ada Lovelace & Grace Hopper', matchStatus: 'unmatched' }], roster, decisions: [], onDecision });
+    await fireEvent.click(screen.getByRole('button', { name: 'Split Shared (2)' }));
+    expect(onDecision).toHaveBeenCalledWith(expect.objectContaining({ action: 'split', splitPersonIds: [10, 11] }));
   });
 });
 // @vitest-environment happy-dom
