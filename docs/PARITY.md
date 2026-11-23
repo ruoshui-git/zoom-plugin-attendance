@@ -230,5 +230,7 @@ Tick items off here as they land.
 - Start a new record mid-meeting (manual split; same semantics as AttendFlow's reload split, with confirmation).
 - Camera on/off minutes and %, mic unmute count and unmuted minutes (a proxy, not speech), audio
   type markers (no audio / phone) per person; also rebuilt from logs recorded before this change.
+- Nonverbal feedback (Yes/No/Faster/Slower/Away) and emoji reactions per person, with a Yes
+  check-in tally.
 - Planned (P3): auto-admit roster matches from the waiting room (host), unknown-arrival
   alerts, autostart, notifications.
