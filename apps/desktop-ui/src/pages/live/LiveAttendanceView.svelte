@@ -27,6 +27,9 @@
   let selectedEntryTypes: string[] = [];
   let statusTable: HTMLTableElement;
   let columnWidths: number[] = [];
+  // Widths are per column position; the Group column only exists in roster mode, so reset on mode change.
+  let widthsForRoster: boolean | null = null;
+  $: if (rosterMode !== widthsForRoster) { widthsForRoster = rosterMode; columnWidths = []; }
   let resizingColumn = -1, resizeStartX = 0, resizeStartWidth = 0;
   function resizeColumn(index: number, width: number) { const count = statusTable?.querySelectorAll("thead th").length || 8; const next = Array.from({ length: count }, (_, i) => columnWidths[i] || 0); next[index] = Math.max(48, width); columnWidths = next; }
   function startColumnResize(event: MouseEvent, index: number) { event.preventDefault(); resizingColumn = index; resizeStartX = event.clientX; resizeStartWidth = columnWidths[index] || (event.currentTarget as HTMLElement).parentElement?.getBoundingClientRect().width || 80; document.addEventListener("mousemove", handleColumnResize); document.addEventListener("mouseup", stopColumnResize); }
