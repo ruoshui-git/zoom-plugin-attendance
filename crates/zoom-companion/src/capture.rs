@@ -23,6 +23,28 @@ pub(crate) fn pick_meeting_window(cands: &[WindowCandidate]) -> Option<&WindowCa
 #[derive(Debug)]
 pub(crate) enum CaptureError { NotFound, Minimized, Unsupported, Timeout, Failed(String) }
 
+/// Copy tightly packed BGRA rows out of a possibly padded GPU staging buffer.
+fn copy_rows(src: &[u8], row_pitch: usize, width: u32, height: u32) -> Vec<u8> {
+    let row_bytes = width as usize * 4;
+    let mut dst = vec![0; row_bytes * height as usize];
+    for y in 0..height as usize {
+        let from = y * row_pitch;
+        let to = y * row_bytes;
+        if from + row_bytes <= src.len() { dst[to..to + row_bytes].copy_from_slice(&src[from..from + row_bytes]); }
+    }
+    dst
+}
+
+#[cfg(test)]
+mod copy_tests {
+    use super::copy_rows;
+    #[test]
+    fn copies_padded_bgra_rows() {
+        let input = [1,2,3,4,5,6,7,8,99,99, 9,10,11,12,13,14,15,16,88,88];
+        assert_eq!(copy_rows(&input, 10, 2, 2), [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]);
+    }
+}
+
 #[cfg(windows)]
 pub(crate) fn list_zoom_windows() -> Vec<WindowCandidate> {
     use std::mem::zeroed;
@@ -52,7 +74,7 @@ pub(crate) fn list_zoom_windows() -> Vec<WindowCandidate> {
 pub(crate) fn list_zoom_windows() -> Vec<WindowCandidate> { Vec::new() }
 
 #[cfg(windows)]
-pub(crate) fn capture_window(_hwnd: isize) -> Result<Frame, CaptureError> { Err(CaptureError::Failed("Windows Graphics Capture is not implemented yet".into())) }
+pub(crate) fn capture_window(_hwnd: isize) -> Result<Frame, CaptureError> { Err(CaptureError::Failed("Windows Graphics Capture implementation pending".into())) }
 #[cfg(not(windows))]
 pub(crate) fn capture_window(_hwnd: isize) -> Result<Frame, CaptureError> { Err(CaptureError::Failed("capture is only available on Windows".into())) }
 
