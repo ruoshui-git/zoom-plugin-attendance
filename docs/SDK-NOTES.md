@@ -68,7 +68,7 @@ Behaviour to design around:
   processes produced missing events.
 - Zoom Workplace must be signed in as the OAuth user, else
   `IPC_STATUS_CONNECT_TIMEOUT` (not an auth error).
-- Not yet verified: webinars (attendee visibility), breakout rooms, focus
+- Not yet verified: co-host receiving waiting-room events via the Plugin SDK (owner treats host and co-host as equal privilege), webinars (attendee visibility), breakout rooms, focus
   mode, large meetings (100+), `OnUnreadChatCountChange` on incoming chat,
   `AdmitToMeeting` / `MakeHost` live, session continuity across leave/rejoin
   of a meeting while the companion keeps running.

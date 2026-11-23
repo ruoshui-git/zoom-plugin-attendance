@@ -113,6 +113,7 @@ struct Tracker {
     file: Option<std::fs::File>,
     resume: Option<Resume>,
     last_touch: u64,
+    role: String,
 }
 /// A companion restart within this window of the last event resumes the same instance.
 const RESUME_WINDOW_MS: u64 = 15 * 60 * 1000;
@@ -220,6 +221,7 @@ impl Tracker {
             myself: me,
         };
         self.meeting = Some(m.clone());
+        self.role = if m.is_host { "host" } else { "none" }.into();
         self.seq = resumed.as_ref().map(|r| r.last_seq).unwrap_or(0);
         self.prepare_log(&m);
         if resumed.is_some() {
@@ -416,6 +418,19 @@ impl Tracker {
                     {
                         out.push(v)
                     }
+                    let effective = if me.host { "host" } else { &self.role };
+                    if effective != self.role {
+                        self.role = effective.to_owned();
+                        if let Some(v) = self.emit("role_changed", json!({"role":self.role,"at":now()})) { out.push(v) }
+                    }
+                }
+            }
+            Event::AsyncResult { operation, code, value, .. } if operation == "GetUserRoleByUserID" && code == 1 => {
+                let observed = match value { 1 => "host", 2 => "cohost", 3 | 4 | 5 => "attendee", _ => "none" };
+                let effective = if self.meeting.as_ref().and_then(|m| m.myself.as_ref()).is_some_and(|me| me.host) { "host" } else { observed };
+                if effective != self.role {
+                    self.role = effective.into();
+                    if let Some(v) = self.emit("role_changed", json!({"role":self.role,"at":now()})) { out.push(v) }
                 }
             }
             Event::Other { name, value, .. }
@@ -1005,6 +1020,13 @@ fn refresh_users(a: &App) {
         a.tracker.lock().unwrap().users = ps.iter().map(user).collect();
     }
 }
+fn request_self_role(a: &App) {
+    let id = a.tracker.lock().unwrap().meeting.as_ref()
+        .and_then(|meeting| meeting.myself.as_ref()).map(|me| me.user_id);
+    if let (Some(id), Some(session)) = (id, a.session.lock().unwrap().as_ref()) {
+        let _ = session.user_role(MeetingInstance::Default, id);
+    }
+}
 fn sdk_loop(a: App) {
     while !a.shutdown.load(Ordering::SeqCst) {
         a.link.sign_out.store(false, Ordering::SeqCst);
@@ -1134,10 +1156,12 @@ fn sdk_loop(a: App) {
                             publish(&a, out);
                         }
                     }
+                    request_self_role(&a);
                     // A meeting can begin (or the toolkits become ready) after connect:
                     // INMEETING / user activity arms a start attempt, retried once per second.
                     let mut want_start = false;
                     let mut last_try = std::time::Instant::now() - Duration::from_secs(5);
+                    let mut last_role_request = std::time::Instant::now();
                     loop {
                         if a.shutdown.load(Ordering::SeqCst)
                             || a.link.sign_out.load(Ordering::SeqCst)
@@ -1149,6 +1173,10 @@ fn sdk_loop(a: App) {
                             t.touch();
                             t.meeting.is_none()
                         };
+                        if !no_meeting && last_role_request.elapsed() >= Duration::from_secs(30) {
+                            request_self_role(&a);
+                            last_role_request = std::time::Instant::now();
+                        }
                         if no_meeting && want_start && last_try.elapsed() >= Duration::from_secs(1)
                         {
                             last_try = std::time::Instant::now();
@@ -1173,8 +1201,10 @@ fn sdk_loop(a: App) {
                                     Event::UserStatus { .. } if no_meeting => want_start = true,
                                     _ => {}
                                 }
+                                let role_may_change = matches!(&e, Event::UserStatus { .. });
                                 let out = a.tracker.lock().unwrap().apply(e, None);
                                 publish(&a, out);
+                                if role_may_change { request_self_role(&a); }
                                 if lost {
                                     set_zoom(
                                         &a,

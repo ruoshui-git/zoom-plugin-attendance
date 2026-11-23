@@ -223,8 +223,10 @@ impl RecordProvider for EngineRecordProvider {
                 );
             }
         }
+        let privilege = derive_privilege(meeting, events, reference_ms);
         Ok(json!({
             "meeting": meeting,
+            "privilege": privilege,
             "rows": rows,
             "summary": record.summary,
             "durationMinutes": duration_minutes,
@@ -233,6 +235,38 @@ impl RecordProvider for EngineRecordProvider {
             "record": record,
         }))
     }
+}
+
+fn derive_privilege(meeting: &Value, events: &[Value], reference_ms: u64) -> Value {
+    let start = meeting["startedAt"].as_u64().unwrap_or(reference_ms);
+    let end = meeting["endedAt"].as_u64().unwrap_or(reference_ms).min(reference_ms).max(start);
+    let mut changes: Vec<(u64, String)> = events.iter().filter_map(|e| {
+        let at = e["at"].as_u64()?;
+        match e["kind"].as_str()? {
+            "role_changed" => Some((at, match e["role"].as_str()? { "host" => "host", "cohost" => "cohost", _ => "none" }.to_string())),
+            "self_changed" if e["isHost"] == true => Some((at, "host".into())),
+            "self_changed" if e["isHost"] == false => Some((at, "none".into())),
+            _ => None,
+        }
+    }).collect();
+    changes.sort_by_key(|c| c.0);
+    let initial_host = events.iter().find(|e| matches!(e["kind"].as_str(), Some("instance_started" | "instance_resumed")))
+        .and_then(|e| e["meeting"]["isHost"].as_bool()).unwrap_or(meeting["isHost"] == true);
+    let mut current = if initial_host { "host".to_string() } else { "none".to_string() };
+    let mut cursor = start;
+    let mut intervals = Vec::new();
+    let mut acquired_at = None;
+    for (at, role) in changes.into_iter().filter(|(at, _)| *at >= start && *at <= end) {
+        let at = at.max(cursor);
+        if current != "none" && at > cursor { intervals.push(json!({"from":cursor,"to":at})); }
+        if current == "none" && role != "none" && acquired_at.is_none() { acquired_at = Some(at); }
+        current = role;
+        cursor = at;
+    }
+    if current != "none" && end > cursor { intervals.push(json!({"from":cursor,"to":end})); }
+    let covered = intervals.first().is_some_and(|i| i["from"] == start) && intervals.last().is_some_and(|i| i["to"] == end) && intervals.windows(2).all(|w| w[0]["to"] == w[1]["from"]);
+    if initial_host && acquired_at.is_none() { acquired_at = Some(start); }
+    json!({"current":current,"acquiredAt":acquired_at,"intervals":intervals,"coveredWholeMeeting":covered})
 }
 
 #[cfg(test)]
