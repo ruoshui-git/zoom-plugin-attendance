@@ -540,6 +540,7 @@ fn replay(t: &Tracker, instance: Option<&str>, since: Option<u64>) -> Vec<Value>
 }
 #[derive(Clone)]
 struct App {
+    proof: Arc<crate::proof_run::ProofShared>,
     tx: broadcast::Sender<Value>,
     tracker: Arc<Mutex<Tracker>>,
     session: Arc<Mutex<Option<Session>>>,
@@ -747,6 +748,7 @@ pub fn run(
             meetings_dir()
         };
         let app = App {
+            proof: Arc::new(crate::proof_run::ProofShared::default()),
             tx: tx.clone(),
             tracker: Arc::new(Mutex::new(Tracker::new(Some(log_dir.clone())))),
             session: Arc::new(Mutex::new(None)),
@@ -1321,6 +1323,14 @@ fn sdk_loop(a: App) {
                                 // Ask for our role only when the update touches us (or is a full sync), not for every participant event.
                                 let role_may_change = matches!(&e, Event::UserStatus { action, users, .. } if *action == 1 || users.iter().any(|u| u.flags.myself()));
                                 let all_hands_lowered = matches!(&e, Event::Other { name, .. } if name == "OnAllHandsLowered");
+                                match &e {
+                                    Event::AsyncResult { operation, code, value, .. } if matches!(operation.as_str(), "GetMeetingViewType" | "Switch2MeetingView" | "Switch2WallViewPrevOrNextPage") => {
+                                        if operation == "GetMeetingViewType" && *code == 1 { a.proof.observe_view(*value as i32); }
+                                        a.proof.push_result(operation.clone(), *code, *value);
+                                    }
+                                    Event::Other { name, code, .. } if name == "OnMeetingViewTypeChange" => a.proof.observe_view(*code),
+                                    _ => {}
+                                }
                                 let out = a.tracker.lock().unwrap().apply(e, None);
                                 publish(&a, out);
                                 if role_may_change { request_self_role(&a); }
@@ -2126,6 +2136,7 @@ mod tests {
         let port = addr.port();
         let tracker = Arc::new(Mutex::new(Tracker::default()));
         let app = App {
+            proof: Default::default(),
             tx: tx.clone(),
             tracker: tracker.clone(),
             session: Arc::new(Mutex::new(None)),
@@ -4191,6 +4202,7 @@ async fn roster_csv_preview_api_decodes_and_returns_commit_plan() {
         Store::open(std::env::temp_dir().join(format!("zc-roster-preview-{}.db", now()))).unwrap(),
     );
     let app = App {
+            proof: Default::default(),
         tx: broadcast::channel(8).0,
         tracker: Arc::new(Mutex::new(Tracker::default())),
         session: Arc::new(Mutex::new(None)),
@@ -4257,6 +4269,7 @@ async fn alias_csv_preview_resolves_canonical_name_and_commits_atomically() {
     );
     store.put_doc("roster",0,&json!([{"personId":7,"canonicalName":"毛若水","pinyin":"maoruoshui","group":"","active":true}]),now()).unwrap().unwrap();
     let app = App {
+            proof: Default::default(),
         tx: broadcast::channel(8).0,
         tracker: Arc::new(Mutex::new(Tracker::default())),
         session: Arc::new(Mutex::new(None)),
@@ -4445,6 +4458,7 @@ async fn fake_record_api_returns_attendflow_row_shape() {
         )
         .unwrap();
     let app = App {
+            proof: Default::default(),
         tx: broadcast::channel(8).0,
         tracker: Arc::new(Mutex::new(Tracker::default())),
         session: Arc::new(Mutex::new(None)),
@@ -4487,6 +4501,7 @@ async fn record_state_captures_persist_and_export_marks_downloaded() {
     let meeting = json!({"instanceId":"export-meeting","meetingNumber":"42","topic":"Export test","startedAt":1000,"isHost":false});
     store.upsert_meeting(&meeting, None, 1).unwrap();
     let app = App {
+            proof: Default::default(),
         tx: broadcast::channel(8).0,
         tracker: Arc::new(Mutex::new(Tracker::default())),
         session: Arc::new(Mutex::new(None)),
@@ -4554,6 +4569,7 @@ async fn custom_name_saved_trimmed_and_listed() {
     );
     store.upsert_meeting(&json!({"instanceId":"named","meetingNumber":"42","topic":"Default topic","startedAt":1000,"isHost":false}), None, 1).unwrap();
     let app = App {
+            proof: Default::default(),
         tx: broadcast::channel(8).0,
         tracker: Arc::new(Mutex::new(Tracker::default())),
         session: Arc::new(Mutex::new(None)),
@@ -4608,6 +4624,7 @@ async fn full_backup_round_trip_keeps_meeting_state() {
     store.put_state("m1", 0, &saved, 2).unwrap().unwrap();
     let (tx, _) = broadcast::channel(8);
     let app = App {
+            proof: Default::default(),
         tx,
         tracker: Arc::new(Mutex::new(Tracker::default())),
         session: Arc::new(Mutex::new(None)),
@@ -4650,6 +4667,7 @@ async fn backup_import_revision_conflict_and_state_notification() {
     let (tx, _) = broadcast::channel(8);
     let mut updates = tx.subscribe();
     let app = App {
+            proof: Default::default(),
         tx,
         tracker: Arc::new(Mutex::new(Tracker::default())),
         session: Arc::new(Mutex::new(None)),
@@ -4821,6 +4839,7 @@ async fn reconciliation_decisions_commit_aliases_atomically_and_revert_keeps_ali
         .unwrap();
     store.put_doc("aliases",0,&json!([{"zoomName":"Known Nick","personId":2,"notes":""},{"zoomName":"Guest Nick","personId":1,"notes":""},{"zoomName":"Shared Nick","personId":1,"notes":""}]),now()).unwrap().unwrap();
     let app = App {
+            proof: Default::default(),
         tx: broadcast::channel(8).0,
         tracker: Arc::new(Mutex::new(Tracker::default())),
         session: Arc::new(Mutex::new(None)),
@@ -4953,6 +4972,7 @@ fn profile_validation_rejects_bad_wildcards_thresholds_and_default_removal() {
         .unwrap()
         .unwrap();
     let app = App {
+            proof: Default::default(),
         tx: broadcast::channel(2).0,
         tracker: Arc::new(Mutex::new(Tracker::default())),
         session: Arc::new(Mutex::new(None)),
@@ -4998,6 +5018,7 @@ async fn example_data_conflict_aborts_all_three_config_documents() {
         .unwrap()
         .unwrap();
     let app = App {
+            proof: Default::default(),
         tx: broadcast::channel(2).0,
         tracker: Arc::new(Mutex::new(Tracker::default())),
         session: Arc::new(Mutex::new(None)),
@@ -5032,6 +5053,7 @@ async fn profile_json_import_preview_and_commit_upsert_by_id() {
         .unwrap()
         .unwrap();
     let app = App {
+            proof: Default::default(),
         tx: broadcast::channel(2).0,
         tracker: Arc::new(Mutex::new(Tracker::default())),
         session: Arc::new(Mutex::new(None)),
@@ -5095,6 +5117,7 @@ async fn attendflow_record_import_preview_then_commit_stores_derived_rows() {
         Store::open(std::env::temp_dir().join(format!("zc-record-import-{}.db", now()))).unwrap(),
     );
     let app = App {
+            proof: Default::default(),
         tx: broadcast::channel(2).0,
         tracker: Arc::new(Mutex::new(Tracker::default())),
         session: Arc::new(Mutex::new(None)),
@@ -5162,6 +5185,7 @@ async fn zoom_endpoints_report_status_and_reject_foreign_origins() {
         Store::open(std::env::temp_dir().join(format!("zc-zoom-status-{}.db", now()))).unwrap(),
     );
     let app = App {
+            proof: Default::default(),
         tx: broadcast::channel(8).0,
         tracker: Arc::new(Mutex::new(Tracker::default())),
         session: Arc::new(Mutex::new(None)),
