@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Tooltip from "./Tooltip.svelte";
   import { onMount } from "svelte";
   export let open = false;
   export let title = "";
@@ -29,9 +30,9 @@
     <div class="panel" bind:this={panel} role="dialog" aria-modal="true" aria-label={title}>
       <header>
         <h2>{title}</h2>
-        <button class="close" onclick={onClose} aria-label={closeLabel}>
+        <Tooltip text={closeLabel}><button class="close" onclick={onClose} aria-label={closeLabel}>
           ×
-        </button>
+        </button></Tooltip>
       </header>
       <slot />
     </div>

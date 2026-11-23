@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Tooltip from "./common/Tooltip.svelte";
   import { importFieldLabel } from "./import-field-labels";
   import { onMount } from "svelte";
   import FormActions from "./common/FormActions.svelte";
@@ -347,6 +348,8 @@
     }
     (e.target as HTMLInputElement).value = "";
   }
+  // Esc closes the edit form like AttendFlow's slide-over (an open confirm dialog or inner control takes it first).
+  function closeFormOnEscape(event: KeyboardEvent) { if (event.key === "Escape" && form && !event.defaultPrevented) { event.preventDefault(); form = null; } }
 </script>
 
 <section class="panel config-workspace">
@@ -522,9 +525,10 @@
     </table>
   </div>
 </section>
+<svelte:window onkeydown={closeFormOnEscape} />
 {#if form}<div class="overlay">
     <section class="slide-panel">
-      <button class="close" onclick={() => (form = null)}>×</button>
+      <Tooltip text={t("关闭", "Close")}><button class="close" aria-label={t("关闭", "Close")} onclick={() => (form = null)}>×</button></Tooltip>
       <h2>
         {editing < 0 ? t("新增", "Add") : t("编辑", "Edit")}
         {tab === "roster"

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Tooltip from "./common/Tooltip.svelte";
   import { importFieldLabel } from "./import-field-labels";
   import FormActions from "./common/FormActions.svelte";
   import { confirmDialog } from "./ui";
@@ -306,6 +307,8 @@
         String(a[sortKey] ?? "").localeCompare(String(b[sortKey] ?? "")) *
         (asc ? 1 : -1),
     );
+  // Esc closes the edit form like AttendFlow's slide-over (an open confirm dialog or inner control takes it first).
+  function closeFormOnEscape(event: KeyboardEvent) { if (event.key === "Escape" && open && !event.defaultPrevented) { event.preventDefault(); open = false; } }
 </script>
 
 <section class="panel profile-workspace">
@@ -453,9 +456,10 @@
     </p>
   </details>
 </section>
+<svelte:window onkeydown={closeFormOnEscape} />
 {#if open}<div class="overlay">
     <section class="slide-panel">
-      <button class="close" onclick={() => (open = false)}>×</button>
+      <Tooltip text={t("关闭", "Close")}><button class="close" aria-label={t("关闭", "Close")} onclick={() => (open = false)}>×</button></Tooltip>
       <h2>
         {editing
           ? t("编辑考勤配置", "Edit profile")

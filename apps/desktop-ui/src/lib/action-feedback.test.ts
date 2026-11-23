@@ -97,4 +97,12 @@ describe("action feedback (busy states and toasts)", () => {
     await saveSettings();
     expect(toastTexts()).toEqual(["success:Export language set to Chinese."]);
   });
+  it("Esc closes the roster edit form, and its close button has a label and tooltip", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("{}", { status: 200 })));
+    await openAddRoster();
+    const close = screen.getByRole("button", { name: "Close" });
+    expect(document.getElementById(close.getAttribute("aria-describedby")!)?.textContent).toBe("Close");
+    await fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByLabelText(/Canonical name/)).toBeNull();
+  });
 });
