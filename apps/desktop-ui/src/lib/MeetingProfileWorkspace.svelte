@@ -405,8 +405,8 @@
               <button
                 class="sort"
                 onclick={() => {
+                  asc = sortKey === key ? !asc : true;
                   sortKey = key;
-                  asc = !asc;
                 }}
               >
                 {t(zh, en).toUpperCase()}
@@ -653,9 +653,13 @@
     top: 0;
     z-index: 2;
     padding: 11px 14px;
-    background: #f3f4f7;
-    color: #42516a;
+    background: #f5f6fa;
+    color: #525d70;
     text-align: left;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: .35px;
+    text-transform: uppercase;
   }
   .profile-workspace td {
     height: 52px;
@@ -690,4 +694,7 @@
   .slide-panel textarea {
     min-height: 56px;
   }
+  /* Sort headers read as header text, like the other tables (not as bordered buttons). */
+  .profile-workspace th button.sort { border: 0; background: transparent; padding: 0; min-height: 0; font: inherit; color: inherit; letter-spacing: inherit; white-space: nowrap; }
+  .profile-workspace th button.sort:hover:not(:disabled) { background: transparent; color: var(--accent); }
 </style>

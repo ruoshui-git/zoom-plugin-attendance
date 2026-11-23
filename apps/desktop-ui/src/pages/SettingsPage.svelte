@@ -1,4 +1,5 @@
 <script lang="ts">
+  import appIcon from "../assets/app-icon.png";
   import { tick } from "svelte";
   import {
     meeting,
@@ -159,11 +160,13 @@
   <div class="language-options">
     <button
       class:chosen={$language === "zh-CN"}
+      aria-pressed={$language === "zh-CN"}
       onclick={() => chooseLanguage("zh-CN")}
     >
       简体中文
     </button><button
       class:chosen={$language === "en"}
+      aria-pressed={$language === "en"}
       onclick={() => chooseLanguage("en")}
     >
       English
@@ -228,9 +231,9 @@
     </div>
   {/if}
   <div class="about">
-    <span class="mark">A</span>
+    <img class="mark" src={appIcon} alt="" width="28" height="28" />
     <div>
-      <b>AttendFlow Desktop</b><small>
+      <b>{t("出勤助手桌面版", "AttendFlow Desktop")}</b><small>
         Zoom Companion · {t(
           "仅本地保存考勤记录",
           "Local-only attendance records",
