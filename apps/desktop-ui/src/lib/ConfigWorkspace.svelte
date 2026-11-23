@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { importFieldLabel } from "./import-field-labels";
   import { onMount } from "svelte";
   import FormActions from "./common/FormActions.svelte";
   import ImportWorkflowPanel from "./common/ImportWorkflowPanel.svelte";
@@ -648,8 +649,8 @@
           </thead><tbody>
             {#each changes as c}<tr class:rejected={["reject", "rejected"].includes(String(c.action || c.status).toLowerCase()) || c.rejected === true}>
                 <td>{c.row}</td><td>{importActionLabel(c.action)}</td><td>{c.id}</td><td>
-                  {#each fields(c.before) as [key, value]}<div><b>{key}:</b> {display(value)}</div>{/each}
-                </td><td>{#each fields(c.after, c.action === "update" || c.action === "updated" ? c.before : null) as [key, value]}<div><b>{key}:</b> {display(value)}</div>{/each}</td><td>{c.notes || c.reason}</td><td>
+                  {#each fields(c.before) as [key, value]}<div><b>{importFieldLabel(key, t)}:</b> {display(value)}</div>{/each}
+                </td><td>{#each fields(c.after, c.action === "update" || c.action === "updated" ? c.before : null) as [key, value]}<div><b>{importFieldLabel(key, t)}:</b> {display(value)}</div>{/each}</td><td>{c.notes || c.reason}</td><td>
                   {c.aliasImpact || 0}
                 </td>
               </tr>{/each}

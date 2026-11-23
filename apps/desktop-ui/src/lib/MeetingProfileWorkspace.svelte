@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { importFieldLabel } from "./import-field-labels";
   import FormActions from "./common/FormActions.svelte";
   import { confirmDialog } from "./ui";
   import { saveConfig } from "./api";
@@ -542,8 +543,8 @@
             </tr>
           </thead><tbody>
             {#each changes as c}<tr class:rejected={["reject", "rejected"].includes(String(c.action || c.status).toLowerCase()) || c.rejected === true}>
-                <td>{c.row}</td><td>{c.id}</td><td>{#each fields(c.before) as [key, value]}<div><b>{key}:</b> {display(value)}</div>{/each}</td><td>{#each fields(c.after, c.action === "update" || c.action === "updated" ? c.before : null) as [key, value]}<div><b>{key}:</b> {display(value)}</div>{/each}</td><td>{importActionLabel(c.action || c.status)}</td><td>
-                  {#each fields(c.after, c.action === "update" || c.action === "updated" ? c.before : null) as [key, value]}<div><b>{key}:</b> {display(value)}</div>{/each}{c.reason || c.notes || ""}
+                <td>{c.row}</td><td>{c.id}</td><td>{#each fields(c.before) as [key, value]}<div><b>{importFieldLabel(key, t)}:</b> {display(value)}</div>{/each}</td><td>{#each fields(c.after, c.action === "update" || c.action === "updated" ? c.before : null) as [key, value]}<div><b>{importFieldLabel(key, t)}:</b> {display(value)}</div>{/each}</td><td>{importActionLabel(c.action || c.status)}</td><td>
+                  {#each fields(c.after, c.action === "update" || c.action === "updated" ? c.before : null) as [key, value]}<div><b>{importFieldLabel(key, t)}:</b> {display(value)}</div>{/each}{c.reason || c.notes || ""}
                 </td>
               </tr>{/each}
           </tbody>

@@ -51,7 +51,7 @@ describe("configuration import preview component", () => {
       expect.objectContaining({ method: "POST" }),
     );
     expect(await screen.findByText("Add")).toBeTruthy();
-    expect(document.body.textContent).toContain("canonicalName");
+    expect(document.body.textContent).toContain("Name: Ada");
     expect(document.body.textContent).toContain("Total Rows");
     expect(document.body.textContent).toContain("Applicable");
   });
@@ -69,7 +69,7 @@ describe("configuration import preview component", () => {
     await fireEvent.click(screen.getByText("Preview"));
     expect((await screen.findAllByText("3")).length).toBeGreaterThan(0);
     expect(screen.getByText("Commit 2 changes")).toBeTruthy();
-    expect(document.body.textContent).toContain("group:");
+    expect(document.body.textContent).toContain("Group: B");
     expect(document.body.textContent).not.toContain('"canonicalName":"Ada"');
   });
 
