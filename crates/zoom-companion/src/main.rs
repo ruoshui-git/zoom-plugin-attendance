@@ -15,6 +15,7 @@ mod record;
 mod record_export;
 mod window_state;
 mod proof;
+mod proof_run;
 
 use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
