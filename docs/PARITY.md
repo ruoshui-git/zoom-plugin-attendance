@@ -120,26 +120,26 @@ Tick items off here as they land.
 
 ### Feedback, dialogs, interaction
 
-- [ ] Toasts: success/error/warning/info types with colors and icons, 5 s auto-dismiss, progress bar, pause on hover, close button, stacking.
+- [x] Toasts: success/error/warning/info types with colors and icons, 5 s auto-dismiss, progress bar, pause on hover, close button, stacking.
 - [ ] Feedback on every action (AttendFlow: ~110 toast calls; desktop: ~19). Saves, deletes, imports, exports, captures, mode and profile switches, name-matching actions.
 - [ ] Busy states: buttons disabled with "…ing" labels while a request runs (AttendFlow: 25 components; desktop: name matching only). Prevents double submits.
-- [ ] No native `alert()` (12) or `confirm()` (5): use toasts and `ConfirmDialog`.
-- [ ] Bug: `SettingsPage` mounts a second `ConfirmDialog`, so each confirm on Settings opens twice.
-- [ ] `ConfirmDialog`: Esc cancels, Enter confirms, focus moves into the dialog.
-- [ ] Import panels and the import preview overlay close on Esc.
-- [ ] Export menu closes on outside click and Esc.
-- [ ] UI size slider applies on release, not on every drag step; the slider stays put on screen.
-- [ ] Roster person picker: one type-ahead field with ↑/↓/Enter/Esc and "No results" (desktop: a text box plus a separate dropdown).
+- [x] No native `alert()` (12) or `confirm()` (5): use toasts and `ConfirmDialog`.
+- [x] Bug: `SettingsPage` mounts a second `ConfirmDialog`, so each confirm on Settings opens twice.
+- [x] `ConfirmDialog`: Esc cancels, Enter confirms, focus moves into the dialog.
+- [x] Import panels and the import preview overlay close on Esc.
+- [x] Export menu closes on outside click and Esc.
+- [x] UI size slider applies on release, not on every drag step; the slider stays put on screen.
+- [x] Roster person picker: one type-ahead field with ↑/↓/Enter/Esc and "No results" (desktop: a text box plus a separate dropdown).
 - [ ] Hover tooltips on icon-only buttons; full-text tooltips on truncated table cells.
 - [ ] Resizable table columns (owner: include).
 - [ ] Resizable record-detail slide-over (drag and keyboard).
 
 ### Live meeting
 
-- [ ] 全程 (Full Present) shown in generic mode too (summary, filter, row badge replaces 到过).
-- [ ] Summary hides zero counts except 总计.
-- [ ] Summary visible above every live tab; clicking a count opens Status filtered by it; clicking 不计入 opens Name Matching.
-- [ ] Remove the stray ↕ in the 状态 header (name sort lives in the filter panel as A→Z/Z→A).
+- [x] 全程 (Full Present) shown in generic mode too (summary, filter, row badge replaces 到过).
+- [x] Summary hides zero counts except 总计.
+- [x] Summary visible above every live tab; clicking a count opens Status filtered by it; clicking 不计入 opens Name Matching.
+- [x] Remove the stray ↕ in the 状态 header (name sort lives in the filter panel as A→Z/Z→A).
 - [ ] Duplicate-name banner (⚠ 重复姓名).
 - [ ] Generic mode: "Zoom 名称" column title and `#XXXX` suffixes for same-name people.
 - [ ] Roster mode: ⚠️ marker for people outside the profile's groups; "疑似重名或共用账号名" note.
@@ -150,11 +150,11 @@ Tick items off here as they land.
 - [ ] Name Changes as a searchable Previous/New table (live and record detail).
 - [ ] Settings & Info: record ID, current mode, plain-language late/return rules, Restore default; fix the "Apply profile overrides" button that sends no values.
 - [ ] Manual attendance: Participant ID and match-status columns.
-- [ ] Name matching: one-click "拆分共用 (N)" suggestions (shared name and past meetings), "Current match:" line.
+- [x] Name matching: one-click "拆分共用 (N)" suggestions (shared name and past meetings), "Current match:" line.
 
 ### Records
 
-- [ ] Record overview: duration, profile name (not ID), revision, export status, meeting UUID, operator-action counts (manual records, decisions, unmatched, guests).
+- [x] Record overview: duration, profile name (not ID), revision, export status, meeting UUID, operator-action counts (manual records, decisions, unmatched, guests).
 - [ ] Record import: several files or pasted JSON.
 - [ ] Records list uses the same "Bulk Select" mode as the Configuration tables.
 - [ ] Remove the Mode, Source and Status dropdown filters from the Records list (added by Codex in `63dd3a8` without an owner decision; owner 2026-11-23: remove).
@@ -165,8 +165,8 @@ Tick items off here as they land.
 
 ### Settings
 
-- [ ] Restore full backup: preview with backup version, date and "current → backup" counts per dataset, then full replacement (records included).
-- [ ] Clear local data resets everything (see "Changed on purpose").
+- [x] Restore full backup: preview with backup version, date and "current → backup" counts per dataset, then full replacement (records included).
+- [x] Clear local data resets everything (see "Changed on purpose").
 
 ## Not carried over
 
