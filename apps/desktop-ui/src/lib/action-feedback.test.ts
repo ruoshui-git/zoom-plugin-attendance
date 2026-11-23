@@ -6,7 +6,7 @@ import ConfigWorkspace from "./ConfigWorkspace.svelte";
 import RecordsPage from "../pages/RecordsPage.svelte";
 import RecordDetail from "../pages/records/RecordDetail.svelte";
 import * as stores from "./stores";
-import { switchMode } from "./api";
+import { loadConfig, saveSettings, switchMode } from "./api";
 import { toast } from "./toast";
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
@@ -85,5 +85,16 @@ describe("action feedback (busy states and toasts)", () => {
     expect(get(stores.mode)).toBe("generic");
     expect(get(stores.stateValue).mode).toBe("generic");
     stores.meeting.set(null);
+  });
+  it("changing only the export language toasts only that change", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: any) => {
+      if (init?.method === "PUT") return new Response(JSON.stringify({ revision: 2, value: JSON.parse(init.body).value }), { status: 200 });
+      return new Response(JSON.stringify({ revision: 1, value: String(url).endsWith("/settings") ? {} : [] }), { status: 200 });
+    }));
+    await loadConfig();
+    toast.clear();
+    stores.settings.set({ exportLanguage: "zh", filterDefaultsClosed: false } as any);
+    await saveSettings();
+    expect(toastTexts()).toEqual(["success:Export language set to Chinese."]);
   });
 });

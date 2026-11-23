@@ -148,12 +148,14 @@ export async function saveConfig(key: string, next: any) {
 let savedSettingsSnapshot: any = { ...value(s.settings) };
 export async function saveSettings() {
   try {
-    const before = savedSettingsSnapshot || value(s.settings);
+    // Compare with defaults applied: a missing value and its default are the same setting.
+    const norm = (x: any) => ({ exportLanguage: x?.exportLanguage || "en", filterDefaultsClosed: !!x?.filterDefaultsClosed });
+    const before = norm(savedSettingsSnapshot || value(s.settings));
     await saveConfig("settings", value(s.settings));
-    const settings = value(s.settings);
+    const current = value(s.settings); const settings = norm(current);
     if (before.exportLanguage !== settings.exportLanguage) toast.success(settings.exportLanguage === "zh" ? t("导出语言已设置为中文。", "Export language set to Chinese.") : t("导出语言已设置为英文。", "Export language set to English."));
     if (before.filterDefaultsClosed !== settings.filterDefaultsClosed) toast.success(settings.filterDefaultsClosed ? t("筛选器默认关闭。", "Filters default to closed.") : t("筛选器默认打开。", "Filters default to open."));
-    savedSettingsSnapshot = { ...settings };
+    savedSettingsSnapshot = { ...current };
   } catch (error: any) {
     toast.error(`${t("保存失败：", "Save failed: ")}${error.message}`);
   }
