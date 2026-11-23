@@ -19,11 +19,12 @@ pub struct MediaStats {
 
 #[derive(Default)]
 struct Track { stats: MediaStats, video: Option<bool>, muted: Option<bool>, seen: bool, cursor: u64, video_since: Option<u64>, unmuted_since: Option<u64>, present: bool }
-fn close(t: &mut Track, at: u64) {
+fn close(t: &mut Track, at: u64, departed: bool) {
     if let Some(s) = t.video_since.take() { t.stats.camera_on_ms += at.saturating_sub(s); }
     if let Some(s) = t.unmuted_since.take() { t.stats.unmuted_ms += at.saturating_sub(s); }
     if t.seen { t.stats.camera_known_ms += at.saturating_sub(t.cursor); t.stats.audio_known_ms += at.saturating_sub(t.cursor); }
-    t.present = false; t.video = None; t.muted = None;
+    t.present = false;
+    if departed { t.video = None; t.muted = None; t.stats.video_on=None; t.stats.audio_muted=None; }
 }
 
 pub fn media_by_participant(events: &[Value], end_ms: u64) -> HashMap<String, MediaStats> {
@@ -37,7 +38,7 @@ pub fn media_by_participant(events: &[Value], end_ms: u64) -> HashMap<String, Me
                 for u in e["users"].as_array().into_iter().flatten() {
                     let Some(uid)=u["userId"].as_u64() else { continue };
                     let key=format!("{instance}:{uid}"); let t=tracks.entry(key).or_default();
-                    if action=="left" { close(t,at); continue; }
+                    if action=="left" { close(t,at,true); continue; }
                     let v=u["videoOn"].as_bool(); let m=u["audioMuted"].as_bool();
                     if !t.seen { t.seen=true; t.present=true; t.cursor=at; t.video=v; t.muted=m; if v==Some(true){t.video_since=Some(at)}; }
                     else if t.present {
@@ -48,11 +49,11 @@ pub fn media_by_participant(events: &[Value], end_ms: u64) -> HashMap<String, Me
                     if let Some(kind)=u.get("audioType").and_then(Value::as_i64).map(|v|v as i32) { t.stats.last_audio_type=Some(kind); t.stats.ever_no_audio|=kind==0; t.stats.phone|=kind==2; }
                 }
             },
-            "instance_ended" => for t in tracks.values_mut(){if t.present{close(t,at)}},
+            "instance_ended" => for t in tracks.values_mut(){if t.present{t.stats.video_on=t.video;t.stats.audio_muted=t.muted;close(t,at,false)}},
             _=>()
         }
     }
-    for t in tracks.values_mut(){if t.present{t.stats.video_on=t.video; t.stats.audio_muted=t.muted; close(t,end_ms);}}
+    for t in tracks.values_mut(){if t.present{t.stats.video_on=t.video; t.stats.audio_muted=t.muted; close(t,end_ms,false);}}
     tracks.into_iter().map(|(k,t)|(k,t.stats)).collect()
 }
 
