@@ -152,7 +152,7 @@ Tick items off here as they land.
 - [x] Manual attendance: Participant ID and match-status columns.
 - [x] Name matching: one-click "拆分共用 (N)" suggestions (shared name and past meetings), "Current match:" line.
 
-- [ ] Host/co-host privilege: record role and when it was acquired; show it in the record overview (AttendFlow "权限获取时间 / Privilege Acquired"); clear notes in Live, record detail and exports that waiting-room data is missing while the user is not host/co-host (owner 2026-11-23).
+- [ ] Host/co-host privilege: record role and when it was acquired; show it in the record overview (AttendFlow "权限获取时间 / Privilege Acquired"); clear notes in Live, record detail and exports that waiting-room data is missing while the user is not host/co-host. Host and co-host count as the same privilege (owner 2026-11-23). Scheduled after wave 5.
 
 ### Records
 
