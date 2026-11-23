@@ -9,14 +9,19 @@ const messages: Record<string, [string, string]> = {
   capture_unsupported: ["此 Windows 版本不支持窗口截图。", "Window capture is not supported on this version of Windows."],
 };
 
+/** Localized text for a capture error code from the server (also stored on failed captures). */
+export function proofErrorMessage(code: string, detail?: string) {
+  const pair = messages[code];
+  return pair ? t(...pair) : `${t("截图失败", "Capture failed")}${detail ? `: ${detail}` : "."}`;
+}
+
 export async function captureProof() {
   const response = await fetch("/api/live/proof", { method: "POST" });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const pair = messages[data.error];
-    throw Error(pair ? t(...pair) : `${t("截图失败", "Capture failed")}${data.detail ? `: ${data.detail}` : "."}`);
+    throw Error(proofErrorMessage(data.error, data.detail));
   }
-  return data as { captureId: string; pages: any[] };
+  return data as { captureId: string; pages: number };
 }
 
 export const proofImageUrl = (instanceId: string, file: string) => `/api/meetings/${encodeURIComponent(instanceId)}/proof/${encodeURIComponent(file)}`;

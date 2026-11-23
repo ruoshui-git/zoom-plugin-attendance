@@ -13,6 +13,11 @@ describe("proof helpers", () => {
     await expect(captureProof()).rejects.toThrow("Zoom 会议窗口已最小化");
   });
 
+  it("returns the page count from a successful capture", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ captureId: "proof-1", pages: 3 }), { status: 200 })));
+    expect((await captureProof()).pages).toBe(3);
+  });
+
   it("flattens newest capture first", () => {
     const pages = flattenProofPages({ proofCaptures: [{ id: "old", pages: [{ file: "a" }] }, { id: "new", pages: [{ file: "b" }] }] });
     expect(pages.map((page: any) => page.captureId)).toEqual(["new", "old"]);

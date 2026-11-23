@@ -114,8 +114,24 @@ describe("RecordDetail attendance filters", () => {
     await waitFor(() => expect(container.querySelector(".card")).toBeTruthy());
     await fireEvent.click(container.querySelector(".card")!);
     expect(screen.getByRole("dialog").textContent).toContain("Ada");
+    // Escape closes only the viewer (a listener behind it, like the record slide-over, must not see it).
+    let behind = 0;
+    const listener = (event: KeyboardEvent) => { if (event.key === "Escape") behind++; };
+    window.addEventListener("keydown", listener);
     await fireEvent.keyDown(window, { key: "Escape" });
+    window.removeEventListener("keydown", listener);
     expect(screen.queryByRole("dialog")).toBeNull();
+    expect(behind).toBe(0);
+    expect(document.activeElement).toBe(container.querySelector(".card"));
+    expect(screen.getByRole("tab", { name: /Proof/ }).textContent).toContain("1");
+  });
+
+  it("shows a failed proof capture with a readable reason", async () => {
+    meeting.set({ instanceId: "proof-meeting", startedAt: "2026-01-01T10:00:00Z" } as any);
+    stateValue.set({ proofCaptures: [{ id: "c2", startedAt: "2026-01-01T10:00:00Z", error: "window_minimized", pages: [] }] });
+    const { container } = render(RecordDetail);
+    await fireEvent.click(screen.getByRole("tab", { name: /Proof/ }));
+    expect(container.textContent).toContain("The Zoom meeting window is minimized");
   });
 
   it("shows exported status when the record has an export timestamp", async () => {

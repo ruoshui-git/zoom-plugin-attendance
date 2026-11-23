@@ -77,7 +77,7 @@
   }
   async function captureLiveProof() {
     await runBusy("live-proof", async () => {
-      try { const result = await captureProof(); toast.success(t(`已截取 ${result.pages.length} 页`, `Captured ${result.pages.length} pages`)); }
+      try { const result = await captureProof(); toast.success(t(`已截取 ${result.pages} 页`, `Captured ${result.pages} ${result.pages === 1 ? 'page' : 'pages'}`)); }
       catch (error) { toast.error(error instanceof Error ? error.message : String(error)); }
     });
   }
