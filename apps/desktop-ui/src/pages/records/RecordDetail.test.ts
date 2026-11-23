@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { configs, language, viewedMeeting as meeting, viewedRecord as record, viewedEvents as recordEvents, settings, viewedState as stateValue } from "../../lib/stores";
 import RecordDetail from "./RecordDetail.svelte";
 import { uiLanguage } from "../../lib/i18n-core";
@@ -103,6 +103,19 @@ describe("RecordDetail attendance filters", () => {
     await fireEvent.click(screen.getByRole("tab", { name: /Auto Attendance/ }));
     await fireEvent.click(screen.getByRole("tab", { name: /Attendance Profile/ }));
     expect(container.textContent).toContain("Staff Profile");
+  });
+
+  it("shows Proof captures and opens a participant viewer that closes with Escape", async () => {
+    meeting.set({ instanceId: "proof-meeting", startedAt: "2026-01-01T10:00:00Z" } as any);
+    stateValue.set({ proofCaptures: [{ id: "c1", startedAt: "2026-01-01T10:00:00Z", pages: [{ file: "page-1.png", at: "2026-01-01T10:01:00Z", cameraOnCount: 1, darkTiles: 2, participants: [{ name: "Ada", videoOn: true }] }] }] });
+    const { container } = render(RecordDetail);
+    await fireEvent.click(screen.getByRole("tab", { name: /Proof/ }));
+    expect(container.textContent).toContain("Experimental");
+    await waitFor(() => expect(container.querySelector(".card")).toBeTruthy());
+    await fireEvent.click(container.querySelector(".card")!);
+    expect(screen.getByRole("dialog").textContent).toContain("Ada");
+    await fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("shows exported status when the record has an export timestamp", async () => {
