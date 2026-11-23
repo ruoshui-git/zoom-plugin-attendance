@@ -26,6 +26,12 @@ export async function get(path: string) {
   if (!response.ok) throw Error(`${response.status}`);
   return response.json();
 }
+export async function startNewRecord() {
+  const response = await fetch("/api/live/new-record", { method: "POST" });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw Error(data.error || `${response.status}`);
+  return data;
+}
 export async function loadViewedRecord(meeting: s.Meeting) {
   const token = ++viewedRequest;
   set(s.viewedMeeting, meeting);
