@@ -21,7 +21,7 @@
   export let activeFilter = "";
   export let showSummary = true;
   let search = "", entryType = "", newest = true, ascending = true, filteredRows: any[] = [];
-  let stagedLate = "", stagedReturn = "", stagedProfileId = "", settingsError = "";
+  let stagedLate = "", stagedReturn = "", stagedProfileId = "", settingsError = "", infoEdited = false;
   let selectedEntryTypes: string[] = [];
   let entryTypesInitialized = false;
   const entryTypeKeys = ["joinedBefore", "join", "leave", "waitingRoomJoinFromOutside", "waitingRoomJoinFromMeeting", "waitingRoomJoinedBefore", "waitingRoomLeave"];
@@ -48,9 +48,11 @@
   $: effectiveLate = Number(state.lateAfterMinutesOverride ?? record.record?.lateAfterMinutes ?? settingsProfile?.lateAfterMinutes ?? 0);
   $: effectiveReturn = Number(state.returnWindowMinutesOverride ?? record.record?.returnWindowMinutes ?? settingsProfile?.returnWindowMinutes ?? 8);
   $: lateTime = meetingStart ? DateTime.fromISO(meetingStart).plus({ minutes: Number(stagedLate || 0) }).toFormat("HH:mm") : "--:--";
-  $: if (stagedLate === "") stagedLate = String(state.lateAfterMinutesOverride ?? record.record?.lateAfterMinutes ?? settingsProfile?.lateAfterMinutes ?? 0);
-  $: if (stagedReturn === "") stagedReturn = String(state.returnWindowMinutesOverride ?? record.record?.returnWindowMinutes ?? settingsProfile?.returnWindowMinutes ?? 8);
-  $: if (!stagedProfileId) stagedProfileId = state.selectedProfileId || record.record?.selectedProfileId || settingsProfile?.id || "default-all";
+  // The form follows the saved settings (which may load after first render) until the user edits it.
+  $: sourceProfileId = state.selectedProfileId || record.record?.selectedProfileId || settingsProfile?.id || "default-all";
+  $: sourceLate = String(state.lateAfterMinutesOverride ?? record.record?.lateAfterMinutes ?? settingsProfile?.lateAfterMinutes ?? 10);
+  $: sourceReturn = String(state.returnWindowMinutesOverride ?? record.record?.returnWindowMinutes ?? settingsProfile?.returnWindowMinutes ?? 8);
+  $: if (!infoEdited) { stagedProfileId = sourceProfileId; stagedLate = sourceLate; stagedReturn = sourceReturn; }
   $: hasOverrides = state.lateAfterMinutesOverride != null || state.returnWindowMinutesOverride != null;
   $: currentMode = (state.mode || mode) === "roster" ? t("花名册", "Roster") : t("普通模式", "Generic");
   $: lateRule = Number(stagedLate) < 0
@@ -67,14 +69,15 @@
       const chosen = (configs.profiles || []).find((p: any) => p.id === stagedProfileId);
       const saved = await onOverrides({ lateAfterMinutesOverride: chosen && Number(chosen.lateAfterMinutes) === late ? null : late, returnWindowMinutesOverride: chosen && Number(chosen.returnWindowMinutes) === ret ? null : ret });
       if (saved === false) throw Error(t("数据已被修改，请重试", "Data changed; please retry"));
+      infoEdited = false;
       toast.success(t("设置已应用", "Settings applied"));
     } catch (error) { toast.error(`${t("保存失败：", "Save failed: ")}${error instanceof Error ? error.message : String(error)}`); }
   }
   async function restoreDefault() {
-    try { if ((await onSelectProfile("default-all")) === false) throw Error(t("数据已被修改，请重试", "Data changed; please retry")); stagedProfileId = "default-all"; stagedLate = String((configs.profiles || []).find((p: any) => p.id === "default-all")?.lateAfterMinutes ?? 0); stagedReturn = String((configs.profiles || []).find((p: any) => p.id === "default-all")?.returnWindowMinutes ?? 8); toast.info(t("已切换到默认配置", "Switched to default profile")); }
+    try { if ((await onSelectProfile("default-all")) === false) throw Error(t("数据已被修改，请重试", "Data changed; please retry")); infoEdited = false; stagedProfileId = "default-all"; stagedLate = String((configs.profiles || []).find((p: any) => p.id === "default-all")?.lateAfterMinutes ?? 0); stagedReturn = String((configs.profiles || []).find((p: any) => p.id === "default-all")?.returnWindowMinutes ?? 8); toast.info(t("已切换到默认配置", "Switched to default profile")); }
     catch (error) { toast.error(`${t("保存失败：", "Save failed: ")}${error instanceof Error ? error.message : String(error)}`); }
   }
-  function changeInfoProfile(id: string) { stagedProfileId = id; const selected = (configs.profiles || []).find((p: any) => p.id === id); if (selected) { stagedLate = String(selected.lateAfterMinutes); stagedReturn = String(selected.returnWindowMinutes); } }
+  function changeInfoProfile(id: string) { infoEdited = true; stagedProfileId = id; const selected = (configs.profiles || []).find((p: any) => p.id === id); if (selected) { stagedLate = String(selected.lateAfterMinutes); stagedReturn = String(selected.returnWindowMinutes); } }
   function statusTone(status: string) { return status === "fullPresent" || status === "present" || status === "inMeeting" ? "success" : status === "late" || status === "returnedAfterLongAbsence" ? "warning" : status === "missing" || status === "leftEarly" ? "danger" : "neutral"; }
   const tagPriority = ["left_early", "late", "returned", "full_present", "seen", "missing", "ignored", "guest", "unmatched"];
   function rowStatusTags(row: any) {
@@ -109,8 +112,8 @@
     <h2>{t("自动考勤设置", "Auto Attendance Settings")}</h2>
     <div class="info-form">
       <label>{t("考勤配置", "Attendance Profile")}<select value={stagedProfileId} onchange={(e) => changeInfoProfile(e.currentTarget.value)}>{#each (configs.profiles || []).filter((p: any) => p.active) as p}<option value={p.id}>{p.name}</option>{/each}</select><small>{t("切换配置时，会同时更新迟到和返回设置。", "Changing the profile also updates the late and return settings.")}</small></label>
-      <label>{t("迟到判定", "Late Rule")}<input type="number" min="-60" max="120" bind:value={stagedLate} /><small>{lateRule}</small></label>
-      <label>{t("返回判定", "Return Rule")}<input type="number" min="1" max="60" bind:value={stagedReturn} /><small>{t("离开会议 {0} 分钟或更久后再回来，会显示为\"返回\"。", "Leaving for {0} minutes or longer and then coming back will show a \"Returned\" status.").replace("{0}", stagedReturn)}</small></label>
+      <label>{t("迟到判定", "Late Rule")}<input type="number" min="-60" max="120" bind:value={stagedLate} oninput={() => infoEdited = true} /><small>{lateRule}</small></label>
+      <label>{t("返回判定", "Return Rule")}<input type="number" min="1" max="60" bind:value={stagedReturn} oninput={() => infoEdited = true} /><small>{t("离开会议 {0} 分钟或更久后再回来，会显示为\"返回\"。", "Leaving for {0} minutes or longer and then coming back will show a \"Returned\" status.").replace("{0}", stagedReturn)}</small></label>
       {#if !hasOverrides}<small>{t("（使用已保存的设置）", "(using saved settings)")}</small>{/if}
       {#if settingsError}<small class="settings-error">{settingsError}</small>{/if}
       <div class="profile-actions"><button class="primary" onclick={applyInfoSettings}>{t("应用", "Apply")}</button><button onclick={restoreDefault}>{t("恢复默认配置", "Restore Default")}</button></div>

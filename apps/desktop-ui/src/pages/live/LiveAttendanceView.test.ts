@@ -209,5 +209,11 @@ describe("LiveAttendanceView", () => {
     expect(items.map((i) => i.type)).toEqual(["success", "error"]);
     toast.clear();
   });
+  it("Settings & Info picks up profile values that load after the first render", async () => {
+    const view = render(LiveAttendanceView, { view: "info", language: "en", record: { record: { startedAt: "2026-01-01T10:00:00Z" } }, state: {}, configs: { profiles: [] } });
+    await view.rerender({ view: "info", language: "en", record: { record: { startedAt: "2026-01-01T10:00:00Z" } }, state: {}, configs: { profiles: [{ id: "default-all", name: "All", lateAfterMinutes: 10, returnWindowMinutes: 8, active: true }] } });
+    expect(screen.getByText(/10 minutes after the meeting starts/)).toBeTruthy();
+    expect((screen.getAllByRole("spinbutton")[0] as HTMLInputElement).value).toBe("10");
+  });
 });
 
