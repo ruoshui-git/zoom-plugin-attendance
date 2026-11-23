@@ -62,3 +62,19 @@ pub fn merge_media(stats: &[&MediaStats]) -> MediaStats {
     for s in stats { out.camera_on_ms+=s.camera_on_ms;out.camera_known_ms+=s.camera_known_ms;out.unmute_count+=s.unmute_count;out.unmuted_ms+=s.unmuted_ms;out.audio_known_ms+=s.audio_known_ms; if s.last_audio_type.is_some(){out.last_audio_type=s.last_audio_type};out.ever_no_audio|=s.ever_no_audio;out.phone|=s.phone;if s.video_on.is_some(){out.video_on=s.video_on};if s.audio_muted.is_some(){out.audio_muted=s.audio_muted}; }
     out
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    fn ev(at:u64, action:&str, users:Value)->Value { json!({"kind":"users","at":at,"instanceId":"i","action":action,"users":users}) }
+    fn user(id:u64,v:bool,m:bool)->Value { json!({"userId":id,"videoOn":v,"audioMuted":m}) }
+    #[test] fn camera_on_off_intervals_and_percent(){let e=[ev(0,"sync_all",json!([user(1,true,true)])),ev(60_000,"update",json!([user(1,false,true)])),ev(120_000,"update",json!([user(1,true,true)]))];let s=media_by_participant(&e,180_000);let m=&s["i:1"];assert_eq!(m.camera_on_ms,120_000);assert_eq!(m.camera_known_ms,180_000);}
+    #[test] fn first_snapshot_muted_state_is_not_unmute(){let e=[ev(0,"sync_all",json!([user(1,true,false)]))];assert_eq!(media_by_participant(&e,60_000)["i:1"].unmute_count,0);}
+    #[test] fn unmute_count_and_minutes(){let e=[ev(0,"sync_all",json!([user(1,true,true)])),ev(10_000,"update",json!([user(1,true,false)]))];let m=&media_by_participant(&e,70_000)["i:1"];assert_eq!(m.unmute_count,1);assert_eq!(m.unmuted_ms,60_000);}
+    #[test] fn left_and_instance_end_close_intervals(){let e=[ev(0,"sync_all",json!([user(1,true,false)])),ev(30_000,"left",json!([user(1,true,false)]))];let m=&media_by_participant(&e,90_000)["i:1"];assert_eq!(m.camera_on_ms,30_000);assert_eq!(m.video_on,None);let e=[ev(0,"sync_all",json!([user(1,true,false)])),json!({"kind":"instance_ended","at":40_000})];assert_eq!(media_by_participant(&e,90_000)["i:1"].camera_on_ms,40_000);}
+    #[test] fn still_present_keeps_current_state(){let e=[ev(0,"sync_all",json!([user(1,true,false)]))];let m=&media_by_participant(&e,10)["i:1"];assert_eq!(m.video_on,Some(true));assert_eq!(m.audio_muted,Some(false));}
+    #[test] fn missing_audio_type_is_unknown_not_none(){let e=[ev(0,"sync_all",json!([user(1,true,true)]))];let m=&media_by_participant(&e,10)["i:1"];assert_eq!(m.last_audio_type,None);assert!(!m.ever_no_audio);}
+    #[test] fn phone_and_no_audio_markers(){let mut u=user(1,true,true);u["audioType"]=json!(0);let mut p=user(2,true,true);p["audioType"]=json!(2);let m=media_by_participant(&[ev(0,"sync_all",json!([u,p]))],10);assert!(m["i:1"].ever_no_audio);assert!(m["i:2"].phone);}
+    #[test] fn rejoin_ids_merge(){let a=MediaStats{camera_on_ms:10,ever_no_audio:true,..Default::default()};let b=MediaStats{camera_on_ms:20,phone:true,..Default::default()};let m=merge_media(&[&a,&b]);assert_eq!(m.camera_on_ms,30);assert!(m.phone&&m.ever_no_audio);}
+}
