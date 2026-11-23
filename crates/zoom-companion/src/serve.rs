@@ -3494,7 +3494,14 @@ async fn api_export_backup(State(a): State<App>, headers: HeaderMap) -> Response
             Ok(v) => v,
             Err(e) => return api_error(e),
         };
-        records.push(json!({"meeting":meeting,"events":events.iter().map(|e|stored_event(&m.instance_id,e)).collect::<Vec<_>>()}));
+        // Per-meeting state (mode, profile/overrides, decisions, snapshots, captures,
+        // export status) so a full restore round-trips everything.
+        let state = match a.store.get_state(&m.instance_id) {
+            Ok((revision, value)) if revision > 0 => value,
+            Ok(_) => Value::Null,
+            Err(e) => return api_error(e),
+        };
+        records.push(json!({"meeting":meeting,"events":events.iter().map(|e|stored_event(&m.instance_id,e)).collect::<Vec<_>>(),"state":state}));
     }
     Json(json!({"version":3,"exportedAt":now(),"rosterPeople":docs("roster"),"aliasMappings":docs("aliases"),"attendanceProfiles":docs("profiles"),"settings":docs("settings"),"records":records})).into_response()
 }
@@ -4045,6 +4052,49 @@ async fn record_state_captures_persist_and_export_marks_downloaded() {
     let (_, saved) = store.get_state("export-meeting").unwrap();
     assert!(!saved["exportedAt"].is_null());
     assert_eq!(saved["needsExport"], false);
+}
+#[tokio::test]
+async fn full_backup_round_trip_keeps_meeting_state() {
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+    let store = Arc::new(
+        Store::open(std::env::temp_dir().join(format!("zc-api-roundtrip-{}.db", now()))).unwrap(),
+    );
+    store.upsert_meeting(&json!({"instanceId":"m1","meetingNumber":"1","topic":"Demo","startedAt":1,"isHost":false}),Some((5,"ended".into())),1).unwrap();
+    let saved = json!({"mode":"roster","selectedProfileId":"p1","manualSnapshots":[{"id":"s1","participants":[]}],"reconciliationDecisions":[{"id":"d1","action":"guest"}],"exportedAt":9});
+    store.put_state("m1", 0, &saved, 2).unwrap().unwrap();
+    let (tx, _) = broadcast::channel(8);
+    let app = App {
+        tx,
+        tracker: Arc::new(Mutex::new(Tracker::default())),
+        session: Arc::new(Mutex::new(None)),
+        shutdown: Arc::new(AtomicBool::new(false)),
+        port: 47812,
+        allowed: vec![],
+        ui: None,
+        log_dir: std::env::temp_dir(),
+        store: store.clone(),
+        provider: Arc::new(StubRecordProvider),
+        record_updates: Arc::new(Mutex::new(Default::default())),
+        link: Default::default(),
+    };
+    let api = Router::new()
+        .route("/api/backup", get(api_export_backup).post(api_restore_backup))
+        .with_state(app);
+    let req = axum::http::Request::builder().uri("/api/backup").body(axum::body::Body::empty()).unwrap();
+    let exported = api.clone().oneshot(req).await.unwrap();
+    assert_eq!(exported.status(), StatusCode::OK);
+    let backup: Value = serde_json::from_slice(&exported.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(backup["records"][0]["state"], saved);
+    store.put_state("m1", 1, &json!({"mode":"generic"}), 3).unwrap().unwrap();
+    let req = axum::http::Request::builder()
+        .method("POST")
+        .uri("/api/backup")
+        .header("content-type", "application/json")
+        .body(axum::body::Body::from(backup.to_string()))
+        .unwrap();
+    assert_eq!(api.clone().oneshot(req).await.unwrap().status(), StatusCode::OK);
+    assert_eq!(store.get_state("m1").unwrap().1, saved);
 }
 #[tokio::test]
 async fn backup_import_revision_conflict_and_state_notification() {
