@@ -240,12 +240,16 @@ impl RecordProvider for EngineRecordProvider {
 fn derive_privilege(meeting: &Value, events: &[Value], reference_ms: u64) -> Value {
     let start = meeting["startedAt"].as_u64().unwrap_or(reference_ms);
     let end = meeting["endedAt"].as_u64().unwrap_or(reference_ms).min(reference_ms).max(start);
+    // role_changed events (host/co-host aware) are authoritative. self_changed carries only the
+    // host flag and also fires on mute/video changes, so it is used only for meetings recorded
+    // before role tracking existed.
+    let has_roles = events.iter().any(|e| e["kind"] == "role_changed");
     let mut changes: Vec<(u64, String)> = events.iter().filter_map(|e| {
         let at = e["at"].as_u64()?;
         match e["kind"].as_str()? {
             "role_changed" => Some((at, match e["role"].as_str()? { "host" => "host", "cohost" => "cohost", _ => "none" }.to_string())),
-            "self_changed" if e["isHost"] == true => Some((at, "host".into())),
-            "self_changed" if e["isHost"] == false => Some((at, "none".into())),
+            "self_changed" if !has_roles && e["isHost"] == true => Some((at, "host".into())),
+            "self_changed" if !has_roles && e["isHost"] == false => Some((at, "none".into())),
             _ => None,
         }
     }).collect();
@@ -271,6 +275,29 @@ fn derive_privilege(meeting: &Value, events: &[Value], reference_ms: u64) -> Val
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn privilege_intervals_from_role_and_legacy_host_events() {
+        let m = |host: bool| json!({"startedAt":100,"endedAt":1000,"isHost":host});
+        let ev = |kind: &str, at: u64, extra: Value| { let mut e = json!({"kind":kind,"at":at}); for (k, v) in extra.as_object().unwrap() { e[k] = v.clone(); } e };
+        // Never privileged.
+        let p = derive_privilege(&m(false), &[], 2000);
+        assert_eq!(p["current"], "none"); assert_eq!(p["acquiredAt"], Value::Null); assert_eq!(p["coveredWholeMeeting"], false);
+        // Host for the whole meeting.
+        let p = derive_privilege(&m(true), &[], 2000);
+        assert_eq!(p["intervals"], json!([{"from":100,"to":1000}])); assert_eq!(p["coveredWholeMeeting"], true); assert_eq!(p["acquiredAt"], 100);
+        // Co-host gained midway, then lost.
+        let events = [ev("role_changed", 300, json!({"role":"cohost"})), ev("role_changed", 700, json!({"role":"attendee"}))];
+        let p = derive_privilege(&m(false), &events, 2000);
+        assert_eq!(p["intervals"], json!([{"from":300,"to":700}])); assert_eq!(p["acquiredAt"], 300); assert_eq!(p["current"], "none"); assert_eq!(p["coveredWholeMeeting"], false);
+        // With role events present, a self_changed without the host flag (e.g. a mute) does not end co-host.
+        let events = [ev("role_changed", 300, json!({"role":"cohost"})), ev("self_changed", 400, json!({"isHost":false}))];
+        let p = derive_privilege(&m(false), &events, 2000);
+        assert_eq!(p["intervals"], json!([{"from":300,"to":1000}])); assert_eq!(p["current"], "cohost");
+        // Legacy meetings (no role events) use the host flag transitions.
+        let events = [ev("self_changed", 500, json!({"isHost":true}))];
+        let p = derive_privilege(&m(false), &events, 2000);
+        assert_eq!(p["intervals"], json!([{"from":500,"to":1000}])); assert_eq!(p["acquiredAt"], 500);
+    }
     use super::*;
     use std::{fs, path::PathBuf};
 

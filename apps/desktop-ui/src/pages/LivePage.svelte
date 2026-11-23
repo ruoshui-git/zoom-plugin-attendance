@@ -29,7 +29,8 @@
     { id: "names", label: t("改名记录", "Name Changes") },
     { id: "info", label: t("设置与信息", "Settings & Info") },
   ];
-  $: privilege = $record.privilege || { current: "none", intervals: [], coveredWholeMeeting: true };
+  // Only warn once the live record says so (not while it is still loading).
+  $: privilege = $record.privilege;
   $: unmatchedCount = ($record.rows || []).filter((r: any) => r.matchStatus === "unmatched").length;
   $: nameChanges = $record.record?.nameChangeEvents || [];
   const statusDefs = [["seen","到过","Seen","seen"],["full_present","全程","Full Present","fullPresent"],["late","迟到","Late","late"],["returned","返回","Returned","returned"],["left_early","早退","Left Early","leftEarly"],["missing","缺席","Absent","missing"],["ignored","不计入","Ignored","ignored"],["total","总计","Total","total"]];
@@ -73,7 +74,7 @@
       <details class="overrides"><summary>{t("阈值", "Overrides")}</summary><div class="override-pop"><p>{t("迟到", "Late")}: {$record.record?.lateAfterMinutes ?? profileGuess()?.lateAfterMinutes ?? 10} {t("分钟", "min")} · {t("返回", "Return")}: {$record.record?.returnWindowMinutes ?? profileGuess()?.returnWindowMinutes ?? 8} {t("分钟", "min")}</p><ProfileOverrideForm initialLate={$stateValue.lateAfterMinutesOverride ?? null} initialReturn={$stateValue.returnWindowMinutesOverride ?? null} language={$language} onApply={applyOverrides} /></div></details>
     </div>
   </section>
-  {#if privilege.current === "none"}<p class="privilege-warning">{t("你目前不是主持人或联合主持人：等候室中的人员和等候时长不会被记录，直到你获得权限。", "You are not host or co-host: people in the waiting room and their waiting time are not recorded until you are.")}</p>{/if}
+  {#if privilege?.current === "none"}<p class="privilege-warning">{t("你目前不是主持人或联合主持人：等候室中的人员和等候时长不会被记录，直到你获得权限。", "You are not host or co-host: people in the waiting room and their waiting time are not recorded until you are.")}</p>{/if}
   <div class="summary-row"><SortableFilterStack items={liveStatItems} active={activeFilter} onSelect={selectStat} /><div class="mode-switch" aria-label={t("考勤模式", "Attendance mode")}><button disabled={$busyKeys.has("live-mode")} class:chosen={$mode === 'generic'} onclick={() => changeMode('generic')}>{t("普通模式", "Generic")}</button><button disabled={$busyKeys.has("live-mode")} class:chosen={$mode === 'roster'} onclick={() => changeMode('roster')}>{t("花名册", "Roster")}</button></div></div>
   <PrimaryTabs items={primaryTabs} active={primary} onSelect={pickPrimary} />
   {#if primary === "attendance"}<SecondaryTabs items={attendanceTabs.map((x) => ({ ...x, label: x.id === "matching" && unmatchedCount ? `${x.label} · ${unmatchedCount}` : x.id === "names" && nameChanges.length ? `${x.label} · ${nameChanges.length}` : x.label }))} active={secondary} onSelect={(id) => { secondary = id; }} />{/if}

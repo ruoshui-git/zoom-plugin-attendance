@@ -1201,7 +1201,8 @@ fn sdk_loop(a: App) {
                                     Event::UserStatus { .. } if no_meeting => want_start = true,
                                     _ => {}
                                 }
-                                let role_may_change = matches!(&e, Event::UserStatus { .. });
+                                // Ask for our role only when the update touches us (or is a full sync), not for every participant event.
+                                let role_may_change = matches!(&e, Event::UserStatus { action, users, .. } if *action == 1 || users.iter().any(|u| u.flags.myself()));
                                 let out = a.tracker.lock().unwrap().apply(e, None);
                                 publish(&a, out);
                                 if role_may_change { request_self_role(&a); }
@@ -1593,6 +1594,21 @@ mod tests {
             None,
         );
         assert_eq!(r[0]["users"][0]["name"], "Renamed");
+    }
+    #[test]
+    fn role_replies_emit_role_changed_once_and_host_flag_counts_as_host() {
+        let mut t = Tracker::default();
+        let me = User { user_id: 1, name: "me".into(), host: false, myself: true, waiting_room: false, audio_muted: false, video_on: false, raised_hand: false, talking: false, spotlighted: false };
+        t.start("1".into(), "".into(), 1, 3, Some(me));
+        let reply = |code: i32, value: i64| Event::AsyncResult { operation: "GetUserRoleByUserID".into(), code, value, thread_id: 0 };
+        let roles = |out: &Vec<Value>| out.iter().filter(|v| v["kind"] == "role_changed").map(|v| v["role"].as_str().unwrap().to_owned()).collect::<Vec<_>>();
+        assert_eq!(roles(&t.apply(reply(1, 2), None)), vec!["cohost"]);
+        assert!(roles(&t.apply(reply(1, 2), None)).is_empty(), "identical reply must not emit again");
+        assert!(roles(&t.apply(reply(0, 3), None)).is_empty(), "failed replies are ignored");
+        assert_eq!(roles(&t.apply(reply(1, 3), None)), vec!["attendee"]);
+        // The host flag alone (before any role reply) counts as host.
+        let out = t.apply(Event::UserStatus { action: 4, error_code: 1, instance: 1, users: vec![part(1, "me", 5)], thread_id: 0 }, None);
+        assert_eq!(roles(&out), vec!["host"]);
     }
     #[test]
     fn host_transfer_emits_self_changed() {
