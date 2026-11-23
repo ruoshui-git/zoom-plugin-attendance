@@ -33,6 +33,9 @@ fn csv(headers: &[&str], rows: &[Vec<String>]) -> Vec<u8> {
 fn text<'a>(v: &'a Value, key: &str) -> &'a str {
     v[key].as_str().unwrap_or("")
 }
+fn safe_file_part(value: &str) -> String {
+    value.chars().map(|c| if c.is_control() || "<>:\"/\\|?*".contains(c) { '_' } else { c }).collect::<String>().trim().trim_matches('.').chars().take(80).collect()
+}
 fn number(v: &Value, key: &str) -> f64 {
     v[key].as_f64().unwrap_or(0.0)
 }
@@ -135,12 +138,15 @@ pub fn artifacts(
         .as_u64()
         .and_then(|ms| chrono::DateTime::from_timestamp_millis(ms as i64).map(|d| d.to_rfc3339()));
     let stamp = timestamp(started_ms);
-    let session = json!({"version":3,"id":null,"sessionId":id,"originSessionKey":id,"sessionRevision":meeting["lastSeq"].as_u64().unwrap_or_default(),"recordSource":if meeting["source"]=="imported" {"main_import"} else {"meeting_live"},"startedAt":started_at,"endedAt":ended_at,"isActive":ended_at.is_none(),"needsExport":false,"mode":record["mode"],"meetingUUID":meeting["instanceId"],"meetingId":meeting["meetingNumber"],"meetingTopic":meeting["topic"],"privilegeAcquiredAt":started_at,"privilege":record["privilege"],"guessedProfileId":record["record"]["guessedProfileId"],"selectedProfileId":record["record"]["selectedProfileId"],"selectedIncludedSubgroups":record["record"]["selectedIncludedSubgroups"].as_array().cloned().unwrap_or_default(),"selectedGroupSortOrder":record["record"]["selectedGroupSortOrder"],"lateThresholdMinutes":record["record"]["lateAfterMinutes"].as_u64().unwrap_or(10),"returnWindowMinutes":record["record"]["returnWindowMinutes"].as_u64().unwrap_or(8),"sessionParticipants":record["record"]["participants"].as_array().cloned().unwrap_or_default(),"movementEvents":record["record"]["movementEvents"].as_array().cloned().unwrap_or_default(),"nameChangeEvents":record["record"]["nameChangeEvents"].as_array().cloned().unwrap_or_default(),"latestRoster":record["record"]["latestRoster"].as_array().cloned().unwrap_or_default(),"rosterObservations":record["record"]["rosterObservations"].as_array().cloned().unwrap_or_default(),"manualSnapshots":state["manualSnapshots"].as_array().cloned().unwrap_or_default(),"reconciliationDecisions":state["reconciliationDecisions"].as_array().cloned().unwrap_or_default(),"derivedRows":record["rows"],"exportedAt":exported_at,"raiseHandEntries":state["raiseHandEntries"].as_array().cloned().unwrap_or_else(||hand_entries(events)),"raiseHandCaptures":state["raiseHandCaptures"].as_array().cloned().unwrap_or_default(),"lastSubmittedAt":Value::Null,"meeting":meeting,"summary":record["summary"]});
+    let title = state["customName"].as_str().filter(|s| !s.trim().is_empty()).unwrap_or_else(|| meeting["topic"].as_str().unwrap_or("meeting"));
+    let title_file = safe_file_part(title);
+    let export_id = if title_file.is_empty() { id.to_string() } else { title_file.clone() };
+    let session = json!({"version":3,"id":null,"sessionId":id,"originSessionKey":id,"sessionRevision":meeting["lastSeq"].as_u64().unwrap_or_default(),"recordSource":if meeting["source"]=="imported" {"main_import"} else {"meeting_live"},"startedAt":started_at,"endedAt":ended_at,"isActive":ended_at.is_none(),"needsExport":false,"mode":record["mode"],"meetingUUID":meeting["instanceId"],"meetingId":meeting["meetingNumber"],"meetingTopic":meeting["topic"],"customName":state["customName"],"privilegeAcquiredAt":started_at,"privilege":record["privilege"],"guessedProfileId":record["record"]["guessedProfileId"],"selectedProfileId":record["record"]["selectedProfileId"],"selectedIncludedSubgroups":record["record"]["selectedIncludedSubgroups"].as_array().cloned().unwrap_or_default(),"selectedGroupSortOrder":record["record"]["selectedGroupSortOrder"],"lateThresholdMinutes":record["record"]["lateAfterMinutes"].as_u64().unwrap_or(10),"returnWindowMinutes":record["record"]["returnWindowMinutes"].as_u64().unwrap_or(8),"sessionParticipants":record["record"]["participants"].as_array().cloned().unwrap_or_default(),"movementEvents":record["record"]["movementEvents"].as_array().cloned().unwrap_or_default(),"nameChangeEvents":record["record"]["nameChangeEvents"].as_array().cloned().unwrap_or_default(),"latestRoster":record["record"]["latestRoster"].as_array().cloned().unwrap_or_default(),"rosterObservations":record["record"]["rosterObservations"].as_array().cloned().unwrap_or_default(),"manualSnapshots":state["manualSnapshots"].as_array().cloned().unwrap_or_default(),"reconciliationDecisions":state["reconciliationDecisions"].as_array().cloned().unwrap_or_default(),"derivedRows":record["rows"],"exportedAt":exported_at,"raiseHandEntries":state["raiseHandEntries"].as_array().cloned().unwrap_or_else(||hand_entries(events)),"raiseHandCaptures":state["raiseHandCaptures"].as_array().cloned().unwrap_or_default(),"lastSubmittedAt":Value::Null,"meeting":meeting,"summary":record["summary"]});
     let mut files = Vec::new();
     if kind == "json" || kind == "all" {
         let content = json!({"version":3,"exportedAt":exported_at,"session":session}).to_string();
         files.push(Artifact {
-            filename: format!("session-{stamp}-{id}.json"),
+            filename: format!("session-{stamp}-{export_id}.json"),
             content_type: "application/json; charset=utf-8",
             bytes: content.into_bytes(),
         });
@@ -148,6 +154,7 @@ pub fn artifacts(
     if kind == "summary" || kind == "all" {
         let headers = if en {
             vec![
+                "meeting",
                 "#",
                 "id",
                 "canonicalName",
@@ -170,6 +177,7 @@ pub fn artifacts(
             ]
         } else {
             vec![
+                "会议",
                 "#",
                 "固定编号",
                 "姓名",
@@ -205,6 +213,7 @@ pub fn artifacts(
             .enumerate()
             .map(|(i, r)| {
                 vec![
+                    title.to_string(),
                     (i + 1).to_string(),
                     r["personId"]
                         .as_i64()
@@ -239,7 +248,7 @@ pub fn artifacts(
             })
             .collect::<Vec<_>>();
         files.push(Artifact {
-            filename: format!("session-{stamp}-{id}.csv"),
+            filename: format!("session-{stamp}-{export_id}.csv"),
             content_type: "text/csv; charset=utf-8",
             bytes: csv(&headers, &data),
         });
@@ -357,7 +366,7 @@ mod tests {
         let f = artifacts(&m, &r, &json!({}), &[], "now", "en", "summary").remove(0);
         assert_eq!(&f.bytes[..3], &[0xef, 0xbb, 0xbf]);
         let s = String::from_utf8(f.bytes[3..].to_vec()).unwrap();
-        assert!(s.starts_with("#,id,canonicalName,zoomName,zoomNameHistory,group,role,statusTags,location,matchStatus,attendanceScore,attendanceGrade,firstJoinAt,lastSeenAt,totalPresenceMinutes,absenceCount,sharedName,notes,waitingRoomMinutes\r\n"));
+        assert!(s.starts_with("meeting,#,id,canonicalName,zoomName,zoomNameHistory,group,role,statusTags,location,matchStatus,attendanceScore,attendanceGrade,firstJoinAt,lastSeenAt,totalPresenceMinutes,absenceCount,sharedName,notes,waitingRoomMinutes\r\n"));
         assert!(s.find("Excellent").unwrap() < s.find("Moderate").unwrap());
         assert!(s.find(",A,").unwrap() < s.find(",B,").unwrap());
     }
@@ -376,7 +385,7 @@ mod tests {
         .remove(0);
         assert_eq!(&summary.bytes[..3], &[0xef, 0xbb, 0xbf]);
         let summary_text = String::from_utf8(summary.bytes[3..].to_vec()).unwrap();
-        assert!(summary_text.starts_with("#,固定编号,姓名,Zoom名称,改名历史,组别,角色,状态标签,当前位置,匹配状态,出勤分数,出勤等级,首次进入时间,最后出现时间,累计在线分钟,离开次数,是否疑似共用名称,备注,等候室分钟\r\n"));
+        assert!(summary_text.starts_with("会议,#,固定编号,姓名,Zoom名称,改名历史,组别,角色,状态标签,当前位置,匹配状态,出勤分数,出勤等级,首次进入时间,最后出现时间,累计在线分钟,离开次数,是否疑似共用名称,备注,等候室分钟\r\n"));
         let f=artifacts(&m,&json!({}),&json!({"manualSnapshots":[{"timestamp":"t","participants":[{"screenName":"Ada","participantUUID":"u","location":"meeting","matchStatus":"matched"}]}]}),&[],"x","zh-CN","manual").remove(0);
         assert_eq!(&f.bytes[..3], &[0xef, 0xbb, 0xbf]);
         let s = String::from_utf8(f.bytes).unwrap();
@@ -425,6 +434,16 @@ mod tests {
 mod tag_label_tests {
     use super::tags;
     use serde_json::json;
+
+    #[test]
+    fn custom_name_in_session_export() {
+        let meeting = json!({"instanceId":"m-1","meetingNumber":"1","topic":"Default","startedAt":1});
+        let state = json!({"customName":"Named session"});
+        let artifacts = super::artifacts(&meeting, &json!({"rows":[]}), &state, &[], "now", "en", "json");
+        let bundle: serde_json::Value = serde_json::from_slice(&artifacts[0].bytes).unwrap();
+        assert_eq!(bundle["session"]["customName"], "Named session");
+        assert!(artifacts[0].filename.contains("Named session"));
+    }
 
     #[test]
     fn tag_labels_match_attendflow_table() {

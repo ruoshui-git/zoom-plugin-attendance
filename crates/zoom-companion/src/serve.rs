@@ -3249,7 +3249,11 @@ async fn api_put_state(
     let Some(rev) = body["revision"].as_u64() else {
         return StatusCode::BAD_REQUEST.into_response();
     };
-    let val = body.get("value").cloned().unwrap_or(json!({}));
+    let mut val = body.get("value").cloned().unwrap_or(json!({}));
+    if let Some(name) = val.get("customName").and_then(Value::as_str).map(str::trim) {
+        if name.is_empty() { val.as_object_mut().map(|o| o.remove("customName")); }
+        else { val["customName"] = json!(name.chars().take(100).collect::<String>()); }
+    }
     match a.store.put_state(&id, rev, &val, now()) {
         Ok(Ok(revision)) => {
             emit_record_updated(&a, &id);
