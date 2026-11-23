@@ -16,7 +16,7 @@
   export let view = "status", record: any = {}, state: any = {}, events: any[] = [], users: any[] = [], language = "en", configs: any = {}, mode = "generic", profile: any = null;
   export let onCaptureManual: () => void = () => {}; export let onCaptureHands: () => void = () => {};
   export let onDecision: (d: any) => Promise<void> = async () => {}; export let onRevert: (id: string) => Promise<void> = async () => {};
-  export let onOverrides: (p?: any) => Promise<void> = async () => {}; export let onSelectProfile: (id: string) => Promise<void> = async () => {}; export let onModeChange: (mode: string) => Promise<void> = async () => {};
+  export let onOverrides: (p?: any) => Promise<boolean | void> = async () => {}; export let onSelectProfile: (id: string) => Promise<boolean | void> = async () => {}; export let onModeChange: (mode: string) => Promise<void> = async () => {};
   export let activeFilter = "";
   export let showSummary = true;
   let search = "", entryType = "", newest = true, ascending = true, filteredRows: any[] = [];
@@ -53,13 +53,16 @@
     if (!Number.isInteger(ret) || ret < 1 || ret > 60) { settingsError = t("返回窗口范围为 1 至 60 分钟", "Return window must be 1 to 60 minutes"); return; }
     settingsError = "";
     try {
-      if (stagedProfileId !== (state.selectedProfileId || record.record?.selectedProfileId || "default-all")) await onSelectProfile(stagedProfileId);
-      await onOverrides({ lateAfterMinutesOverride: late, returnWindowMinutesOverride: ret });
+      if (stagedProfileId !== (state.selectedProfileId || record.record?.selectedProfileId || "default-all") && (await onSelectProfile(stagedProfileId)) === false) throw Error(t("数据已被修改，请重试", "Data changed; please retry"));
+      // Only values that differ from the selected profile are overrides.
+      const chosen = (configs.profiles || []).find((p: any) => p.id === stagedProfileId);
+      const saved = await onOverrides({ lateAfterMinutesOverride: chosen && Number(chosen.lateAfterMinutes) === late ? null : late, returnWindowMinutesOverride: chosen && Number(chosen.returnWindowMinutes) === ret ? null : ret });
+      if (saved === false) throw Error(t("数据已被修改，请重试", "Data changed; please retry"));
       toast.success(t("设置已应用", "Settings applied"));
     } catch (error) { toast.error(`${t("保存失败：", "Save failed: ")}${error instanceof Error ? error.message : String(error)}`); }
   }
   async function restoreDefault() {
-    try { await onSelectProfile("default-all"); stagedProfileId = "default-all"; stagedLate = String((configs.profiles || []).find((p: any) => p.id === "default-all")?.lateAfterMinutes ?? 0); stagedReturn = String((configs.profiles || []).find((p: any) => p.id === "default-all")?.returnWindowMinutes ?? 8); toast.info(t("已切换到默认配置", "Switched to default profile")); }
+    try { if ((await onSelectProfile("default-all")) === false) throw Error(t("数据已被修改，请重试", "Data changed; please retry")); stagedProfileId = "default-all"; stagedLate = String((configs.profiles || []).find((p: any) => p.id === "default-all")?.lateAfterMinutes ?? 0); stagedReturn = String((configs.profiles || []).find((p: any) => p.id === "default-all")?.returnWindowMinutes ?? 8); toast.info(t("已切换到默认配置", "Switched to default profile")); }
     catch (error) { toast.error(`${t("保存失败：", "Save failed: ")}${error instanceof Error ? error.message : String(error)}`); }
   }
   function changeInfoProfile(id: string) { stagedProfileId = id; const selected = (configs.profiles || []).find((p: any) => p.id === id); if (selected) { stagedLate = String(selected.lateAfterMinutes); stagedReturn = String(selected.returnWindowMinutes); } }

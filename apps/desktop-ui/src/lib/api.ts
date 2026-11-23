@@ -500,9 +500,10 @@ export async function captureHands() {
     ],
   });
 }
-export async function applyOverrides(patch: any = value(s.stagedState)) {
+/** Saves meeting-state changes; resolves true when saved, false when the save failed. */
+export async function applyOverrides(patch: any = value(s.stagedState)): Promise<boolean> {
   const active = value(s.meeting);
-  if (!active) return;
+  if (!active) return false;
   const response = await fetch(`/api/meetings/${active.instanceId}/state`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -513,7 +514,7 @@ export async function applyOverrides(patch: any = value(s.stagedState)) {
   });
   if (!response.ok) {
     await loadState();
-    return;
+    return false;
   }
   const data = await response.json();
   set(s.stateRevision, data.revision);
@@ -521,6 +522,7 @@ export async function applyOverrides(patch: any = value(s.stagedState)) {
   set(s.stagedState, {});
   set(s.record, await get(`/api/meetings/${active.instanceId}/record`));
   invalidateRecord(active.instanceId); await refresh({ changed: [active.instanceId] });
+  return true;
 }
 export async function saveDecision(decision: any, revertId?: string) {
   const active = value(s.meeting);
@@ -587,7 +589,7 @@ export async function selectProfile(id: string) {
     lateAfterMinutesOverride: null,
     returnWindowMinutesOverride: null,
   });
-  await applyOverrides();
+  return applyOverrides();
 }
 export function profileGuess() {
   const profiles = (value(s.configs).profiles || []).filter(

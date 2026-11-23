@@ -131,5 +131,20 @@ describe("LiveAttendanceView", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Restore Default" }));
     expect(onSelectProfile).toHaveBeenCalledWith("default-all");
   });
+  it("saves profile-equal values as no override and reports a failed save", async () => {
+    const { toast } = await import("../../lib/toast");
+    toast.clear();
+    const onOverrides = vi.fn().mockResolvedValueOnce(true).mockResolvedValueOnce(false);
+    const profiles = [{ id: "default-all", name: "All", lateAfterMinutes: 10, returnWindowMinutes: 8, active: true }];
+    render(LiveAttendanceView, { view: "info", language: "en", record: { record: { startedAt: "2026-01-01T10:00:00Z", lateAfterMinutes: 10, returnWindowMinutes: 8, selectedProfileId: "default-all" } }, state: { selectedProfileId: "default-all" }, configs: { profiles }, onOverrides });
+    await fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    expect(onOverrides).toHaveBeenLastCalledWith({ lateAfterMinutesOverride: null, returnWindowMinutesOverride: null });
+    await fireEvent.input(screen.getAllByRole("spinbutton")[0], { target: { value: "15" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    await new Promise((r) => setTimeout(r, 0));
+    let items: any[] = []; toast.subscribe((v) => (items = v))();
+    expect(items.map((i) => i.type)).toEqual(["success", "error"]);
+    toast.clear();
+  });
 });
 
