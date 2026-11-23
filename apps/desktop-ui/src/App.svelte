@@ -36,6 +36,7 @@
   import ConfirmDialog from "./lib/common/ConfirmDialog.svelte";
   import Toast from "./lib/common/Toast.svelte";
   import { toast } from "./lib/toast";
+  import { loadWindowState } from "./lib/window-control";
 
   $: $language = $uiLanguage;
   $: appTitle = $language ? t("出勤助手桌面版", "AttendFlow Desktop") : "AttendFlow Desktop";
@@ -93,6 +94,7 @@
     };
     refresh();
     loadConfig();
+    loadWindowState();
     return () => ws.close();
   });
 </script>
