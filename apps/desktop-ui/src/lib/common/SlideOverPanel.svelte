@@ -13,7 +13,7 @@
   function beginResize(event: MouseEvent) { event.preventDefault(); event.stopPropagation(); resizing = true; startX = event.clientX; startWidth = panelWidth; document.addEventListener('mousemove', resize); document.addEventListener('mouseup', endResize); }
   function resize(event: MouseEvent) { if (resizing) panelWidth = clamp(startWidth + startX - event.clientX); }
   function endResize() { resizing = false; justResized = true; document.removeEventListener('mousemove', resize); document.removeEventListener('mouseup', endResize); setTimeout(() => justResized = false, 120); }
-  function resizeKey(event: KeyboardEvent) { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); const step = event.shiftKey ? 50 : 10; panelWidth = clamp(panelWidth + (event.key === 'ArrowLeft' ? -step : step)); // AttendFlow: 10px, Shift 50px } }
+  function resizeKey(event: KeyboardEvent) { if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') { event.preventDefault(); const step = event.shiftKey ? 50 : 10; panelWidth = clamp(panelWidth + (event.key === 'ArrowLeft' ? -step : step)); /* AttendFlow: 10px, Shift 50px */ } }
   function closeFromBackdrop() { if (!resizing && !justResized) onClose(); }
   function handleKeydown(event: KeyboardEvent) { if (event.key === 'Escape' && open && !event.defaultPrevented) onClose(); }
 </script>
