@@ -130,9 +130,9 @@ Tick items off here as they land.
 - [x] Export menu closes on outside click and Esc.
 - [x] UI size slider applies on release, not on every drag step; the slider stays put on screen.
 - [x] Roster person picker: one type-ahead field with ↑/↓/Enter/Esc and "No results" (desktop: a text box plus a separate dropdown).
-- [ ] Hover tooltips on icon-only buttons; full-text tooltips on truncated table cells.
-- [ ] Resizable table columns (owner: include).
-- [ ] Resizable record-detail slide-over (drag and keyboard).
+- [x] Hover tooltips on icon-only buttons; full-text tooltips on truncated table cells.
+- [x] Resizable table columns (owner: include).
+- [x] Resizable record-detail slide-over (drag and keyboard).
 
 ### Live meeting
 
