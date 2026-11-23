@@ -210,6 +210,8 @@ Tick items off here as they land.
 
 ## Desktop additions
 
+- Hand log closes raises when a participant leaves with a hand up, and lowers from the participant flag (lower-all, flag-only).
+
 - Works as a plain attendee: full participant list and live join/leave without host/co-host
   (Plugin SDK; SDK-NOTES "In-meeting observations").
 - Background capture without the UI open; the record survives UI reloads and companion
