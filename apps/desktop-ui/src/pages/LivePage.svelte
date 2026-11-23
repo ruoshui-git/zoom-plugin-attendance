@@ -15,6 +15,8 @@
   import { toast } from "../lib/toast";
   import RecordNameEditor from "../lib/common/RecordNameEditor.svelte";
   import { recordTitle } from "../lib/record-title";
+  import { captureProof } from "../lib/proof";
+  import Tooltip from "../lib/common/Tooltip.svelte";
 
   // currentUsers() replays $recordEvents; tie it to the store so the list stays current.
   const usersFor = (_events: unknown[]) => currentUsers();
@@ -73,6 +75,13 @@
       catch (error) { toast.error(`${t("开始新记录失败：", "Failed to start new record: ")}${error instanceof Error ? error.message : String(error)}`); }
     });
   }
+  async function captureLiveProof() {
+    await runBusy("live-proof", async () => {
+      try { const result = await captureProof(); toast.success(t(`已截取 ${result.pages.length} 页`, `Captured ${result.pages.length} pages`)); }
+      catch (error) { toast.error(error instanceof Error ? error.message : String(error)); }
+    });
+  }
+  const proofNote = t("实验性功能，不保证可用：会把你自己的 Zoom 切换到图库视图逐页截图，然后恢复原视图。截图只保存在本机。", "Experimental, not guaranteed to work: switches your own Zoom view to gallery, captures each page, then restores your view. Images stay on this computer.");
 </script>
 
 {#if $meeting}
@@ -81,6 +90,7 @@
     <div class="head-controls">
       <span class="live-status"><i></i>{liveLabel}</span>
       <button disabled={$meeting.status === "ended" || !!$meeting.endedAt || $busyKeys.has("live-new-record")} onclick={newRecord}>{t("开始新记录", "Start new record")}</button>
+      <Tooltip text={proofNote}><button disabled={$meeting.status === "ended" || !!$meeting.endedAt || $busyKeys.has("live-proof")} onclick={captureLiveProof}>{$busyKeys.has("live-proof") ? t("截图中…", "Capturing…") : t("截图证明", "Capture proof")}</button></Tooltip><small class="experimental-tag">{t("实验性", "Experimental")}</small>
       <label class="profile"><span>{t("配置", "Profile")}</span><select aria-label={t("考勤配置", "Attendance profile")} disabled={$busyKeys.has("live-profile")} value={$stateValue.selectedProfileId || profileGuess()?.id || "default-all"} onchange={(e) => changeProfile(e.currentTarget.value)}>
         {#each ($configs.profiles || []).filter((p: any) => p.active) as p}<option value={p.id}>{p.name}</option>{/each}
       </select></label>
@@ -102,5 +112,5 @@
 
 <style>
  .privilege-warning{background:#fffbeb;border:1px solid #f3d08a;color:#92400e;border-radius:7px;padding:9px 12px;margin:7px 0;font-size:12px}.summary-row{display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line);padding:4px 0}.mode-switch{display:flex;flex:none;background:#f4f6fa;border-radius:7px;padding:2px}.mode-switch button{min-height:27px;padding:3px 9px;border:0;background:transparent;font-size:10px}.mode-switch button.chosen{background:white;color:var(--accent);box-shadow:var(--shadow-card)}.compact-head{padding:8px 12px;margin-bottom:8px;min-height:44px}.meeting-title,.head-controls{display:flex;align-items:center;gap:10px;min-width:0}.meeting-title b{font-size:13px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.meeting-title span{font-size:11px;color:var(--muted);white-space:nowrap}.meeting-number{padding-left:9px;border-left:1px solid var(--line)}.head-controls{flex:none}.live-status{display:flex;align-items:center;gap:5px;color:#27835d;font-size:11px;white-space:nowrap}.live-status i{width:7px;height:7px;border-radius:50%;background:#26b47a}.profile{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:10px}.profile select{min-height:30px!important;padding:5px 7px!important;max-width:150px}.overrides{position:relative}.overrides summary{cursor:pointer;list-style:none;border:1px solid var(--line);border-radius:6px;padding:6px 8px;color:var(--muted);font-size:10px}.override-pop{position:absolute;right:0;top:32px;z-index:5;width:min(420px,90vw);background:white;border:1px solid var(--line);box-shadow:0 8px 26px #18223020;border-radius:8px;padding:12px}.override-pop p{font-size:11px;color:var(--muted)}
- @media(max-width:950px){.compact-head{align-items:flex-start;flex-wrap:wrap}.head-controls{flex-wrap:wrap}.meeting-title{flex-wrap:wrap}}
+ .experimental-tag{font-size:9px;color:var(--muted);border:1px solid var(--line);border-radius:10px;padding:2px 5px;white-space:nowrap}@media(max-width:950px){.compact-head{align-items:flex-start;flex-wrap:wrap}.head-controls{flex-wrap:wrap}.meeting-title{flex-wrap:wrap}}
 </style>
