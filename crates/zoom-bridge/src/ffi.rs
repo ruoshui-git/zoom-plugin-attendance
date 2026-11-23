@@ -7,7 +7,7 @@
 
 use std::ffi::{c_char, c_void};
 
-pub const ZC_ABI_VERSION: u32 = 2;
+pub const ZC_ABI_VERSION: u32 = 3;
 
 pub const ZC_OK: i32 = 0;
 pub const ZC_ERR_NOT_AVAILABLE: i32 = 1;
@@ -107,6 +107,9 @@ extern "C" {
     pub fn zc_admit_all(instance: i32) -> i32;
     pub fn zc_enable_waiting_room(instance: i32, enable: i32) -> i32;
     pub fn zc_is_waiting_room_on(instance: i32) -> i32;
+    pub fn zc_get_meeting_view_type(instance: i32) -> i32;
+    pub fn zc_switch_meeting_view(instance: i32, view_type: i32) -> i32;
+    pub fn zc_wall_view_page(instance: i32, next: i32) -> i32;
 
     pub fn zc_selftest_utf8_roundtrip(
         input: *const c_char,

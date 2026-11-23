@@ -20,7 +20,7 @@ pub mod status;
 pub use dll::{ensure_sdk_dll_loaded, sdk_runtime_beside_exe, DllError, SDK_DLL_NAME};
 pub use events::{Event, MeetingInfo, Participant, ParticipantFlags};
 pub use status::MeetingInstance;
-pub use session::{Session, SessionConfig};
+pub use session::{MeetingViewType, Session, SessionConfig};
 
 use std::path::PathBuf;
 
@@ -175,6 +175,15 @@ mod tests {
     #[test]
     fn abi_version_matches() {
         assert_eq!(adapter_abi_version(), RUST_ABI_VERSION);
+    }
+
+    #[test]
+    fn meeting_view_type_conversions() {
+        for (raw, view) in [(0, MeetingViewType::ActiveSpeaker), (1, MeetingViewType::Wall), (2, MeetingViewType::MultiSpeaker), (3, MeetingViewType::Other)] {
+            assert_eq!(MeetingViewType::from_i32(raw), view);
+            assert_eq!(view.to_i32(), raw);
+        }
+        assert_eq!(MeetingViewType::from_i32(99), MeetingViewType::Other);
     }
 
     #[test]
