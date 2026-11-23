@@ -316,6 +316,32 @@ impl Tracker {
         self.file = None;
         v
     }
+    fn split(&mut self) -> Vec<Value> {
+        let Some(m) = self.meeting.clone() else { return vec![] };
+        let users = self.users.clone();
+        let mut out = self.end("manual_split").into_iter().collect::<Vec<_>>();
+        self.users = users;
+        let mut started = self.start_with_snapshot(
+            m.meeting_number, m.topic, m.meeting_type, m.status, m.myself,
+        );
+        let old_id = out.first().and_then(|e| e["instanceId"].as_str()).map(str::to_owned);
+        let mut relog = None;
+        if let (Some(old_id), Some(new_meeting)) = (old_id, self.meeting.as_mut()) {
+            if new_meeting.instance_id == old_id {
+                let bumped = new_meeting.started_at.saturating_add(1);
+                new_meeting.started_at = bumped;
+                new_meeting.instance_id = format!("pz-{}-{bumped}", new_meeting.meeting_number);
+                if let Some(event) = started.first_mut() {
+                    event["instanceId"] = json!(new_meeting.instance_id);
+                    event["meeting"]["instanceId"] = json!(new_meeting.instance_id);
+                }
+                relog = Some(new_meeting.clone());
+            }
+        }
+        if let Some(meeting) = relog { self.prepare_log(&meeting); }
+        out.append(&mut started);
+        out
+    }
     /// R-A3.3: after "lower all hands", diff the re-read participant list's hand flags
     /// against tracker state and log one `users` update with only the changed users.
     fn hand_flag_refresh(&mut self, fresh: Vec<User>) -> Vec<Value> {
