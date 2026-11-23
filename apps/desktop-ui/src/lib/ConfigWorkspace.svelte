@@ -8,6 +8,12 @@
   import { tick } from "svelte";
   import ImportPreviewSummary from "./common/ImportPreviewSummary.svelte";
   import { toast } from "./toast";
+  import { busyKeys, runBusy } from "./busy-config";
+  $: saving = $busyKeys.has(`config-${tab}-save`);
+  $: deleting = $busyKeys.has(`config-${tab}-delete`);
+  $: bulkSaving = $busyKeys.has(`config-${tab}-bulk-save`);
+  $: bulkDeleting = $busyKeys.has(`config-${tab}-bulk-delete`);
+  $: exporting = $busyKeys.has(`config-${tab}-export`);
   export let language = "en";
   export let exportLanguage = "en";
   export let roster: any[] = [];
@@ -164,14 +170,14 @@
       }
       if (editing < 0) rows.push(form);
       else rows[editing] = form;
-      await save(
-        key,
-        rows,
-        key === "roster" ? rosterRevision : aliasesRevision,
-      );
-      form = null;
+      await runBusy(`config-${key}-save`, async () => {
+        await save(key, rows, key === "roster" ? rosterRevision : aliasesRevision);
+        form = null;
+        toast.success(editing < 0 ? (key === "roster" ? t("花名册已添加。", "Roster row added.") : t("名称匹配已添加。", "Name matching added.")) : (key === "roster" ? t("花名册已更新。", "Roster row updated.") : t("名称匹配已更新。", "Name matching updated.")));
+      });
     } catch (e: any) {
       error = e.message;
+      toast.error(`${t("保存失败：", "Save failed:")}${e.message}`);
     }
   }
   async function remove(item: any) {
@@ -196,7 +202,7 @@
     )
       return;
     try {
-      if (isRoster)
+      await runBusy(`config-${tab}-delete`, async () => { if (isRoster)
         await save(
           "roster",
           roster.filter((x: any) => x.personId !== item.personId),
@@ -208,8 +214,11 @@
           aliases.filter((x: any) => x !== item),
           aliasesRevision,
         );
+        toast.success(isRoster ? t(`已删除 1 位花名册人员，并级联删除 ${impact} 条昵称匹配。`, `Deleted 1 roster person and ${impact} linked name match(es).`) : t("名称匹配已删除。", "Name matching deleted."));
+      });
     } catch (e: any) {
       error = e.message;
+      toast.error(`${t("删除失败：", "Delete failed:")}${e.message}`);
     }
   }
   function bulkEdit() {
@@ -235,14 +244,14 @@
       };
     });
     try {
-      await save(
+      await runBusy(`config-${tab}-bulk-save`, async () => { await save(
         tab,
         rows,
         tab === "roster" ? rosterRevision : aliasesRevision,
-      );
-      bulkOpen = false;
+      ); bulkOpen = false; toast.success(t(`已批量更新 ${selected.length} 位${tab === "roster" ? "花名册人员" : "名称匹配"}。`, `Bulk updated ${selected.length} ${tab === "roster" ? "roster row(s)" : "name match(es)"}.`)); });
     } catch (e: any) {
       error = e.message;
+      toast.error(`${t("批量更新失败：", "Bulk update failed:")}${e.message}`);
     }
   }
   async function bulkDelete() {
@@ -259,7 +268,9 @@
     )
       return;
     try {
-      if (tab === "roster")
+      const count = selected.length;
+      const cascadeCount = tab === "roster" ? aliases.filter((a: any) => selected.includes(a.personId)).length : 0;
+      await runBusy(`config-${tab}-bulk-delete`, async () => { if (tab === "roster")
         await save(
           "roster",
           roster.filter((x: any) => !selected.includes(x.personId)),
@@ -272,17 +283,22 @@
           aliasesRevision,
         );
       selected = [];
+      toast.success(tab === "roster" ? t(`已删除 ${count} 位花名册人员，并级联删除 ${cascadeCount} 条昵称匹配。`, `Deleted ${count} roster row(s) and ${cascadeCount} linked name match(es).`) : t(`已删除 ${count} 条名称匹配。`, `Deleted ${count} name match(es).`)); });
     } catch (e: any) {
       error = e.message;
+      toast.error(`${t("批量删除失败：", "Bulk delete failed:")}${e.message}`);
     }
   }
-  function exportCsv(ids: (number | string)[] = []) {
+  async function exportCsv(ids: (number | string)[] = []) {
+    await runBusy(`config-${tab}-export`, async () => { try {
     const lang = exportLanguage === "zh" ? "zh" : "en";
     const url = `/api/config/${tab}/export?language=${lang}${ids.length ? `&selected=${encodeURIComponent(ids.join("|"))}` : ""}`;
     const a = document.createElement("a");
     a.href = url;
     a.download = "";
     a.click();
+    toast.success(ids.length ? t("已导出选中项。", "Selected items exported.") : tab === "roster" ? t("花名册已导出。", "Roster exported.") : t("名称匹配已导出。", "Name matching exported."));
+    } catch (e: any) { toast.error(t("导出失败。", "Export failed.")); } });
   }
   async function previewImport() {
     try {
@@ -355,8 +371,8 @@
         }}
       >
         {t("导入", "Import")}
-      </button><button onclick={() => exportCsv()}>
-        {t("导出", "Export")}
+      </button><button onclick={() => exportCsv()} disabled={exporting}>
+        {exporting ? t("导出中…", "Exporting…") : t("导出", "Export")}
       </button><span class="count-pill">
         {tab === "roster" ? roster.length : aliases.length}
         {t("条记录", "records")}
@@ -384,14 +400,14 @@
       </button><button
         class="danger"
         onclick={bulkDelete}
-        disabled={!selected.length}
+        disabled={!selected.length || bulkDeleting}
       >
-        {t("批量删除", "Bulk delete")}
+        {bulkDeleting ? t("删除中…", "Deleting…") : t("批量删除", "Bulk delete")}
       </button><button
         onclick={() => exportCsv(selected)}
-        disabled={!selected.length}
+        disabled={!selected.length || exporting}
       >
-        {t("导出所选", "Export selected")}
+        {exporting ? t("导出中…", "Exporting…") : t("导出所选", "Export selected")}
       </button><button
         onclick={() => {
           selected = [];
@@ -550,8 +566,10 @@
         cancelLabel={t("取消", "Cancel")}
         onSubmit={submit}
         onCancel={() => (form = null)}
-      />{#if editing >= 0}<button class="danger" onclick={() => remove(form)}>
-          {t("删除", "Delete")}
+        busy={saving}
+        busyLabel={t("保存中…", "Saving…")}
+      />{#if editing >= 0}<button class="danger" disabled={deleting} onclick={() => remove(form)}>
+          {deleting ? t("删除中…", "Deleting…") : t("删除", "Delete")}
         </button>{/if}
     </section>
   </div>{/if}
@@ -590,6 +608,8 @@
         cancelLabel={t("取消", "Cancel")}
         onSubmit={applyBulk}
         onCancel={() => (bulkOpen = false)}
+        busy={bulkSaving}
+        busyLabel={t("应用中…", "Applying…")}
       />
     </section>
   </div>{/if}

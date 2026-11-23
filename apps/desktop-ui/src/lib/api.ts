@@ -122,6 +122,7 @@ export async function loadConfig() {
     s.settings,
     configs.settings || { exportLanguage: "en", filterDefaultsClosed: false },
   );
+  savedSettingsSnapshot = { ...value(s.settings) };
 }
 export async function saveConfig(key: string, next: any) {
   const revisions = value(s.configRevision);
@@ -144,11 +145,17 @@ export async function saveConfig(key: string, next: any) {
   set(s.configs, { ...value(s.configs), [key]: data.value });
   set(s.configRevision, { ...revisions, [key]: data.revision });
 }
+let savedSettingsSnapshot: any = { ...value(s.settings) };
 export async function saveSettings() {
   try {
+    const before = savedSettingsSnapshot || value(s.settings);
     await saveConfig("settings", value(s.settings));
+    const settings = value(s.settings);
+    if (before.exportLanguage !== settings.exportLanguage) toast.success(settings.exportLanguage === "zh" ? t("导出语言已设置为中文。", "Export language set to Chinese.") : t("导出语言已设置为英文。", "Export language set to English."));
+    if (before.filterDefaultsClosed !== settings.filterDefaultsClosed) toast.success(settings.filterDefaultsClosed ? t("筛选器默认关闭。", "Filters default to closed.") : t("筛选器默认打开。", "Filters default to open."));
+    savedSettingsSnapshot = { ...settings };
   } catch (error: any) {
-    toast.error(error.message);
+    toast.error(`${t("保存失败：", "Save failed:")}${error.message}`);
   }
 }
 export function download(filename: string, data: string) {
@@ -161,10 +168,8 @@ export function download(filename: string, data: string) {
   URL.revokeObjectURL(anchor.href);
 }
 export async function downloadBackup() {
-  download(
-    "attendflow-backup-v3.json",
-    JSON.stringify(await get("/api/backup"), null, 2),
-  );
+  try { download("attendflow-backup-v3.json", JSON.stringify(await get("/api/backup"), null, 2)); toast.success(t("完整备份已导出：attendflow-backup-v3.json", "Full app backup exported: attendflow-backup-v3.json")); }
+  catch (error: any) { toast.error(`${t("导出备份失败：", "Backup export failed:")}${error.message}`); throw error; }
 }
 export async function exportRecords(ids: string[] = []) {
   const data = await get("/api/records/export");
@@ -697,6 +702,7 @@ export async function zoomAction(action: string) {
 export function chooseLanguage(next: string) {
   localStorage.setItem("ui-language", next);
   setUiLanguage(next as any);
+  toast.success(next === "zh-CN" ? t("界面语言已设置为中文。", "Interface language set to Chinese.") : t("界面语言已设置为英文。", "Interface language set to English."));
   window.location.reload();
 }
 
@@ -716,5 +722,5 @@ export async function loadExampleDataQuiet() {
   const data = await response.json();
   if (!response.ok) throw Error(data.message || t("示例数据冲突，未添加任何数据", "Example data conflict; nothing was added"));
   await loadConfig();
-  toast.success(t("已导入示例数据。", "Example roster, aliases, and four profiles loaded."));
+  toast.success(t(`示例数据已写入。花名册 ${roster.length} 条，名称匹配 ${aliases.length} 条，考勤配置 ${profiles.length} 条。`, `Example data added. Roster: ${roster.length}, name matching: ${aliases.length}, attendance profiles: ${profiles.length}.`));
 }
