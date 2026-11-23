@@ -377,7 +377,7 @@ pub fn adapt_bridge_events(events: &[Value]) -> Result<Vec<Value>, EngineError> 
                     .unwrap_or_else(|| uid.to_string());
                 let uuid = format!("{instance}:{uid}");
                 let raised = e["raised"].as_bool().unwrap_or(false);
-                if hand_state.get(&uuid) != Some(&raised) {
+                if hand_state.get(&uuid).copied().unwrap_or(false) != raised {
                     hand_state.insert(uuid.clone(), raised);
                     let mut event = json!({"eventType":"hand","timestamp":ts,"participantUUID":uuid,"screenName":names.get(&uuid).cloned().unwrap_or_default(),"raised":raised});
                     if let Some(reason) = e.get("reason") { event["reason"] = reason.clone(); }
@@ -1703,6 +1703,16 @@ use serde_json::json;
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn hands(events: Vec<Value>) -> Vec<Value> { adapt_bridge_events(&events).unwrap().into_iter().filter(|e| e["eventType"] == "hand").collect() }
+    #[test] fn hand_left_with_raised_hand_yields_lower_reason_left() {
+        let h=hands(vec![json!({"kind":"users","action":"add","at":1,"instanceId":"i","users":[{"userId":1,"name":"A","raisedHand":true}]}),json!({"kind":"users","action":"left","at":2,"instanceId":"i","users":[{"userId":1,"name":"A","raisedHand":true}]})]);
+        assert_eq!(h.len(),2); assert_eq!(h[1]["raised"],false); assert_eq!(h[1]["reason"],"left");
+    }
+    #[test] fn hand_lower_all_dedups() {
+        let h=hands(vec![json!({"kind":"hand","at":1,"instanceId":"i","userId":1,"raised":true}),json!({"kind":"users","action":"update","at":2,"instanceId":"i","users":[{"userId":1,"name":"A","raisedHand":false}]}),json!({"kind":"hand","at":3,"instanceId":"i","userId":1,"raised":false}),json!({"kind":"all_hands_lowered","at":4,"instanceId":"i"}),json!({"kind":"all_hands_lowered","at":5,"instanceId":"i"})]); assert_eq!(h.len(),2);
+    }
+    #[test] fn hand_flag_only_lower() { let h=hands(vec![json!({"kind":"users","action":"update","at":1,"instanceId":"i","users":[{"userId":1,"name":"A","raisedHand":true}]}),json!({"kind":"users","action":"update","at":2,"instanceId":"i","users":[{"userId":1,"name":"A","raisedHand":false}]})]); assert_eq!(h.len(),2); assert_eq!(h[0]["raised"],true); assert_eq!(h[1]["raised"],false); }
+    #[test] fn hand_synthetic_left_event_not_duplicated() { let h=hands(vec![json!({"kind":"users","action":"add","at":1,"instanceId":"i","users":[{"userId":1,"name":"A","raisedHand":true}]}),json!({"kind":"users","action":"left","at":2,"instanceId":"i","users":[{"userId":1,"name":"A","raisedHand":true}]}),json!({"kind":"hand","at":2,"instanceId":"i","userId":1,"raised":false,"reason":"left"})]); assert_eq!(h.len(),2); }
     #[test]
     fn scoring_bands() {
         assert_eq!(score(9, 10).grade, AttendanceGrade::Excellent);
