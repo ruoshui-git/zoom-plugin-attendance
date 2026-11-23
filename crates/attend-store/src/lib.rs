@@ -13,21 +13,43 @@ pub struct Store {
     connection: Arc<Mutex<Connection>>,
 }
 
-fn upsert_meeting(c: &Connection, meta: &Value, ended: Option<(u64, String)>, seq: u64) -> Result<()> {
-    let id = meta["instanceId"].as_str().context("meeting.instanceId missing")?;
+fn upsert_meeting(
+    c: &Connection,
+    meta: &Value,
+    ended: Option<(u64, String)>,
+    seq: u64,
+) -> Result<()> {
+    let id = meta["instanceId"]
+        .as_str()
+        .context("meeting.instanceId missing")?;
     c.execute("INSERT INTO meetings(instance_id,meeting_number,topic,started_at,ended_at,end_reason,is_host,last_seq,meta_json) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9) ON CONFLICT(instance_id) DO UPDATE SET meeting_number=excluded.meeting_number,topic=CASE WHEN excluded.topic='' THEN meetings.topic ELSE excluded.topic END,ended_at=COALESCE(excluded.ended_at,meetings.ended_at),end_reason=COALESCE(excluded.end_reason,meetings.end_reason),is_host=excluded.is_host,last_seq=MAX(meetings.last_seq,excluded.last_seq),meta_json=CASE WHEN excluded.meeting_number='' THEN meetings.meta_json ELSE excluded.meta_json END", params![id,meta["meetingNumber"].as_str().unwrap_or(""),meta["topic"].as_str().unwrap_or(""),meta["startedAt"].as_u64().unwrap_or(0) as i64,ended.as_ref().map(|x|x.0 as i64),ended.as_ref().map(|x|x.1.as_str()),meta["isHost"].as_bool().unwrap_or(false) as i32,seq as i64,meta.to_string()])?;
     Ok(())
 }
 fn meeting_conn(c: &Connection, id: &str) -> Result<Option<Value>> {
-    Ok(c.query_row("SELECT meta_json,ended_at,end_reason,last_seq FROM meetings WHERE instance_id=?1", [id], |r| {
-        let mut v: Value = serde_json::from_str(&r.get::<_, String>(0)?).unwrap_or(Value::Null);
-        if let Some(o) = v.as_object_mut() {
-            o.insert("endedAt".into(), r.get::<_, Option<i64>>(1)?.map(|n| Value::from(n as u64)).unwrap_or(Value::Null));
-            o.insert("endReason".into(), r.get::<_, Option<String>>(2)?.map(Value::from).unwrap_or(Value::Null));
-            o.insert("lastSeq".into(), Value::from(r.get::<_, i64>(3)? as u64));
-        }
-        Ok(v)
-    }).optional()?)
+    Ok(c.query_row(
+        "SELECT meta_json,ended_at,end_reason,last_seq FROM meetings WHERE instance_id=?1",
+        [id],
+        |r| {
+            let mut v: Value = serde_json::from_str(&r.get::<_, String>(0)?).unwrap_or(Value::Null);
+            if let Some(o) = v.as_object_mut() {
+                o.insert(
+                    "endedAt".into(),
+                    r.get::<_, Option<i64>>(1)?
+                        .map(|n| Value::from(n as u64))
+                        .unwrap_or(Value::Null),
+                );
+                o.insert(
+                    "endReason".into(),
+                    r.get::<_, Option<String>>(2)?
+                        .map(Value::from)
+                        .unwrap_or(Value::Null),
+                );
+                o.insert("lastSeq".into(), Value::from(r.get::<_, i64>(3)? as u64));
+            }
+            Ok(v)
+        },
+    )
+    .optional()?)
 }
 #[derive(Debug, Clone)]
 pub struct MeetingRow {
@@ -54,12 +76,18 @@ impl Store {
             fs::create_dir_all(p)?;
         }
         let connection = Connection::open(&path)?;
-        let s = Self { path, connection: Arc::new(Mutex::new(connection)) };
+        let s = Self {
+            path,
+            connection: Arc::new(Mutex::new(connection)),
+        };
         s.with(|c| { c.execute_batch("PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON; CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS meetings(instance_id TEXT PRIMARY KEY, meeting_number TEXT NOT NULL, topic TEXT NOT NULL DEFAULT '', started_at INTEGER NOT NULL, ended_at INTEGER, end_reason TEXT, is_host INTEGER NOT NULL DEFAULT 0, last_seq INTEGER NOT NULL DEFAULT 0, meta_json TEXT NOT NULL DEFAULT '{}'); CREATE TABLE IF NOT EXISTS events(instance_id TEXT NOT NULL REFERENCES meetings(instance_id) ON DELETE CASCADE, seq INTEGER NOT NULL, at INTEGER NOT NULL, kind TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(instance_id,seq)); CREATE TABLE IF NOT EXISTS docs(key TEXT PRIMARY KEY, revision INTEGER NOT NULL, json TEXT NOT NULL, updated_at INTEGER NOT NULL); CREATE TABLE IF NOT EXISTS states(instance_id TEXT PRIMARY KEY REFERENCES meetings(instance_id) ON DELETE CASCADE, revision INTEGER NOT NULL, json TEXT NOT NULL, updated_at INTEGER NOT NULL);")?; c.execute("INSERT OR IGNORE INTO schema_migrations VALUES(1,unixepoch())",[])?; Ok(()) })?;
         Ok(s)
     }
     fn with<T>(&self, f: impl FnOnce(&Connection) -> Result<T>) -> Result<T> {
-        let c = self.connection.lock().map_err(|_| anyhow::anyhow!("store connection lock poisoned"))?;
+        let c = self
+            .connection
+            .lock()
+            .map_err(|_| anyhow::anyhow!("store connection lock poisoned"))?;
         f(&c)
     }
     pub fn path(&self) -> &Path {
@@ -264,6 +292,77 @@ impl Store {
             Ok(())
         })
     }
+    /// Replace all persisted local data atomically with a validated backup.
+    pub fn replace_all(&self, docs: &[(String, Value)], records: &[Value], now: u64) -> Result<()> {
+        self.with(|c| {
+            let tx = c.unchecked_transaction()?;
+            tx.execute("DELETE FROM meetings", [])?;
+            tx.execute("DELETE FROM docs", [])?;
+            for (key, value) in docs {
+                tx.execute("INSERT INTO docs(key,revision,json,updated_at) VALUES(?1,1,?2,?3)", params![key, value.to_string(), now as i64])?;
+            }
+            for record in records {
+                let meeting = &record["meeting"];
+                let id = meeting["instanceId"].as_str().context("record meeting.instanceId missing")?;
+                let ended = meeting["endedAt"].as_u64();
+                let end_reason = meeting["endReason"].as_str();
+                upsert_meeting(&tx, meeting, ended.map(|at| (at, end_reason.unwrap_or("ended").to_owned())), meeting["lastSeq"].as_u64().unwrap_or(0))?;
+                for event in record["events"].as_array().into_iter().flatten() {
+                    let seq = event["seq"].as_u64().context("event seq missing")?;
+                    let at = event["at"].as_u64().context("event timestamp missing")?;
+                    let kind = event["kind"].as_str().context("event kind missing")?;
+                    let mut payload = event.clone();
+                    if let Some(obj) = payload.as_object_mut() { for key in ["seq", "at", "instanceId", "kind", "type"] { obj.remove(key); } }
+                    tx.execute("INSERT INTO events(instance_id,seq,at,kind,payload) VALUES(?1,?2,?3,?4,?5)", params![id, seq as i64, at as i64, kind, payload.to_string()])?;
+                }
+                if !record["state"].is_null() {
+                    tx.execute("INSERT INTO states(instance_id,revision,json,updated_at) VALUES(?1,1,?2,?3)", params![id, record["state"].to_string(), now as i64])?;
+                }
+            }
+            tx.commit()?;
+            Ok(())
+        })
+    }
+    pub fn clear_all_with_counts(
+        &self,
+        default_profile: &Value,
+        now: u64,
+    ) -> Result<(usize, usize, usize, usize)> {
+        self.with(|c| {
+            let tx = c.unchecked_transaction()?;
+            let records: usize = tx.query_row("SELECT COUNT(*) FROM meetings", [], |r| r.get(0))?;
+            let count = |key: &str| -> Result<usize> {
+                let value: Option<String> = tx
+                    .query_row("SELECT json FROM docs WHERE key=?1", [key], |r| r.get(0))
+                    .optional()?;
+                Ok(value
+                    .and_then(|s| serde_json::from_str::<Value>(&s).ok())
+                    .and_then(|v| v.as_array().map(Vec::len))
+                    .unwrap_or(0))
+            };
+            let (roster, aliases, profiles) =
+                (count("roster")?, count("aliases")?, count("profiles")?);
+            let settings: Option<String> = tx
+                .query_row("SELECT json FROM docs WHERE key='settings'", [], |r| {
+                    r.get(0)
+                })
+                .optional()?;
+            tx.execute("DELETE FROM meetings", [])?;
+            tx.execute("DELETE FROM docs", [])?;
+            if let Some(settings) = settings {
+                tx.execute(
+                    "INSERT INTO docs(key,revision,json,updated_at) VALUES('settings',1,?1,?2)",
+                    params![settings, now as i64],
+                )?;
+            }
+            tx.execute(
+                "INSERT INTO docs(key,revision,json,updated_at) VALUES('profiles',1,?1,?2)",
+                params![serde_json::json!([default_profile]).to_string(), now as i64],
+            )?;
+            tx.commit()?;
+            Ok((records, roster, aliases, profiles))
+        })
+    }
     /// Close records left open by a process shutdown, using the last persisted event time.
     pub fn close_stale_meetings(&self, ended_at: u64) -> Result<usize> {
         self.close_open_meetings_except(ended_at, None)
@@ -279,11 +378,19 @@ impl Store {
         let mut events = Vec::new();
         for line in fs::read_to_string(path)?.lines() {
             if let Ok(v) = serde_json::from_str::<Value>(line) {
-                if v["instanceId"].as_str().is_some() { events.push(v); }
+                if v["instanceId"].as_str().is_some() {
+                    events.push(v);
+                }
             }
         }
-        if events.is_empty() { return Ok(0); }
-        let max_seq = events.iter().filter_map(|v| v["seq"].as_u64()).max().unwrap_or(0);
+        if events.is_empty() {
+            return Ok(0);
+        }
+        let max_seq = events
+            .iter()
+            .filter_map(|v| v["seq"].as_u64())
+            .max()
+            .unwrap_or(0);
         self.with(|c| {
             let tx = c.unchecked_transaction()?;
             let id = events[0]["instanceId"].as_str().unwrap();
@@ -354,6 +461,37 @@ mod tests {
         let _ = fs::remove_file(path.with_extension("db-shm"));
     }
     #[test]
+    fn replacement_restores_records_and_clear_all_resets_profile() {
+        let p = temp("full-replace");
+        clean(&p);
+        let s = Store::open(&p).unwrap();
+        s.upsert_meeting(
+            &json!({"instanceId":"old","meetingNumber":"1","startedAt":1,"isHost":false}),
+            None,
+            0,
+        )
+        .unwrap();
+        s.put_doc("settings", 0, &json!({"exportLanguage":"zh"}), 1)
+            .unwrap()
+            .unwrap();
+        let record = json!({"meeting":{"instanceId":"new","meetingNumber":"2","topic":"Restored","startedAt":20,"endedAt":30,"endReason":"ended","isHost":false,"lastSeq":1},"events":[{"seq":1,"at":21,"kind":"instance_started","instanceId":"new","meeting":{"instanceId":"new","meetingNumber":"2","startedAt":20,"isHost":false}}]});
+        let docs = vec![
+            ("roster".to_owned(), json!([{"personId":1}])),
+            ("aliases".to_owned(), json!([])),
+            ("profiles".to_owned(), json!([])),
+            ("settings".to_owned(), json!({"exportLanguage":"en"})),
+        ];
+        s.replace_all(&docs, &[record], 40).unwrap();
+        assert!(s.meeting("old").unwrap().is_none());
+        assert_eq!(s.events("new").unwrap().len(), 1);
+        assert_eq!(s.get_doc("settings").unwrap().1["exportLanguage"], "en");
+        let profile = json!({"id":"default-all","name":"All participants","includedSubgroups":[],"lateAfterMinutes":10,"returnWindowMinutes":8,"meetingIds":[],"topicKeywords":[],"groupSortOrder":[],"active":true});
+        assert_eq!(s.clear_all_with_counts(&profile, 50).unwrap(), (1, 1, 0, 0));
+        assert!(s.meetings().unwrap().is_empty());
+        assert_eq!(s.get_doc("profiles").unwrap().1[0]["id"], "default-all");
+        clean(&p);
+    }
+    #[test]
     fn migrations_and_revision_conflicts() {
         let p = temp("revision");
         clean(&p);
@@ -372,14 +510,36 @@ mod tests {
     }
     #[test]
     fn meeting_summaries_include_state_mode_and_null_without_state() {
-        let p = temp("summary-mode"); clean(&p);
+        let p = temp("summary-mode");
+        clean(&p);
         let s = Store::open(&p).unwrap();
-        s.upsert_meeting(&json!({"instanceId":"mode-1","meetingNumber":"1","startedAt":1}), None, 0).unwrap();
-        s.upsert_meeting(&json!({"instanceId":"mode-2","meetingNumber":"2","startedAt":2}), None, 0).unwrap();
-        s.put_state("mode-1", 0, &json!({"mode":"roster"}), 3).unwrap();
+        s.upsert_meeting(
+            &json!({"instanceId":"mode-1","meetingNumber":"1","startedAt":1}),
+            None,
+            0,
+        )
+        .unwrap();
+        s.upsert_meeting(
+            &json!({"instanceId":"mode-2","meetingNumber":"2","startedAt":2}),
+            None,
+            0,
+        )
+        .unwrap();
+        s.put_state("mode-1", 0, &json!({"mode":"roster"}), 3)
+            .unwrap();
         let summaries = s.meeting_summaries().unwrap();
-        assert_eq!(summaries.iter().find(|m| m["instanceId"] == "mode-1").unwrap()["mode"], "roster");
-        assert!(summaries.iter().find(|m| m["instanceId"] == "mode-2").unwrap()["mode"].is_null());
+        assert_eq!(
+            summaries
+                .iter()
+                .find(|m| m["instanceId"] == "mode-1")
+                .unwrap()["mode"],
+            "roster"
+        );
+        assert!(summaries
+            .iter()
+            .find(|m| m["instanceId"] == "mode-2")
+            .unwrap()["mode"]
+            .is_null());
         clean(&p)
     }
     #[test]
@@ -403,39 +563,72 @@ mod tests {
     }
     #[test]
     fn imports_only_appended_events() {
-        let p = temp("append"); clean(&p);
+        let p = temp("append");
+        clean(&p);
         let dir = std::env::temp_dir().join(format!("attend-store-append-{}", std::process::id()));
-        let _ = fs::create_dir_all(&dir); let log = dir.join("meeting.jsonl");
+        let _ = fs::create_dir_all(&dir);
+        let log = dir.join("meeting.jsonl");
         fs::write(&log, "{\"seq\":1,\"at\":1,\"instanceId\":\"x\",\"kind\":\"instance_started\",\"meeting\":{\"instanceId\":\"x\",\"meetingNumber\":\"1\",\"startedAt\":1}}\n").unwrap();
-        let s = Store::open(&p).unwrap(); assert_eq!(s.import_jsonl(&log).unwrap(), 1);
-        fs::OpenOptions::new().append(true).open(&log).unwrap().write_all(b"{\"seq\":2,\"at\":2,\"instanceId\":\"x\",\"kind\":\"users\"}\n").unwrap();
-        assert_eq!(s.import_jsonl(&log).unwrap(), 1); assert_eq!(s.events("x").unwrap().len(), 2);
-        clean(&p); let _ = fs::remove_dir_all(dir);
+        let s = Store::open(&p).unwrap();
+        assert_eq!(s.import_jsonl(&log).unwrap(), 1);
+        fs::OpenOptions::new()
+            .append(true)
+            .open(&log)
+            .unwrap()
+            .write_all(b"{\"seq\":2,\"at\":2,\"instanceId\":\"x\",\"kind\":\"users\"}\n")
+            .unwrap();
+        assert_eq!(s.import_jsonl(&log).unwrap(), 1);
+        assert_eq!(s.events("x").unwrap().len(), 2);
+        clean(&p);
+        let _ = fs::remove_dir_all(dir);
     }
     #[test]
     fn import_recovers_an_event_missing_despite_a_higher_last_seq() {
         // The live path updates meetings.last_seq before appending the event; a crash in
         // between must not make the next startup skip that event from the log.
-        let p = temp("recover"); clean(&p);
+        let p = temp("recover");
+        clean(&p);
         let dir = std::env::temp_dir().join(format!("attend-store-recover-{}", std::process::id()));
-        let _ = fs::create_dir_all(&dir); let log = dir.join("meeting.jsonl");
+        let _ = fs::create_dir_all(&dir);
+        let log = dir.join("meeting.jsonl");
         fs::write(&log, "{\"seq\":1,\"at\":1,\"instanceId\":\"y\",\"kind\":\"instance_started\",\"meeting\":{\"instanceId\":\"y\",\"meetingNumber\":\"1\",\"startedAt\":1}}
 {\"seq\":2,\"at\":2,\"instanceId\":\"y\",\"kind\":\"users\"}
 ").unwrap();
         let s = Store::open(&p).unwrap();
-        s.upsert_meeting(&json!({"instanceId":"y","meetingNumber":"1","topic":"","startedAt":1,"isHost":false}), None, 2).unwrap();
-        s.append_event("y", 1, 1, "instance_started", &json!({})).unwrap();
+        s.upsert_meeting(
+            &json!({"instanceId":"y","meetingNumber":"1","topic":"","startedAt":1,"isHost":false}),
+            None,
+            2,
+        )
+        .unwrap();
+        s.append_event("y", 1, 1, "instance_started", &json!({}))
+            .unwrap();
         assert_eq!(s.import_jsonl(&log).unwrap(), 1);
         assert_eq!(s.events("y").unwrap().len(), 2);
-        clean(&p); let _ = fs::remove_dir_all(dir);
+        clean(&p);
+        let _ = fs::remove_dir_all(dir);
     }
     #[test]
     fn shared_store_is_safe_across_threads() {
         fn assert_send_sync<T: Send + Sync>() {}
         assert_send_sync::<Store>();
-        let p = temp("threads"); clean(&p); let store = Store::open(&p).unwrap();
-        let handles: Vec<_> = (0..2).map(|i| { let s=store.clone(); std::thread::spawn(move || { for _ in 0..100 { let _ = s.put_doc("shared", 0, &json!({"thread":i}), 1).unwrap(); let _=s.get_doc("shared").unwrap(); } }) }).collect();
-        for h in handles { h.join().unwrap(); }
+        let p = temp("threads");
+        clean(&p);
+        let store = Store::open(&p).unwrap();
+        let handles: Vec<_> = (0..2)
+            .map(|i| {
+                let s = store.clone();
+                std::thread::spawn(move || {
+                    for _ in 0..100 {
+                        let _ = s.put_doc("shared", 0, &json!({"thread":i}), 1).unwrap();
+                        let _ = s.get_doc("shared").unwrap();
+                    }
+                })
+            })
+            .collect();
+        for h in handles {
+            h.join().unwrap();
+        }
         clean(&p);
     }
 }

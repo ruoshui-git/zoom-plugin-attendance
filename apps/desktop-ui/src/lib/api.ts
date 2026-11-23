@@ -681,34 +681,6 @@ export async function zoomAction(action: string) {
     if (await zoomSignOut()) await zoomSignIn();
   } else await zoomSignIn();
 }
-export async function importBackup(event: Event) {
-  const input = event.target as HTMLInputElement;
-  const file = input.files?.[0];
-  if (!file) return;
-  try {
-    const data = JSON.parse(await file.text());
-    const preview = `${data.rosterPeople?.length || 0} roster · ${data.aliasMappings?.length || 0} aliases · ${data.attendanceProfiles?.length || 0} profiles`;
-    if (
-      !confirm(
-        `${t("将导入以下配置：", "Import this backup configuration:")} ${preview}`,
-      )
-    )
-      return;
-    const response = await fetch("/api/backup", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
-    if (response.ok) {
-      await loadConfig();
-      toast.success(t("备份配置已导入", "Backup configuration imported"));
-    } else toast.error(t("导入失败：", "Import failed: ") + (await response.text()));
-  } catch (error: any) {
-    toast.error(error.message);
-  } finally {
-    input.value = "";
-  }
-}
 export function chooseLanguage(next: string) {
   localStorage.setItem("ui-language", next);
   setUiLanguage(next as any);

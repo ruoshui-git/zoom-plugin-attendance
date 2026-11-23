@@ -56,7 +56,6 @@
     zoomSignIn,
     zoomSignOut,
     zoomAction,
-    importBackup,
     chooseLanguage,
   } from "../lib/api";
   import { t, dateTime, timeOnly } from "../lib/ui";
@@ -69,6 +68,8 @@
   import { toast } from "../lib/toast";
 
   let fileInput: HTMLInputElement;
+  let restorePreview: any = null;
+  function clearRecordView(){record.set({rows:[],summary:{}});recordEvents.set([]);stateValue.set({mode:'generic'});stateRevision.set(0);}
   const scaleLabels = [
     ["紧凑", "Compact"], ["中等", "Medium"], ["大号", "Large"],
     ["超大", "Extra Large"], ["特大", "Maximum"],
@@ -84,11 +85,23 @@
   }
   async function restoreBackup(event: Event) {
     const input=event.currentTarget as HTMLInputElement; const file=input.files?.[0]; if(!file)return;
-    try { const data=JSON.parse(await file.text()); const counts=`${data.rosterPeople?.length||0} roster · ${data.aliasMappings?.length||0} aliases · ${data.attendanceProfiles?.length||0} profiles`;
-      if(await confirmDialog({title:t('恢复备份','Restore backup'),message:`${t('将导入以下配置：','Import this backup configuration:')} ${counts}`})){const response=await fetch('/api/backup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});if(response.ok){await loadConfig();toast.success(t('备份配置已导入','Backup configuration imported'))}else toast.error(t('导入失败：','Import failed: ')+(await response.text()))}
+    restorePreview=null;
+    try {
+      const data=JSON.parse(await file.text());
+      const response=await fetch('/api/backup/preview',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+      const preview=await response.json();
+      if(!response.ok || preview.errors?.length) throw Error(preview.errors?.join('; ') || preview.message || preview.error || 'Preview failed');
+      restorePreview=data; restorePreview.summary=preview;
     } catch(error:any){toast.error(error.message)} finally {input.value=''}
   }
-  async function clearLocalRecords(){if(!await confirmDialog({title:t('清除本地记录','Clear local records'),message:t('确定清除所有本地记录？','Clear all local records?'),destructive:true}))return;const r=await fetch('/api/local-data',{method:'DELETE'});if(r.ok){$meeting=null;await refresh()}else toast.error(t('会议进行时不能清除数据。','Cannot clear while a meeting is live.'))}
+  async function commitRestore(){
+    if(!restorePreview)return;
+    if(!await confirmDialog({title:t('恢复完整备份','Restore Full Backup'),message:t('这将用备份完整替换当前本地数据，包括考勤记录、花名册、名称匹配、考勤配置和设置。此操作无法撤销。','This fully replaces current local data with the backup, including records, roster, name matching, profiles, and settings. This cannot be undone.'),destructive:true}))return;
+    const r=await fetch('/api/backup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(restorePreview)});const d=await r.json().catch(()=>({}));
+    if(r.ok){restorePreview=null;$meeting=null;clearRecordView();await Promise.all([loadConfig(),refresh()]);toast.success(t(`完整备份已恢复。考勤记录 ${d.records} 条，花名册 ${d.roster} 条，名称匹配 ${d.aliases} 条，考勤配置 ${d.profiles} 条。`,`Backup restored. Records: ${d.records}, roster: ${d.roster}, matching: ${d.aliases}, profiles: ${d.profiles}.`))}
+    else toast.error(r.status===409?t('会议端当前仍在记录考勤，请结束后再恢复备份。','Meeting panel is still capturing attendance. End the attendance record before restoring a full backup.'):d.message||d.error||'Restore failed');
+  }
+  async function clearLocalRecords(){if(!await confirmDialog({title:t('清空本地数据','Clear Local Data'),message:t('确定要清空当前设备上的所有本地数据吗？这会删除考勤记录、花名册、名称匹配、考勤配置和同步状态，并恢复为全新空白状态。此操作无法撤销。','Are you sure you want to clear all local data on this device? This deletes attendance records, roster, Zoom name matching, attendance profiles, and sync state, then resets the app to a blank slate. This cannot be undone.'),destructive:true}))return;const r=await fetch('/api/local-data',{method:'DELETE'});const d=await r.json().catch(()=>({}));if(r.ok){$meeting=null;clearRecordView();await Promise.all([loadConfig(),refresh()]);toast.success(t(`本地数据已清空。考勤记录 ${d.records} 条，花名册 ${d.roster} 条，名称匹配 ${d.aliases} 条，考勤配置 ${d.profiles} 条已重置。`,`Local data cleared. Reset ${d.records} attendance records, ${d.roster} roster entries, ${d.aliases} matching rows, and ${d.profiles} attendance profiles.`))}else toast.error(r.status===409?t('会议端当前仍在记录考勤，请结束后再清空本地数据。','Meeting panel is still capturing attendance. End the attendance record before clearing local data.'):d.message||d.error||'Clear failed')}
 </script>
 
 <section class="panel settings">
@@ -142,13 +155,15 @@
       {t("导入示例数据", "Load example data")}
     </button><button onclick={downloadBackup}>
       {t("导出完整备份", "Export full backup")}
-    </button><button onclick={() => fileInput.click()}>
-      {t("恢复备份", "Restore backup")}
+    </button><button disabled={!!$meeting} title={$meeting ? t('会议端当前仍在记录考勤，请结束后再恢复备份。','Meeting panel is still capturing attendance. End the attendance record before restoring a full backup.') : ''} onclick={() => fileInput.click()}>
+      {t("恢复完整备份", "Restore Full Backup")}
     </button><button
       class="danger"
+      disabled={!!$meeting}
+      title={$meeting ? t('会议端当前仍在记录考勤，请结束后再清空本地数据。','Meeting panel is still capturing attendance. End the attendance record before clearing local data.') : ''}
       onclick={clearLocalRecords}
     >
-      {t("清除本地记录", "Clear local records")}
+      {t("清空本地数据", "Clear Local Data")}
     </button><input
       bind:this={fileInput}
       type="file"
@@ -157,6 +172,16 @@
       onchange={restoreBackup}
     />
   </div>
+  {#if restorePreview}
+    <div class="restore-preview"><h3>{t('备份预览','Backup preview')}</h3>
+      <p>{t('备份版本','Backup Version')}: {restorePreview.summary.version}　{t('备份时间','Backed Up At')}: {restorePreview.summary.exportedAt}</p>
+      <table><thead><tr><th>{t('数据区域','Data Area')}</th><th>{t('当前本地','Current Local')}</th><th>{t('备份内容','Backup Content')}</th><th>{t('内容说明','What This Contains')}</th></tr></thead><tbody>
+        {#each [['records','考勤记录','Attendance records'],['roster','花名册','Roster'],['aliases','名称匹配','Name matching'],['profiles','考勤配置','Attendance profiles']] as row}
+          <tr><td>{t(row[1],row[2])}</td><td>{restorePreview.summary.current[row[0]]}</td><td>{restorePreview.summary.backup[row[0]]}</td><td>{t('将被完整替换','Replaced by backup content')}</td></tr>
+        {/each}
+      </tbody></table><button class="danger" onclick={commitRestore}>{t('恢复','Restore')}</button><button onclick={()=>restorePreview=null}>{t('取消','Cancel')}</button>
+    </div>
+  {/if}
   <div class="about">
     <span class="mark">A</span>
     <div>

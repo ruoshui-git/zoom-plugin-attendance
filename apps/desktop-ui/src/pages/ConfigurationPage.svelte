@@ -54,7 +54,6 @@
     zoomSignIn,
     zoomSignOut,
     zoomAction,
-    importBackup,
     chooseLanguage,
   } from "../lib/api";
   import { t, dateTime, timeOnly } from "../lib/ui";

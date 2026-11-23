@@ -8,9 +8,9 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use crate::record::{EngineRecordProvider, RecordProvider};
 #[cfg(test)]
 use crate::record::StubRecordProvider;
+use crate::record::{EngineRecordProvider, RecordProvider};
 use attend_store::Store;
 use axum::{
     extract::{
@@ -29,10 +29,10 @@ use tokio::sync::broadcast;
 use zoom_bridge::status::{self, MeetingInstance};
 use zoom_bridge::{Event, Participant, Session};
 
-use anyhow::Context;
 use crate::config::Config;
 use crate::connection::{classify_start_error, ZoomLink, ZoomState, ZoomStatus};
 use crate::{open_browser, start_session};
+use anyhow::Context;
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct User {
@@ -426,10 +426,7 @@ impl Tracker {
                 if let Some(user) = self.users.iter_mut().find(|user| user.user_id == id) {
                     user.raised_hand = raised;
                 }
-                if let Some(v) = self.emit(
-                    "hand",
-                    json!({"userId":id,"raised":raised}),
-                ) {
+                if let Some(v) = self.emit("hand", json!({"userId":id,"raised":raised})) {
                     out.push(v)
                 }
             }
@@ -786,6 +783,7 @@ pub fn run(
                 "/api/backup",
                 get(api_export_backup).post(api_restore_backup),
             )
+            .route("/api/backup/preview", post(api_backup_preview))
             .route(
                 "/api/local-data",
                 axum::routing::delete(api_clear_local_data),
@@ -893,7 +891,10 @@ pub fn app() -> anyhow::Result<()> {
         *control_flow = ControlFlow::Wait;
         match event {
             Event::UserEvent(title) => window.set_title(&title),
-            Event::WindowEvent { event: WindowEvent::CloseRequested, .. } => {
+            Event::WindowEvent {
+                event: WindowEvent::CloseRequested,
+                ..
+            } => {
                 *control_flow = ControlFlow::Exit;
             }
             _ => {}
@@ -1028,7 +1029,11 @@ fn sdk_loop(a: App) {
                                 if !auth {
                                     retry = true;
                                     // VERIFY_USER_FAILED: Zoom Workplace is signed in as a different user.
-                                    let reason = if *code == 2 { "account_mismatch" } else { "auth_failed" };
+                                    let reason = if *code == 2 {
+                                        "account_mismatch"
+                                    } else {
+                                        "auth_failed"
+                                    };
                                     pause_secs = 15;
                                     // A token that is unexpired but revoked (app removed on the Zoom
                                     // website) also fails here: if Zoom refuses a refresh, the grant is
@@ -1038,7 +1043,10 @@ fn sdk_loop(a: App) {
                                             zoom_auth::TokenStore::open_default()
                                                 .and_then(|s| zoom_auth::refresh_now(&s)),
                                             Err(zoom_auth::AuthError::NotSignedIn)
-                                                | Err(zoom_auth::AuthError::TokenEndpoint { status: 400..=499, .. })
+                                                | Err(zoom_auth::AuthError::TokenEndpoint {
+                                                    status: 400..=499,
+                                                    ..
+                                                })
                                         );
                                     if grant_gone {
                                         if let Ok(store) = zoom_auth::TokenStore::open_default() {
@@ -1046,15 +1054,21 @@ fn sdk_loop(a: App) {
                                         }
                                         set_zoom(
                                             &a,
-                                            ZoomStatus::new(ZoomState::SignedOut, status::auth_result_name(*code))
-                                                .with_reason("session_expired"),
+                                            ZoomStatus::new(
+                                                ZoomState::SignedOut,
+                                                status::auth_result_name(*code),
+                                            )
+                                            .with_reason("session_expired"),
                                         );
                                         pause_secs = 2;
                                     } else {
                                         set_zoom(
                                             &a,
-                                            ZoomStatus::new(ZoomState::Error, status::auth_result_name(*code))
-                                                .with_reason(reason),
+                                            ZoomStatus::new(
+                                                ZoomState::Error,
+                                                status::auth_result_name(*code),
+                                            )
+                                            .with_reason(reason),
                                         );
                                     }
                                 }
@@ -1067,8 +1081,11 @@ fn sdk_loop(a: App) {
                                     // signed out or signed in as a different user than the token's.
                                     set_zoom(
                                         &a,
-                                        ZoomStatus::new(ZoomState::Error, status::ipc_status_name(*code))
-                                            .with_reason("ipc_timeout"),
+                                        ZoomStatus::new(
+                                            ZoomState::Error,
+                                            status::ipc_status_name(*code),
+                                        )
+                                        .with_reason("ipc_timeout"),
                                     );
                                     pause_secs = 15;
                                 }
@@ -1082,7 +1099,8 @@ fn sdk_loop(a: App) {
                 if !(auth && ipc) && !retry && !a.link.sign_out.load(Ordering::SeqCst) {
                     // Neither success nor an explicit failure within 30 s.
                     let st = if crate::zoom_workplace_running() {
-                        ZoomStatus::new(ZoomState::Error, "no response from Zoom Workplace").with_reason("ipc_timeout")
+                        ZoomStatus::new(ZoomState::Error, "no response from Zoom Workplace")
+                            .with_reason("ipc_timeout")
                     } else {
                         ZoomStatus::new(ZoomState::ZoomNotRunning, "")
                     };
@@ -1121,7 +1139,9 @@ fn sdk_loop(a: App) {
                     let mut want_start = false;
                     let mut last_try = std::time::Instant::now() - Duration::from_secs(5);
                     loop {
-                        if a.shutdown.load(Ordering::SeqCst) || a.link.sign_out.load(Ordering::SeqCst) {
+                        if a.shutdown.load(Ordering::SeqCst)
+                            || a.link.sign_out.load(Ordering::SeqCst)
+                        {
                             break;
                         }
                         let no_meeting = {
@@ -1156,7 +1176,13 @@ fn sdk_loop(a: App) {
                                 let out = a.tracker.lock().unwrap().apply(e, None);
                                 publish(&a, out);
                                 if lost {
-                                    set_zoom(&a, ZoomStatus::new(ZoomState::Connecting, "connection to Zoom Workplace lost"));
+                                    set_zoom(
+                                        &a,
+                                        ZoomStatus::new(
+                                            ZoomState::Connecting,
+                                            "connection to Zoom Workplace lost",
+                                        ),
+                                    );
                                     pause_secs = 2;
                                     break;
                                 }
@@ -1220,7 +1246,9 @@ fn host_allowed(host: Option<&str>, port: u16, allowed: &[String]) -> bool {
         Some(h) => {
             h == format!("127.0.0.1:{port}")
                 || h == format!("localhost:{port}")
-                || allowed.iter().any(|o| o.split_once("://").map(|(_, rest)| rest) == Some(h))
+                || allowed
+                    .iter()
+                    .any(|o| o.split_once("://").map(|(_, rest)| rest) == Some(h))
         }
     }
 }
@@ -1261,7 +1289,13 @@ async fn api_zoom_sign_in(State(a): State<App>, headers: HeaderMap) -> Response 
     }
     let cfg = match Config::load() {
         Ok(c) if !c.client_id.is_empty() => c,
-        Ok(_) => return (StatusCode::CONFLICT, Json(json!({"error":"not_configured"}))).into_response(),
+        Ok(_) => {
+            return (
+                StatusCode::CONFLICT,
+                Json(json!({"error":"not_configured"})),
+            )
+                .into_response()
+        }
         Err(e) => return api_error(e),
     };
     let pending = {
@@ -1269,7 +1303,11 @@ async fn api_zoom_sign_in(State(a): State<App>, headers: HeaderMap) -> Response 
         if let Some(u) = url.as_ref() {
             let _ = open_browser(u);
             set_zoom(&a, ZoomStatus::new(ZoomState::SigningIn, ""));
-            return (StatusCode::ACCEPTED, Json(json!({"started":true,"reopened":true}))).into_response();
+            return (
+                StatusCode::ACCEPTED,
+                Json(json!({"started":true,"reopened":true})),
+            )
+                .into_response();
         }
         match zoom_auth::begin_login(&cfg.oauth()) {
             Ok(p) => {
@@ -1278,14 +1316,23 @@ async fn api_zoom_sign_in(State(a): State<App>, headers: HeaderMap) -> Response 
             }
             Err(e) => {
                 log::warn!("sign-in could not start: {e}");
-                set_zoom(&a, ZoomStatus::new(ZoomState::SignedOut, e.to_string()).with_reason("sign_in_failed"));
-                return (StatusCode::CONFLICT, Json(json!({"error":e.to_string()}))).into_response();
+                set_zoom(
+                    &a,
+                    ZoomStatus::new(ZoomState::SignedOut, e.to_string())
+                        .with_reason("sign_in_failed"),
+                );
+                return (StatusCode::CONFLICT, Json(json!({"error":e.to_string()})))
+                    .into_response();
             }
         }
     };
     a.link.login_pending.fetch_add(1, Ordering::SeqCst);
     set_zoom(&a, ZoomStatus::new(ZoomState::SigningIn, ""));
-    log::info!("opening browser for Zoom authorization (client_id={}, redirect {})", cfg.client_id, pending.redirect_uri());
+    log::info!(
+        "opening browser for Zoom authorization (client_id={}, redirect {})",
+        cfg.client_id,
+        pending.redirect_uri()
+    );
     if let Err(e) = open_browser(pending.authorize_url()) {
         log::warn!("{e}");
     }
@@ -1297,7 +1344,8 @@ async fn api_zoom_sign_in(State(a): State<App>, headers: HeaderMap) -> Response 
         match result {
             Ok(t) if !t.has_scope(zoom_auth::PLUGIN_SDK_SCOPE) => set_zoom(
                 &a,
-                ZoomStatus::new(ZoomState::Error, format!("granted scopes: {}", t.scope)).with_reason("missing_scope"),
+                ZoomStatus::new(ZoomState::Error, format!("granted scopes: {}", t.scope))
+                    .with_reason("missing_scope"),
             ),
             Ok(_) => {
                 set_zoom(&a, ZoomStatus::new(ZoomState::Connecting, ""));
@@ -1310,7 +1358,10 @@ async fn api_zoom_sign_in(State(a): State<App>, headers: HeaderMap) -> Response 
                     zoom_auth::AuthError::Loopback(_) => "sign_in_timeout",
                     _ => "sign_in_failed",
                 };
-                set_zoom(&a, ZoomStatus::new(ZoomState::SignedOut, e.to_string()).with_reason(reason));
+                set_zoom(
+                    &a,
+                    ZoomStatus::new(ZoomState::SignedOut, e.to_string()).with_reason(reason),
+                );
             }
         }
     });
@@ -1341,7 +1392,12 @@ async fn api_zoom_sign_out(State(a): State<App>, headers: HeaderMap) -> Response
 fn set_zoom(a: &App, st: ZoomStatus) {
     let mut cur = a.link.status.lock().unwrap();
     if *cur != st {
-        log::info!("zoom status: {} {} {}", st.state.as_str(), st.reason, st.detail);
+        log::info!(
+            "zoom status: {} {} {}",
+            st.state.as_str(),
+            st.reason,
+            st.detail
+        );
         let _ = a.tx.send(st.wire());
         *cur = st;
     }
@@ -1600,10 +1656,14 @@ mod tests {
     fn config_writes_must_match_engine_schema() {
         // A string personId once got stored and then broke every meeting record (500).
         let bad = json!([{"personId":"example-1","canonicalName":"张三","pinyin":"zhangsan","group":"A","active":true}]);
-        assert!(config_schema_error("roster", &bad).unwrap().contains("invalid roster data"));
+        assert!(config_schema_error("roster", &bad)
+            .unwrap()
+            .contains("invalid roster data"));
         let good = json!([{"personId":1,"canonicalName":"张三","pinyin":"zhangsan","group":"A","active":true}]);
         assert!(config_schema_error("roster", &good).is_none());
-        assert!(config_schema_error("aliases", &json!([{"zoomName":"小张","personId":"x"}])).is_some());
+        assert!(
+            config_schema_error("aliases", &json!([{"zoomName":"小张","personId":"x"}])).is_some()
+        );
         assert!(config_schema_error("settings", &json!({"anything":true})).is_none());
     }
     #[test]
@@ -1727,11 +1787,17 @@ async fn api_get_config(
     if !["roster", "aliases", "profiles", "settings"].contains(&key.as_str()) {
         return StatusCode::NOT_FOUND.into_response();
     }
-    if key=="profiles" {
-        if let Ok((revision,value))=a.store.get_doc("profiles") {
-            if !value.as_array().is_some_and(|rows|rows.iter().any(|p|p["id"]=="default-all")) {
-                let mut rows=value.as_array().cloned().unwrap_or_default();rows.push(json!({"id":"default-all","name":"All participants","description":"Factory default profile","includedSubgroups":[],"lateAfterMinutes":10,"returnWindowMinutes":8,"meetingIds":[],"topicKeywords":[],"groupSortOrder":[],"active":true,"isDefault":true}));
-                if let Ok(Ok(next))=a.store.put_doc("profiles",revision,&json!(rows),now()) { return Json(json!({"revision":next,"value":rows})).into_response(); }
+    if key == "profiles" {
+        if let Ok((revision, value)) = a.store.get_doc("profiles") {
+            if !value
+                .as_array()
+                .is_some_and(|rows| rows.iter().any(|p| p["id"] == "default-all"))
+            {
+                let mut rows = value.as_array().cloned().unwrap_or_default();
+                rows.push(json!({"id":"default-all","name":"All participants","description":"Factory default profile","includedSubgroups":[],"lateAfterMinutes":10,"returnWindowMinutes":8,"meetingIds":[],"topicKeywords":[],"groupSortOrder":[],"active":true,"isDefault":true}));
+                if let Ok(Ok(next)) = a.store.put_doc("profiles", revision, &json!(rows), now()) {
+                    return Json(json!({"revision":next,"value":rows})).into_response();
+                }
             }
         }
     }
@@ -1810,9 +1876,15 @@ async fn api_name_pinyin(_headers: HeaderMap, Json(body): Json<Value>) -> Respon
 /// otherwise one malformed write (e.g. a string personId) breaks every record.
 fn config_schema_error(key: &str, value: &Value) -> Option<String> {
     let result = match key {
-        "roster" => serde_json::from_value::<Vec<attend_engine::RosterPerson>>(value.clone()).map(|_| ()),
-        "aliases" => serde_json::from_value::<Vec<attend_engine::AliasMapping>>(value.clone()).map(|_| ()),
-        "profiles" => serde_json::from_value::<Vec<attend_engine::MeetingProfile>>(value.clone()).map(|_| ()),
+        "roster" => {
+            serde_json::from_value::<Vec<attend_engine::RosterPerson>>(value.clone()).map(|_| ())
+        }
+        "aliases" => {
+            serde_json::from_value::<Vec<attend_engine::AliasMapping>>(value.clone()).map(|_| ())
+        }
+        "profiles" => {
+            serde_json::from_value::<Vec<attend_engine::MeetingProfile>>(value.clone()).map(|_| ())
+        }
         _ => Ok(()),
     };
     result.err().map(|e| format!("invalid {key} data: {e}"))
@@ -1895,8 +1967,14 @@ fn validate_config(a: &App, key: &str, value: &Value) -> Option<String> {
         }
     } else if key == "profiles" {
         let current = a.store.get_doc("profiles").ok()?.1;
-        let factory = current.as_array().into_iter().flatten().find(|p| p["id"] == "default-all");
-        if !rows.iter().any(|p|p["id"]=="default-all") { return Some("default-all profile is required".into()); }
+        let factory = current
+            .as_array()
+            .into_iter()
+            .flatten()
+            .find(|p| p["id"] == "default-all");
+        if !rows.iter().any(|p| p["id"] == "default-all") {
+            return Some("default-all profile is required".into());
+        }
         if factory.is_some() && !rows.iter().any(|p| p["id"] == "default-all") {
             return Some("default-all profile is locked".into());
         }
@@ -1904,23 +1982,54 @@ fn validate_config(a: &App, key: &str, value: &Value) -> Option<String> {
         for p in rows {
             let id = p["id"].as_str().unwrap_or("");
             let name = p["name"].as_str().unwrap_or("").trim();
-            if id.is_empty() || name.is_empty() { return Some("profile id and name are required".into()); }
-            if !ids.insert(id) { return Some(format!("duplicate profile id: {id}")); }
+            if id.is_empty() || name.is_empty() {
+                return Some("profile id and name are required".into());
+            }
+            if !ids.insert(id) {
+                return Some(format!("duplicate profile id: {id}"));
+            }
             if id == "default-all" {
                 if let Some(old) = factory {
-                    if old["name"] != p["name"] { return Some("default-all name is locked".into()); }
+                    if old["name"] != p["name"] {
+                        return Some("default-all name is locked".into());
+                    }
                 }
-                if p["name"].as_str().is_some_and(|n| n.trim().is_empty()) { return Some("default-all name is locked".into()); }
+                if p["name"].as_str().is_some_and(|n| n.trim().is_empty()) {
+                    return Some("default-all name is locked".into());
+                }
             }
             for field in ["lateAfterMinutes", "returnWindowMinutes"] {
-                if !p[field].as_u64().is_some_and(|n| n > 0) { return Some(format!("{field} must be a positive integer")); }
+                if !p[field].as_u64().is_some_and(|n| n > 0) {
+                    return Some(format!("{field} must be a positive integer"));
+                }
             }
-            for field in ["includedSubgroups", "meetingIds", "topicKeywords", "groupSortOrder"] {
-                if !p[field].as_array().is_some_and(|a| a.iter().all(Value::is_string)) { return Some(format!("{field} must be an array of strings")); }
+            for field in [
+                "includedSubgroups",
+                "meetingIds",
+                "topicKeywords",
+                "groupSortOrder",
+            ] {
+                if !p[field]
+                    .as_array()
+                    .is_some_and(|a| a.iter().all(Value::is_string))
+                {
+                    return Some(format!("{field} must be an array of strings"));
+                }
             }
             for field in ["includedSubgroups", "groupSortOrder"] {
-                for pattern in p[field].as_array().into_iter().flatten().filter_map(Value::as_str) {
-                    if pattern.contains('?') || pattern.contains('[') || pattern.contains(']') || pattern.contains('{') || pattern.contains('}') || pattern.contains("**") {
+                for pattern in p[field]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_str)
+                {
+                    if pattern.contains('?')
+                        || pattern.contains('[')
+                        || pattern.contains(']')
+                        || pattern.contains('{')
+                        || pattern.contains('}')
+                        || pattern.contains("**")
+                    {
                         return Some(format!("invalid wildcard pattern: {pattern}"));
                     }
                 }
@@ -1930,48 +2039,214 @@ fn validate_config(a: &App, key: &str, value: &Value) -> Option<String> {
     None
 }
 
-async fn api_profiles_import_preview(State(a): State<App>, headers: HeaderMap, Json(body): Json<Value>) -> Response {
-    if let Some(r)=api_origin(&a,&headers){return r}
-    let Some(incoming)=body["profiles"].as_array().or_else(||body.as_array()) else { return StatusCode::BAD_REQUEST.into_response() };
-    let (revision,current)=match a.store.get_doc("profiles"){Ok(v)=>v,Err(e)=>return api_error(e)};
-    let mut merged=current.as_array().cloned().unwrap_or_default();
-    let mut changes=Vec::new();
-    for (idx,raw) in incoming.iter().enumerate(){
-        if raw["id"].as_str().unwrap_or("").is_empty() || raw["name"].as_str().unwrap_or("").trim().is_empty(){changes.push(json!({"row":idx+1,"action":"reject","reason":"id and name required"}));continue}
-        let mut p=raw.clone(); if let Some(o)=p.as_object_mut(){o.remove("specialParticipants");o.remove("blacklist");for (key,default) in [("description",json!("")),("includedSubgroups",json!([])),("lateAfterMinutes",json!(10)),("returnWindowMinutes",json!(8)),("meetingIds",json!([])),("topicKeywords",json!([])),("groupSortOrder",json!([])),("active",json!(true))]{o.entry(key).or_insert(default);}}
-        let id=p["id"].as_str().unwrap(); let pos=merged.iter().position(|x|x["id"]==id);
-        match pos {Some(i)=>{if id=="default-all" && merged[i]["name"]!=p["name"]{changes.push(json!({"row":idx+1,"id":id,"action":"reject","reason":"default-all name is locked"}));}else{changes.push(json!({"row":idx+1,"id":id,"action":"update"}));merged[i]=p;}},None=>{changes.push(json!({"row":idx+1,"id":id,"action":"add"}));merged.push(p)}}
+async fn api_profiles_import_preview(
+    State(a): State<App>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Response {
+    if let Some(r) = api_origin(&a, &headers) {
+        return r;
     }
-    if let Some(msg)=validate_config(&a,"profiles",&json!(merged)){return (StatusCode::UNPROCESSABLE_ENTITY,Json(json!({"message":msg}))).into_response()}
+    let Some(incoming) = body["profiles"].as_array().or_else(|| body.as_array()) else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    let (revision, current) = match a.store.get_doc("profiles") {
+        Ok(v) => v,
+        Err(e) => return api_error(e),
+    };
+    let mut merged = current.as_array().cloned().unwrap_or_default();
+    let mut changes = Vec::new();
+    for (idx, raw) in incoming.iter().enumerate() {
+        if raw["id"].as_str().unwrap_or("").is_empty()
+            || raw["name"].as_str().unwrap_or("").trim().is_empty()
+        {
+            changes.push(json!({"row":idx+1,"action":"reject","reason":"id and name required"}));
+            continue;
+        }
+        let mut p = raw.clone();
+        if let Some(o) = p.as_object_mut() {
+            o.remove("specialParticipants");
+            o.remove("blacklist");
+            for (key, default) in [
+                ("description", json!("")),
+                ("includedSubgroups", json!([])),
+                ("lateAfterMinutes", json!(10)),
+                ("returnWindowMinutes", json!(8)),
+                ("meetingIds", json!([])),
+                ("topicKeywords", json!([])),
+                ("groupSortOrder", json!([])),
+                ("active", json!(true)),
+            ] {
+                o.entry(key).or_insert(default);
+            }
+        }
+        let id = p["id"].as_str().unwrap();
+        let pos = merged.iter().position(|x| x["id"] == id);
+        match pos {
+            Some(i) => {
+                if id == "default-all" && merged[i]["name"] != p["name"] {
+                    changes.push(json!({"row":idx+1,"id":id,"action":"reject","reason":"default-all name is locked"}));
+                } else {
+                    changes.push(json!({"row":idx+1,"id":id,"action":"update"}));
+                    merged[i] = p;
+                }
+            }
+            None => {
+                changes.push(json!({"row":idx+1,"id":id,"action":"add"}));
+                merged.push(p)
+            }
+        }
+    }
+    if let Some(msg) = validate_config(&a, "profiles", &json!(merged)) {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({"message":msg})),
+        )
+            .into_response();
+    }
     Json(json!({"revision":revision,"value":merged,"changes":changes})).into_response()
 }
-async fn api_profiles_import_commit(State(a): State<App>, headers: HeaderMap, Json(body): Json<Value>) -> Response {
-    if let Some(r)=api_origin(&a,&headers){return r}
-    let (Some(rev),Some(value))=(body["revision"].as_u64(),body.get("value")) else{return StatusCode::BAD_REQUEST.into_response()};
-    if let Some(msg)=validate_config(&a,"profiles",value){return (StatusCode::UNPROCESSABLE_ENTITY,Json(json!({"message":msg}))).into_response()}
-    match a.store.put_doc("profiles",rev,value,now()){Ok(Ok(revision))=>Json(json!({"revision":revision,"value":value})).into_response(),Ok(Err(actual))=>Json(json!({"error":"stale_revision","revision":actual})).into_response_with_status(StatusCode::CONFLICT),Err(e)=>api_error(e)}
+async fn api_profiles_import_commit(
+    State(a): State<App>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Response {
+    if let Some(r) = api_origin(&a, &headers) {
+        return r;
+    }
+    let (Some(rev), Some(value)) = (body["revision"].as_u64(), body.get("value")) else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    if let Some(msg) = validate_config(&a, "profiles", value) {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({"message":msg})),
+        )
+            .into_response();
+    }
+    match a.store.put_doc("profiles", rev, value, now()) {
+        Ok(Ok(revision)) => Json(json!({"revision":revision,"value":value})).into_response(),
+        Ok(Err(actual)) => Json(json!({"error":"stale_revision","revision":actual}))
+            .into_response_with_status(StatusCode::CONFLICT),
+        Err(e) => api_error(e),
+    }
 }
-async fn api_example_data_commit(State(a):State<App>,headers:HeaderMap,Json(body):Json<Value>)->Response{
-    if let Some(r)=api_origin(&a,&headers){return r}
-    let (rr,old_roster)=match a.store.get_doc("roster"){Ok(v)=>v,Err(e)=>return api_error(e)};
-    let (ar,old_aliases)=match a.store.get_doc("aliases"){Ok(v)=>v,Err(e)=>return api_error(e)};
-    let (pr,old_profiles)=match a.store.get_doc("profiles"){Ok(v)=>v,Err(e)=>return api_error(e)};
-    let (Some(new_roster),Some(new_aliases),Some(new_profiles))=(body["roster"].as_array(),body["aliases"].as_array(),body["profiles"].as_array()) else{return StatusCode::BAD_REQUEST.into_response()};
-    let roster_names:std::collections::HashSet<String>=old_roster.as_array().into_iter().flatten().filter_map(|p|p["canonicalName"].as_str()).map(norm_config_name).collect();
-    if let Some(p)=new_roster.iter().find(|p|roster_names.contains(&norm_config_name(p["canonicalName"].as_str().unwrap_or("")))){return (StatusCode::CONFLICT,Json(json!({"message":format!("Example roster person {} conflicts with existing roster data",p["canonicalName"])}))).into_response()}
-    let alias_names:std::collections::HashSet<String>=old_aliases.as_array().into_iter().flatten().filter_map(|p|p["zoomName"].as_str()).map(norm_config_name).collect();
-    if let Some(p)=new_aliases.iter().find(|p|alias_names.contains(&norm_config_name(p["zoomName"].as_str().unwrap_or("")))){return (StatusCode::CONFLICT,Json(json!({"message":format!("Example alias {} conflicts with existing name matching",p["zoomName"])}))).into_response()}
-    let new_canonical:std::collections::HashSet<String>=new_roster.iter().filter_map(|p|p["canonicalName"].as_str()).map(norm_config_name).collect();
-    let old_canonical:std::collections::HashSet<String>=roster_names.clone();
-    if let Some(p)=new_roster.iter().find(|p|alias_names.contains(&norm_config_name(p["canonicalName"].as_str().unwrap_or("")))){return (StatusCode::CONFLICT,Json(json!({"message":format!("Example roster person {} conflicts with existing name matching",p["canonicalName"])}))).into_response()}
-    if let Some(p)=new_aliases.iter().find(|p|old_canonical.contains(&norm_config_name(p["zoomName"].as_str().unwrap_or("")))||new_canonical.contains(&norm_config_name(p["zoomName"].as_str().unwrap_or("")))){return (StatusCode::CONFLICT,Json(json!({"message":format!("Example alias {} conflicts with a canonical name",p["zoomName"])}))).into_response()}
-    let profile_ids:std::collections::HashSet<String>=old_profiles.as_array().into_iter().flatten().filter_map(|p|p["id"].as_str().map(str::to_owned)).collect();
-    if let Some(p)=new_profiles.iter().find(|p|profile_ids.contains(p["id"].as_str().unwrap_or(""))){return (StatusCode::CONFLICT,Json(json!({"message":format!("Example profile id {} already exists",p["id"])}))).into_response()}
-    let mut aliases=old_aliases.as_array().cloned().unwrap_or_default();aliases.extend(new_aliases.iter().cloned());
-    let mut roster=old_roster.as_array().cloned().unwrap_or_default();roster.extend(new_roster.iter().cloned());
-    let mut profiles=old_profiles.as_array().cloned().unwrap_or_default();for profile in new_profiles{let mut p=profile.clone();if let Some(o)=p.as_object_mut(){o.remove("specialParticipants");o.remove("blacklist");}profiles.push(p)}
-    for (key,val) in [("roster",json!(roster)),("aliases",json!(aliases)),("profiles",json!(profiles))]{if let Some(message)=config_schema_error(key,&val){return (StatusCode::UNPROCESSABLE_ENTITY,Json(json!({"message":message}))).into_response()}}
-    let docs=vec![("roster".into(),rr,json!(roster)),("aliases".into(),ar,json!(aliases)),("profiles".into(),pr,json!(profiles))];
+async fn api_example_data_commit(
+    State(a): State<App>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Response {
+    if let Some(r) = api_origin(&a, &headers) {
+        return r;
+    }
+    let (rr, old_roster) = match a.store.get_doc("roster") {
+        Ok(v) => v,
+        Err(e) => return api_error(e),
+    };
+    let (ar, old_aliases) = match a.store.get_doc("aliases") {
+        Ok(v) => v,
+        Err(e) => return api_error(e),
+    };
+    let (pr, old_profiles) = match a.store.get_doc("profiles") {
+        Ok(v) => v,
+        Err(e) => return api_error(e),
+    };
+    let (Some(new_roster), Some(new_aliases), Some(new_profiles)) = (
+        body["roster"].as_array(),
+        body["aliases"].as_array(),
+        body["profiles"].as_array(),
+    ) else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    let roster_names: std::collections::HashSet<String> = old_roster
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|p| p["canonicalName"].as_str())
+        .map(norm_config_name)
+        .collect();
+    if let Some(p) = new_roster.iter().find(|p| {
+        roster_names.contains(&norm_config_name(p["canonicalName"].as_str().unwrap_or("")))
+    }) {
+        return (StatusCode::CONFLICT,Json(json!({"message":format!("Example roster person {} conflicts with existing roster data",p["canonicalName"])}))).into_response();
+    }
+    let alias_names: std::collections::HashSet<String> = old_aliases
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|p| p["zoomName"].as_str())
+        .map(norm_config_name)
+        .collect();
+    if let Some(p) = new_aliases
+        .iter()
+        .find(|p| alias_names.contains(&norm_config_name(p["zoomName"].as_str().unwrap_or(""))))
+    {
+        return (StatusCode::CONFLICT,Json(json!({"message":format!("Example alias {} conflicts with existing name matching",p["zoomName"])}))).into_response();
+    }
+    let new_canonical: std::collections::HashSet<String> = new_roster
+        .iter()
+        .filter_map(|p| p["canonicalName"].as_str())
+        .map(norm_config_name)
+        .collect();
+    let old_canonical: std::collections::HashSet<String> = roster_names.clone();
+    if let Some(p) = new_roster.iter().find(|p| {
+        alias_names.contains(&norm_config_name(p["canonicalName"].as_str().unwrap_or("")))
+    }) {
+        return (StatusCode::CONFLICT,Json(json!({"message":format!("Example roster person {} conflicts with existing name matching",p["canonicalName"])}))).into_response();
+    }
+    if let Some(p) = new_aliases.iter().find(|p| {
+        old_canonical.contains(&norm_config_name(p["zoomName"].as_str().unwrap_or("")))
+            || new_canonical.contains(&norm_config_name(p["zoomName"].as_str().unwrap_or("")))
+    }) {
+        return (StatusCode::CONFLICT,Json(json!({"message":format!("Example alias {} conflicts with a canonical name",p["zoomName"])}))).into_response();
+    }
+    let profile_ids: std::collections::HashSet<String> = old_profiles
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|p| p["id"].as_str().map(str::to_owned))
+        .collect();
+    if let Some(p) = new_profiles
+        .iter()
+        .find(|p| profile_ids.contains(p["id"].as_str().unwrap_or("")))
+    {
+        return (
+            StatusCode::CONFLICT,
+            Json(json!({"message":format!("Example profile id {} already exists",p["id"])})),
+        )
+            .into_response();
+    }
+    let mut aliases = old_aliases.as_array().cloned().unwrap_or_default();
+    aliases.extend(new_aliases.iter().cloned());
+    let mut roster = old_roster.as_array().cloned().unwrap_or_default();
+    roster.extend(new_roster.iter().cloned());
+    let mut profiles = old_profiles.as_array().cloned().unwrap_or_default();
+    for profile in new_profiles {
+        let mut p = profile.clone();
+        if let Some(o) = p.as_object_mut() {
+            o.remove("specialParticipants");
+            o.remove("blacklist");
+        }
+        profiles.push(p)
+    }
+    for (key, val) in [
+        ("roster", json!(roster)),
+        ("aliases", json!(aliases)),
+        ("profiles", json!(profiles)),
+    ] {
+        if let Some(message) = config_schema_error(key, &val) {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(json!({"message":message})),
+            )
+                .into_response();
+        }
+    }
+    let docs = vec![
+        ("roster".into(), rr, json!(roster)),
+        ("aliases".into(), ar, json!(aliases)),
+        ("profiles".into(), pr, json!(profiles)),
+    ];
     match a.store.put_docs_atomic(&docs,now()){Ok(Ok(_))=>Json(json!({"added":{"roster":new_roster.len(),"aliases":new_aliases.len(),"profiles":new_profiles.len()}})).into_response(),Ok(Err((key,_)))=>(StatusCode::CONFLICT,Json(json!({"message":format!("{key} changed during example import; retry") }))).into_response(),Err(e)=>api_error(e)}
 }
 
@@ -2547,7 +2822,10 @@ async fn api_meetings(State(a): State<App>, headers: HeaderMap) -> Response {
     if let Some(r) = api_origin(&a, &headers) {
         return r;
     }
-    match a.store.meeting_summaries() { Ok(rows) => Json(rows).into_response(), Err(e) => api_error(e) }
+    match a.store.meeting_summaries() {
+        Ok(rows) => Json(rows).into_response(),
+        Err(e) => api_error(e),
+    }
 }
 async fn api_meeting(
     State(a): State<App>,
@@ -2587,7 +2865,9 @@ async fn api_record(
     let Ok(Some(meeting)) = a.store.meeting(&id) else {
         return StatusCode::NOT_FOUND.into_response();
     };
-    if meeting["source"] == "imported" { return Json(meeting["importedRecord"].clone()).into_response(); }
+    if meeting["source"] == "imported" {
+        return Json(meeting["importedRecord"].clone()).into_response();
+    }
     let events = match a.store.events(&id) {
         Ok(e) => e,
         Err(e) => return api_error(e),
@@ -2606,7 +2886,10 @@ async fn api_record(
         .get_state(&id)
         .map(|x| x.1)
         .unwrap_or(json!({"mode":"generic"}));
-    match a.provider.try_build_record(&meeting, &vals, &docs, &state, now()) {
+    match a
+        .provider
+        .try_build_record(&meeting, &vals, &docs, &state, now())
+    {
         Ok(mut record) => {
             // The UI reads the top-level `rows`; the nested copy doubled the payload.
             if let Some(nested) = record.get_mut("record").and_then(Value::as_object_mut) {
@@ -2630,61 +2913,246 @@ async fn api_record_export(
     headers: HeaderMap,
     axum::extract::Query(query): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> Response {
-    if let Some(r) = api_origin(&a, &headers) { return r; }
-    let kind=query.get("kind").map(String::as_str).unwrap_or("json");
-    if !["json","summary","manual"].contains(&kind) { return StatusCode::BAD_REQUEST.into_response(); }
-    let Some(meeting) = a.store.meeting(&id).ok().flatten() else { return StatusCode::NOT_FOUND.into_response(); };
-    let events = match a.store.events(&id) { Ok(v) => v, Err(e) => return api_error(e) };
-    let values = events.iter().map(|e| stored_event(&id,e)).collect::<Vec<_>>();
-    let config=json!({"roster":a.store.get_doc("roster").map(|x|x.1).unwrap_or(Value::Null),"aliases":a.store.get_doc("aliases").map(|x|x.1).unwrap_or(Value::Null),"profiles":a.store.get_doc("profiles").map(|x|x.1).unwrap_or(Value::Null)});
-    let (revision, mut state)=match a.store.get_state(&id){Ok(v)=>v,Err(e)=>return api_error(e)};
-    if state["raiseHandEntries"].as_array().is_none() { state["raiseHandEntries"]=json!(crate::record_export::hand_entries(&values)); }
-    let record=if meeting["source"]=="imported" { meeting["importedRecord"].clone() } else { match a.provider.try_build_record(&meeting,&values,&config,&state,now()) {Ok(v)=>v,Err(e)=>return (StatusCode::INTERNAL_SERVER_ERROR,Json(json!({"message":e}))).into_response()} };
-    let exported_at=chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis,true);
-    state["exportedAt"]=json!(exported_at); state["needsExport"]=json!(false);
-    match a.store.put_state(&id,revision,&state,now()) {
-        Ok(Ok(_)) => {},
-        Ok(Err(actual)) => return (StatusCode::CONFLICT,Json(json!({"error":"stale_revision","revision":actual}))).into_response(),
+    if let Some(r) = api_origin(&a, &headers) {
+        return r;
+    }
+    let kind = query.get("kind").map(String::as_str).unwrap_or("json");
+    if !["json", "summary", "manual"].contains(&kind) {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+    let Some(meeting) = a.store.meeting(&id).ok().flatten() else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let events = match a.store.events(&id) {
+        Ok(v) => v,
+        Err(e) => return api_error(e),
+    };
+    let values = events
+        .iter()
+        .map(|e| stored_event(&id, e))
+        .collect::<Vec<_>>();
+    let config = json!({"roster":a.store.get_doc("roster").map(|x|x.1).unwrap_or(Value::Null),"aliases":a.store.get_doc("aliases").map(|x|x.1).unwrap_or(Value::Null),"profiles":a.store.get_doc("profiles").map(|x|x.1).unwrap_or(Value::Null)});
+    let (revision, mut state) = match a.store.get_state(&id) {
+        Ok(v) => v,
+        Err(e) => return api_error(e),
+    };
+    if state["raiseHandEntries"].as_array().is_none() {
+        state["raiseHandEntries"] = json!(crate::record_export::hand_entries(&values));
+    }
+    let record = if meeting["source"] == "imported" {
+        meeting["importedRecord"].clone()
+    } else {
+        match a
+            .provider
+            .try_build_record(&meeting, &values, &config, &state, now())
+        {
+            Ok(v) => v,
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"message":e})),
+                )
+                    .into_response()
+            }
+        }
+    };
+    let exported_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    state["exportedAt"] = json!(exported_at);
+    state["needsExport"] = json!(false);
+    match a.store.put_state(&id, revision, &state, now()) {
+        Ok(Ok(_)) => {}
+        Ok(Err(actual)) => {
+            return (
+                StatusCode::CONFLICT,
+                Json(json!({"error":"stale_revision","revision":actual})),
+            )
+                .into_response()
+        }
         Err(e) => return api_error(e),
     }
-    emit_record_updated(&a,&id);
-    let language=query.get("language").map(String::as_str).unwrap_or("en");
-    let Some(file)=crate::record_export::artifacts(&meeting,&record,&state,&values,&exported_at,language,kind).into_iter().next() else { return StatusCode::INTERNAL_SERVER_ERROR.into_response(); };
-    let mut response=(StatusCode::OK,[(axum::http::header::CONTENT_TYPE,file.content_type.to_string()),(axum::http::header::CONTENT_DISPOSITION,format!("attachment; filename=\"{}\"",file.filename))],file.bytes).into_response();
-    response.headers_mut().insert("x-exported-at",axum::http::HeaderValue::from_str(&exported_at).unwrap());
+    emit_record_updated(&a, &id);
+    let language = query.get("language").map(String::as_str).unwrap_or("en");
+    let Some(file) = crate::record_export::artifacts(
+        &meeting,
+        &record,
+        &state,
+        &values,
+        &exported_at,
+        language,
+        kind,
+    )
+    .into_iter()
+    .next() else {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    };
+    let mut response = (
+        StatusCode::OK,
+        [
+            (
+                axum::http::header::CONTENT_TYPE,
+                file.content_type.to_string(),
+            ),
+            (
+                axum::http::header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"{}\"", file.filename),
+            ),
+        ],
+        file.bytes,
+    )
+        .into_response();
+    response.headers_mut().insert(
+        "x-exported-at",
+        axum::http::HeaderValue::from_str(&exported_at).unwrap(),
+    );
     response
 }
-fn normalize_imported_record(item:&Value,index:usize)->Result<Value,String>{
-    let session=item.get("session").unwrap_or(item);
-    let is_session=item.get("session").is_some() || session.get("derivedRows").is_some();
-    let source_meeting=if is_session { session } else { item.get("meeting").unwrap_or(item) };
-    let id=source_meeting["instanceId"].as_str().or_else(||source_meeting["sessionId"].as_str()).or_else(||session["sessionId"].as_str()).unwrap_or("");
-    let number=source_meeting["meetingNumber"].as_str().or_else(||source_meeting["meetingId"].as_str()).or_else(||session["metadata"]["meetingId"].as_str()).unwrap_or("");
-    let topic=source_meeting["topic"].as_str().or_else(||source_meeting["meetingTopic"].as_str()).or_else(||session["metadata"]["meetingTopic"].as_str()).unwrap_or("Imported meeting");
-    let started=parse_meeting_timestamp(&source_meeting["startedAt"]).unwrap_or_else(now);
-    let mut record=if is_session {json!({"rows":session["derivedRows"],"summary":session["summary"],"mode":"roster"})} else {item["record"].clone()};
-    if record.is_null(){return Err("record rows are missing".into())}
-    if record["rows"].is_null(){if let Some(rows)=session["derivedRows"].as_array(){record["rows"]=json!(rows)}else{return Err("derived rows are missing".into())}}
-    let instance_id=if id.is_empty(){format!("imported-{}-{index}",now())}else{format!("imported-{id}")};
-    Ok(json!({"meeting":{"instanceId":instance_id,"meetingNumber":number,"topic":topic,"meetingType":0,"status":0,"statusName":"Imported","startedAt":started,"endedAt":parse_meeting_timestamp(&source_meeting["endedAt"]).or(Some(started)),"endReason":"imported","isHost":false,"source":"imported","importedRecord":record},"record":record,"source":"imported"}))
+fn normalize_imported_record(item: &Value, index: usize) -> Result<Value, String> {
+    let session = item.get("session").unwrap_or(item);
+    let is_session = item.get("session").is_some() || session.get("derivedRows").is_some();
+    let source_meeting = if is_session {
+        session
+    } else {
+        item.get("meeting").unwrap_or(item)
+    };
+    let id = source_meeting["instanceId"]
+        .as_str()
+        .or_else(|| source_meeting["sessionId"].as_str())
+        .or_else(|| session["sessionId"].as_str())
+        .unwrap_or("");
+    let number = source_meeting["meetingNumber"]
+        .as_str()
+        .or_else(|| source_meeting["meetingId"].as_str())
+        .or_else(|| session["metadata"]["meetingId"].as_str())
+        .unwrap_or("");
+    let topic = source_meeting["topic"]
+        .as_str()
+        .or_else(|| source_meeting["meetingTopic"].as_str())
+        .or_else(|| session["metadata"]["meetingTopic"].as_str())
+        .unwrap_or("Imported meeting");
+    let started = parse_meeting_timestamp(&source_meeting["startedAt"]).unwrap_or_else(now);
+    let mut record = if is_session {
+        json!({"rows":session["derivedRows"],"summary":session["summary"],"mode":"roster"})
+    } else {
+        item["record"].clone()
+    };
+    if record.is_null() {
+        return Err("record rows are missing".into());
+    }
+    if record["rows"].is_null() {
+        if let Some(rows) = session["derivedRows"].as_array() {
+            record["rows"] = json!(rows)
+        } else {
+            return Err("derived rows are missing".into());
+        }
+    }
+    let instance_id = if id.is_empty() {
+        format!("imported-{}-{index}", now())
+    } else {
+        format!("imported-{id}")
+    };
+    Ok(
+        json!({"meeting":{"instanceId":instance_id,"meetingNumber":number,"topic":topic,"meetingType":0,"status":0,"statusName":"Imported","startedAt":started,"endedAt":parse_meeting_timestamp(&source_meeting["endedAt"]).or(Some(started)),"endReason":"imported","isHost":false,"source":"imported","importedRecord":record},"record":record,"source":"imported"}),
+    )
 }
-fn parse_meeting_timestamp(value:&Value)->Option<u64>{value.as_u64().or_else(||value.as_str().and_then(|s|s.parse().ok())).or_else(||value.as_str().and_then(|s|chrono::DateTime::parse_from_rfc3339(s).ok()).map(|d|d.timestamp_millis().max(0) as u64))}
-async fn api_records_import_preview(State(a):State<App>,headers:HeaderMap,Json(body):Json<Value>)->Response{
-    if let Some(r)=api_origin(&a,&headers){return r}
-    let items=if let Some(v)=body.as_array(){v.clone()}else if let Some(v)=body["records"].as_array(){v.clone()}else if let Some(v)=body["sessions"].as_array(){v.clone()}else if body["version"].as_u64()==Some(3)&&body["session"].is_object(){vec![body.clone()]}else{return StatusCode::BAD_REQUEST.into_response()};
-    let active=a.tracker.lock().unwrap().meeting.as_ref().map(|m|m.meeting_number.clone());
-    let mut plans=Vec::new();
-    for (i,item) in items.iter().enumerate(){match normalize_imported_record(item,i){Ok(v)=>{let number=v["meeting"]["meetingNumber"].as_str().unwrap_or("");let instance=v["meeting"]["instanceId"].as_str().unwrap_or("");let reject=active.as_deref()==Some(number);let update=a.store.meeting(instance).ok().flatten().is_some();plans.push(json!({"action":if reject{"reject"}else if update{"update"}else{"add"},"reason":if reject{"would overwrite live meeting"}else{""},"value":v}));},Err(e)=>plans.push(json!({"action":"reject","reason":e}))}}
+fn parse_meeting_timestamp(value: &Value) -> Option<u64> {
+    value
+        .as_u64()
+        .or_else(|| value.as_str().and_then(|s| s.parse().ok()))
+        .or_else(|| {
+            value
+                .as_str()
+                .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                .map(|d| d.timestamp_millis().max(0) as u64)
+        })
+}
+async fn api_records_import_preview(
+    State(a): State<App>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Response {
+    if let Some(r) = api_origin(&a, &headers) {
+        return r;
+    }
+    let items = if let Some(v) = body.as_array() {
+        v.clone()
+    } else if let Some(v) = body["records"].as_array() {
+        v.clone()
+    } else if let Some(v) = body["sessions"].as_array() {
+        v.clone()
+    } else if body["version"].as_u64() == Some(3) && body["session"].is_object() {
+        vec![body.clone()]
+    } else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    let active = a
+        .tracker
+        .lock()
+        .unwrap()
+        .meeting
+        .as_ref()
+        .map(|m| m.meeting_number.clone());
+    let mut plans = Vec::new();
+    for (i, item) in items.iter().enumerate() {
+        match normalize_imported_record(item, i) {
+            Ok(v) => {
+                let number = v["meeting"]["meetingNumber"].as_str().unwrap_or("");
+                let instance = v["meeting"]["instanceId"].as_str().unwrap_or("");
+                let reject = active.as_deref() == Some(number);
+                let update = a.store.meeting(instance).ok().flatten().is_some();
+                plans.push(json!({"action":if reject{"reject"}else if update{"update"}else{"add"},"reason":if reject{"would overwrite live meeting"}else{""},"value":v}));
+            }
+            Err(e) => plans.push(json!({"action":"reject","reason":e})),
+        }
+    }
     Json(json!({"plans":plans})).into_response()
 }
-async fn api_records_import_commit(State(a):State<App>,headers:HeaderMap,Json(body):Json<Value>)->Response{
-    if let Some(r)=api_origin(&a,&headers){return r}
-    let Some(plans)=body["plans"].as_array() else{return StatusCode::BAD_REQUEST.into_response()};
-    if plans.iter().any(|p|p["action"]=="reject"){return (StatusCode::UNPROCESSABLE_ENTITY,Json(json!({"message":"Import preview contains rejected records"}))).into_response()}
-    let active=a.tracker.lock().unwrap().meeting.as_ref().map(|m|m.meeting_number.clone());
-    if plans.iter().any(|p|active.as_deref()==p["value"]["meeting"]["meetingNumber"].as_str()){return (StatusCode::CONFLICT,Json(json!({"message":"Cannot import over the live meeting"}))).into_response()}
-    let mut imported=0;
-    for p in plans {let m=&p["value"]["meeting"];if let Err(e)=a.store.upsert_meeting(m,Some((m["endedAt"].as_u64().unwrap_or_else(now),"imported".into())),0){return api_error(e)} imported+=1;}
+async fn api_records_import_commit(
+    State(a): State<App>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Response {
+    if let Some(r) = api_origin(&a, &headers) {
+        return r;
+    }
+    let Some(plans) = body["plans"].as_array() else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    if plans.iter().any(|p| p["action"] == "reject") {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({"message":"Import preview contains rejected records"})),
+        )
+            .into_response();
+    }
+    let active = a
+        .tracker
+        .lock()
+        .unwrap()
+        .meeting
+        .as_ref()
+        .map(|m| m.meeting_number.clone());
+    if plans
+        .iter()
+        .any(|p| active.as_deref() == p["value"]["meeting"]["meetingNumber"].as_str())
+    {
+        return (
+            StatusCode::CONFLICT,
+            Json(json!({"message":"Cannot import over the live meeting"})),
+        )
+            .into_response();
+    }
+    let mut imported = 0;
+    for p in plans {
+        let m = &p["value"]["meeting"];
+        if let Err(e) = a.store.upsert_meeting(
+            m,
+            Some((m["endedAt"].as_u64().unwrap_or_else(now), "imported".into())),
+            0,
+        ) {
+            return api_error(e);
+        }
+        imported += 1;
+    }
     Json(json!({"imported":imported})).into_response()
 }
 fn stored_event(id: &str, e: &attend_store::EventRow) -> Value {
@@ -2737,67 +3205,157 @@ async fn api_reconciliation_decision(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> Response {
-    if let Some(r) = api_origin(&a, &headers) { return r; }
-    let (Some(state_revision), Some(alias_revision), Some(mut state)) =
-        (body["revision"].as_u64(), body["aliasesRevision"].as_u64(), body.get("value").cloned())
-    else { return StatusCode::BAD_REQUEST.into_response(); };
-    let alias_result = a.store.get_doc("aliases");
-    let (actual_alias_revision, aliases) = match alias_result { Ok(v) => v, Err(e) => return api_error(e) };
-    if actual_alias_revision != alias_revision {
-        return (StatusCode::CONFLICT, Json(json!({"error":"stale_revision","key":"aliases","revision":actual_alias_revision}))).into_response();
+    if let Some(r) = api_origin(&a, &headers) {
+        return r;
     }
-    let Some(rows) = aliases.as_array() else { return StatusCode::INTERNAL_SERVER_ERROR.into_response(); };
-    if state["reconciliationDecisions"].is_null() && state["decisions"].is_array() { state["reconciliationDecisions"] = state["decisions"].clone(); }
-    if state["reconciliationDecisions"].is_null() { state["reconciliationDecisions"] = json!([]); }
+    let (Some(state_revision), Some(alias_revision), Some(mut state)) = (
+        body["revision"].as_u64(),
+        body["aliasesRevision"].as_u64(),
+        body.get("value").cloned(),
+    ) else {
+        return StatusCode::BAD_REQUEST.into_response();
+    };
+    let alias_result = a.store.get_doc("aliases");
+    let (actual_alias_revision, aliases) = match alias_result {
+        Ok(v) => v,
+        Err(e) => return api_error(e),
+    };
+    if actual_alias_revision != alias_revision {
+        return (
+            StatusCode::CONFLICT,
+            Json(
+                json!({"error":"stale_revision","key":"aliases","revision":actual_alias_revision}),
+            ),
+        )
+            .into_response();
+    }
+    let Some(rows) = aliases.as_array() else {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    };
+    if state["reconciliationDecisions"].is_null() && state["decisions"].is_array() {
+        state["reconciliationDecisions"] = state["decisions"].clone();
+    }
+    if state["reconciliationDecisions"].is_null() {
+        state["reconciliationDecisions"] = json!([]);
+    }
     let decisions = state["reconciliationDecisions"].as_array_mut().unwrap();
     if body["revertId"].is_string() {
         let revert_id = body["revertId"].as_str().unwrap();
         decisions.retain(|d| d["id"].as_str() != Some(revert_id));
     } else {
-        let Some(decision) = body.get("decision") else { return StatusCode::BAD_REQUEST.into_response(); };
-        let parsed: attend_engine::ReconciliationDecision = match serde_json::from_value(decision.clone()) {
-            Ok(v) => v, Err(e) => return (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({"message":format!("Invalid decision: {e}")}))).into_response()
+        let Some(decision) = body.get("decision") else {
+            return StatusCode::BAD_REQUEST.into_response();
         };
-        let zoom_name = if parsed.zoom_name_at_decision.is_empty() { &parsed.zoom_name } else { &parsed.zoom_name_at_decision };
+        let parsed: attend_engine::ReconciliationDecision =
+            match serde_json::from_value(decision.clone()) {
+                Ok(v) => v,
+                Err(e) => {
+                    return (
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                        Json(json!({"message":format!("Invalid decision: {e}")})),
+                    )
+                        .into_response()
+                }
+            };
+        let zoom_name = if parsed.zoom_name_at_decision.is_empty() {
+            &parsed.zoom_name
+        } else {
+            &parsed.zoom_name_at_decision
+        };
         let norm = norm_config_name(zoom_name);
         let roster = a.store.get_doc("roster").map(|x| x.1).unwrap_or(json!([]));
         let mut next_aliases = rows.clone();
         match &parsed.action {
-            attend_engine::DecisionAction::Match | attend_engine::DecisionAction::NameChangeKeepMatch => {
-                let Some(person_id) = parsed.person_id else { return (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({"message":"A roster person is required for a match."}))).into_response(); };
-                let Some(person) = roster.as_array().into_iter().flatten().find(|p| p["personId"].as_u64() == Some(person_id)) else { return (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({"message":"The selected roster person no longer exists."}))).into_response(); };
+            attend_engine::DecisionAction::Match
+            | attend_engine::DecisionAction::NameChangeKeepMatch => {
+                let Some(person_id) = parsed.person_id else {
+                    return (
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                        Json(json!({"message":"A roster person is required for a match."})),
+                    )
+                        .into_response();
+                };
+                let Some(person) = roster
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .find(|p| p["personId"].as_u64() == Some(person_id))
+                else {
+                    return (
+                        StatusCode::UNPROCESSABLE_ENTITY,
+                        Json(json!({"message":"The selected roster person no longer exists."})),
+                    )
+                        .into_response();
+                };
                 let canonical = person["canonicalName"].as_str().unwrap_or("");
                 if norm_config_name(canonical) == norm {
-                    if parsed.action == attend_engine::DecisionAction::Match { return (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({"message":"A nickname must differ from the canonical name."}))).into_response(); }
+                    if parsed.action == attend_engine::DecisionAction::Match {
+                        return (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({"message":"A nickname must differ from the canonical name."}))).into_response();
+                    }
                 }
-                if let Some(other) = roster.as_array().into_iter().flatten().find(|p| p["personId"].as_u64() != Some(person_id) && norm_config_name(p["canonicalName"].as_str().unwrap_or("")) == norm) {
+                if let Some(other) = roster.as_array().into_iter().flatten().find(|p| {
+                    p["personId"].as_u64() != Some(person_id)
+                        && norm_config_name(p["canonicalName"].as_str().unwrap_or("")) == norm
+                }) {
                     return (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({"message":format!("Nickname '{}' is already a canonical roster name.", other["canonicalName"].as_str().unwrap_or(zoom_name))}))).into_response();
                 }
-                if let Some(existing) = rows.iter().find(|a| norm_config_name(a["zoomName"].as_str().unwrap_or("")) == norm && a["personId"].as_u64() != Some(person_id)) {
+                if let Some(existing) = rows.iter().find(|a| {
+                    norm_config_name(a["zoomName"].as_str().unwrap_or("")) == norm
+                        && a["personId"].as_u64() != Some(person_id)
+                }) {
                     return (StatusCode::UNPROCESSABLE_ENTITY, Json(json!({"message":format!("Nickname '{}' already belongs to another roster person.", existing["zoomName"].as_str().unwrap_or(zoom_name))}))).into_response();
                 }
-                next_aliases.retain(|a| norm_config_name(a["zoomName"].as_str().unwrap_or("")) != norm);
-                if norm_config_name(canonical) != norm { next_aliases.push(json!({"zoomName":zoom_name,"personId":person_id,"notes":""})); }
+                next_aliases
+                    .retain(|a| norm_config_name(a["zoomName"].as_str().unwrap_or("")) != norm);
+                if norm_config_name(canonical) != norm {
+                    next_aliases
+                        .push(json!({"zoomName":zoom_name,"personId":person_id,"notes":""}));
+                }
             }
             attend_engine::DecisionAction::Guest | attend_engine::DecisionAction::Split => {
-                next_aliases.retain(|a| norm_config_name(a["zoomName"].as_str().unwrap_or("")) != norm);
+                next_aliases
+                    .retain(|a| norm_config_name(a["zoomName"].as_str().unwrap_or("")) != norm);
             }
             _ => {}
         }
         decisions.retain(|d| d["sessionParticipantId"] != parsed.session_participant_id);
         decisions.push(json!(parsed));
-        let put = a.store.put_state_and_doc_atomic(&id, state_revision, &state, "aliases", alias_revision, &json!(next_aliases), now());
+        let put = a.store.put_state_and_doc_atomic(
+            &id,
+            state_revision,
+            &state,
+            "aliases",
+            alias_revision,
+            &json!(next_aliases),
+            now(),
+        );
         return match put {
-            Ok(Ok((revision, aliases_revision))) => { emit_record_updated(&a, &id); Json(json!({"revision":revision,"aliasesRevision":aliases_revision,"value":state})).into_response() },
+            Ok(Ok((revision, aliases_revision))) => {
+                emit_record_updated(&a, &id);
+                Json(json!({"revision":revision,"aliasesRevision":aliases_revision,"value":state}))
+                    .into_response()
+            }
             Ok(Err((_, u64::MAX))) => StatusCode::NOT_FOUND.into_response(),
-            Ok(Err((key, revision))) => (StatusCode::CONFLICT, Json(json!({"error":"stale_revision","key":key,"revision":revision}))).into_response(),
+            Ok(Err((key, revision))) => (
+                StatusCode::CONFLICT,
+                Json(json!({"error":"stale_revision","key":key,"revision":revision})),
+            )
+                .into_response(),
             Err(e) => api_error(e),
         };
     }
     match a.store.put_state(&id, state_revision, &state, now()) {
-        Ok(Ok(revision)) => { emit_record_updated(&a, &id); Json(json!({"revision":revision,"aliasesRevision":alias_revision,"value":state})).into_response() },
+        Ok(Ok(revision)) => {
+            emit_record_updated(&a, &id);
+            Json(json!({"revision":revision,"aliasesRevision":alias_revision,"value":state}))
+                .into_response()
+        }
         Ok(Err(u64::MAX)) => StatusCode::NOT_FOUND.into_response(),
-        Ok(Err(actual)) => (StatusCode::CONFLICT, Json(json!({"error":"stale_revision","key":"state","revision":actual}))).into_response(),
+        Ok(Err(actual)) => (
+            StatusCode::CONFLICT,
+            Json(json!({"error":"stale_revision","key":"state","revision":actual})),
+        )
+            .into_response(),
         Err(e) => api_error(e),
     }
 }
@@ -2860,10 +3418,13 @@ async fn api_export_records(State(a): State<App>, headers: HeaderMap) -> Respons
             .get_state(&m.instance_id)
             .map(|x| x.1)
             .unwrap_or(json!({"mode":"generic"}));
-        let record = if meeting["source"]=="imported" { meeting["importedRecord"].clone() } else { a
-            .provider
-            .try_build_record(&meeting, &events, &config, &state, now())
-            .unwrap_or_else(|error| json!({"error":"engine_failed","message":error})) };
+        let record = if meeting["source"] == "imported" {
+            meeting["importedRecord"].clone()
+        } else {
+            a.provider
+                .try_build_record(&meeting, &events, &config, &state, now())
+                .unwrap_or_else(|error| json!({"error":"engine_failed","message":error}))
+        };
         records.push(json!({"meeting":meeting,"events":events,"record":record,"state":state}));
     }
     Json(json!({"version":3,"exportedAt":now(),"records":records})).into_response()
@@ -2959,7 +3520,122 @@ async fn api_restore_backup(
         )
             .into_response();
     }
-    api_import_backup(State(a), headers, Json(body)).await
+    let (docs, records) = match validate_full_backup(&body) {
+        Ok(v) => v,
+        Err(message) => {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(json!({"error":"validation_error","message":message})),
+            )
+                .into_response()
+        }
+    };
+    if let Err(e) = a.store.replace_all(&docs, &records, now()) {
+        return api_error(e);
+    }
+    let _ = a.tx.send(json!({"type":"state_updated"}));
+    for record in &records {
+        if let Some(id) = record["meeting"]["instanceId"].as_str() {
+            emit_record_updated(&a, id);
+        }
+    }
+    Json(json!({"records":records.len(),"roster":docs[0].1.as_array().map_or(0, Vec::len),"aliases":docs[1].1.as_array().map_or(0, Vec::len),"profiles":docs[2].1.as_array().map_or(0, Vec::len)})).into_response()
+}
+fn backup_counts(value: &Value) -> Value {
+    json!({"records":value["records"].as_array().or_else(||value["sessions"].as_array()).map_or(0, Vec::len),"roster":value["rosterPeople"].as_array().map_or(0, Vec::len),"aliases":value["aliasMappings"].as_array().map_or(0, Vec::len),"profiles":value["attendanceProfiles"].as_array().map_or(0, Vec::len)})
+}
+fn validate_full_backup(body: &Value) -> Result<(Vec<(String, Value)>, Vec<Value>), String> {
+    let fields = [
+        ("roster", "rosterPeople"),
+        ("aliases", "aliasMappings"),
+        ("profiles", "attendanceProfiles"),
+        ("settings", "settings"),
+    ];
+    let mut docs = Vec::new();
+    for (key, field) in fields {
+        let value = body.get(field).cloned().unwrap_or_else(|| {
+            if key == "settings" {
+                json!({})
+            } else {
+                json!([])
+            }
+        });
+        if let Some(error) = config_schema_error(key, &value) {
+            return Err(error);
+        }
+        docs.push((key.to_owned(), value));
+    }
+    let records = if let Some(records) = body["records"].as_array() {
+        records.clone()
+    } else if let Some(sessions) = body["sessions"].as_array() {
+        let mut records = Vec::new();
+        for (i, session) in sessions.iter().enumerate() {
+            let normalized = normalize_imported_record(session, i)?;
+            records.push(json!({"meeting":normalized["meeting"],"events":[]}));
+        }
+        records
+    } else {
+        return Err("records or sessions must be an array".to_owned());
+    };
+    let mut record_ids = std::collections::HashSet::new();
+    for (i, record) in records.iter().enumerate() {
+        let meeting = &record["meeting"];
+        if meeting["instanceId"].as_str().is_none()
+            || !meeting["startedAt"].is_u64()
+            || !record["events"].is_array()
+        {
+            return Err(format!("record {i} must contain a meeting with instanceId and startedAt, and an events array"));
+        }
+        if !record_ids.insert(meeting["instanceId"].as_str().unwrap()) {
+            return Err(format!("record {i} has a duplicate instanceId"));
+        }
+        if meeting["startedAt"].as_u64().unwrap() > i64::MAX as u64 {
+            return Err(format!("record {i} has an out-of-range start time"));
+        }
+        let mut sequences = std::collections::HashSet::new();
+        for (j, event) in record["events"].as_array().unwrap().iter().enumerate() {
+            if event["seq"].as_u64().is_none()
+                || event["at"].as_u64().is_none()
+                || event["kind"].as_str().is_none()
+            {
+                return Err(format!("record {i} event {j} is invalid"));
+            }
+            if event["seq"].as_u64().unwrap() > i64::MAX as u64
+                || event["at"].as_u64().unwrap() > i64::MAX as u64
+                || !sequences.insert(event["seq"].as_u64().unwrap())
+            {
+                return Err(format!(
+                    "record {i} event {j} has an invalid or duplicate sequence/timestamp"
+                ));
+            }
+        }
+    }
+    Ok((docs, records))
+}
+async fn api_backup_preview(
+    State(a): State<App>,
+    headers: HeaderMap,
+    Json(body): Json<Value>,
+) -> Response {
+    if let Some(r) = api_origin(&a, &headers) {
+        return r;
+    }
+    if body["version"]
+        .as_u64()
+        .or_else(|| body["schemaVersion"].as_u64())
+        != Some(3)
+    {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({"errors":["expected AttendFlow backup v3"]})),
+        )
+            .into_response();
+    }
+    let validated = validate_full_backup(&body);
+    let errors: Vec<String> = validated.as_ref().err().cloned().into_iter().collect();
+    let incoming = backup_counts(&body);
+    let current = json!({"records":a.store.meetings().map_or(0,|v|v.len()),"roster":a.store.get_doc("roster").map_or(0,|v|v.1.as_array().map_or(0,Vec::len)),"aliases":a.store.get_doc("aliases").map_or(0,|v|v.1.as_array().map_or(0,Vec::len)),"profiles":a.store.get_doc("profiles").map_or(0,|v|v.1.as_array().map_or(0,Vec::len))});
+    Json(json!({"version":3,"exportedAt":body["exportedAt"],"current":current,"backup":incoming,"errors":errors})).into_response()
 }
 async fn api_clear_local_data(State(a): State<App>, headers: HeaderMap) -> Response {
     if let Some(r) = api_origin(&a, &headers) {
@@ -2972,8 +3648,13 @@ async fn api_clear_local_data(State(a): State<App>, headers: HeaderMap) -> Respo
         )
             .into_response();
     }
-    match a.store.clear_records() {
-        Ok(()) => Json(json!({"cleared":true})).into_response(),
+    let profile = json!({"id":"default-all","name":"All participants","description":"Factory default profile","includedSubgroups":[],"lateAfterMinutes":10,"returnWindowMinutes":8,"meetingIds":[],"topicKeywords":[],"groupSortOrder":[],"active":true,"isDefault":true});
+    match a.store.clear_all_with_counts(&profile, now()) {
+        Ok((records, roster, aliases, profiles)) => {
+            let _ = a.tx.send(json!({"type":"state_updated"}));
+            Json(json!({"records":records,"roster":roster,"aliases":aliases,"profiles":profiles}))
+                .into_response()
+        }
         Err(e) => api_error(e),
     }
 }
@@ -3301,22 +3982,73 @@ async fn fake_record_api_returns_attendflow_row_shape() {
 async fn record_state_captures_persist_and_export_marks_downloaded() {
     use http_body_util::BodyExt;
     use tower::ServiceExt;
-    let store=Arc::new(Store::open(std::env::temp_dir().join(format!("zc-export-state-{}.db",now()))).unwrap());
-    let meeting=json!({"instanceId":"export-meeting","meetingNumber":"42","topic":"Export test","startedAt":1000,"isHost":false});
-    store.upsert_meeting(&meeting,None,1).unwrap();
-    let app=App{tx:broadcast::channel(8).0,tracker:Arc::new(Mutex::new(Tracker::default())),session:Arc::new(Mutex::new(None)),shutdown:Arc::new(AtomicBool::new(false)),port:47812,allowed:vec![],ui:None,log_dir:std::env::temp_dir(),store:store.clone(),provider:Arc::new(StubRecordProvider),record_updates:Arc::new(Mutex::new(Default::default())),link:Default::default()};
-    let api=Router::new().route("/api/meetings/:id/state",get(api_get_state).put(api_put_state)).route("/api/meetings/:id/export",get(api_record_export)).with_state(app);
-    let captured=json!({"mode":"generic","manualSnapshots":[{"id":"snap-1","timestamp":"2026-11-17T00:00:00Z","participants":[{"screenName":"Ada","location":"meeting","matchStatus":"matched"}]}],"raiseHandCaptures":[{"id":"hands-1","timestamp":"2026-11-17T00:01:00Z","screenNames":["Ada"],"totalCount":1}],"raiseHandEntries":[{"participantUUID":"7","screenName":"Ada","action":"raise"}],"needsExport":true});
-    let put=api.clone().oneshot(axum::http::Request::builder().method("PUT").uri("/api/meetings/export-meeting/state").header("content-type","application/json").body(axum::body::Body::from(json!({"revision":0,"value":captured}).to_string())).unwrap()).await.unwrap();
-    assert_eq!(put.status(),StatusCode::OK);
-    let export=api.oneshot(axum::http::Request::builder().uri("/api/meetings/export-meeting/export?kind=json&language=en").body(axum::body::Body::empty()).unwrap()).await.unwrap();
-    assert_eq!(export.status(),StatusCode::OK);
-    let bundle:Value=serde_json::from_slice(&export.into_body().collect().await.unwrap().to_bytes()).unwrap();
-    assert_eq!(bundle["version"],3); assert_eq!(bundle["session"]["manualSnapshots"][0]["participants"][0]["screenName"],"Ada"); assert_eq!(bundle["session"]["raiseHandCaptures"][0]["totalCount"],1);
-    let (_,saved)=store.get_state("export-meeting").unwrap(); assert!(!saved["exportedAt"].is_null()); assert_eq!(saved["needsExport"],false);
+    let store = Arc::new(
+        Store::open(std::env::temp_dir().join(format!("zc-export-state-{}.db", now()))).unwrap(),
+    );
+    let meeting = json!({"instanceId":"export-meeting","meetingNumber":"42","topic":"Export test","startedAt":1000,"isHost":false});
+    store.upsert_meeting(&meeting, None, 1).unwrap();
+    let app = App {
+        tx: broadcast::channel(8).0,
+        tracker: Arc::new(Mutex::new(Tracker::default())),
+        session: Arc::new(Mutex::new(None)),
+        shutdown: Arc::new(AtomicBool::new(false)),
+        port: 47812,
+        allowed: vec![],
+        ui: None,
+        log_dir: std::env::temp_dir(),
+        store: store.clone(),
+        provider: Arc::new(StubRecordProvider),
+        record_updates: Arc::new(Mutex::new(Default::default())),
+        link: Default::default(),
+    };
+    let api = Router::new()
+        .route(
+            "/api/meetings/:id/state",
+            get(api_get_state).put(api_put_state),
+        )
+        .route("/api/meetings/:id/export", get(api_record_export))
+        .with_state(app);
+    let captured = json!({"mode":"generic","manualSnapshots":[{"id":"snap-1","timestamp":"2026-11-17T00:00:00Z","participants":[{"screenName":"Ada","location":"meeting","matchStatus":"matched"}]}],"raiseHandCaptures":[{"id":"hands-1","timestamp":"2026-11-17T00:01:00Z","screenNames":["Ada"],"totalCount":1}],"raiseHandEntries":[{"participantUUID":"7","screenName":"Ada","action":"raise"}],"needsExport":true});
+    let put = api
+        .clone()
+        .oneshot(
+            axum::http::Request::builder()
+                .method("PUT")
+                .uri("/api/meetings/export-meeting/state")
+                .header("content-type", "application/json")
+                .body(axum::body::Body::from(
+                    json!({"revision":0,"value":captured}).to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(put.status(), StatusCode::OK);
+    let export = api
+        .oneshot(
+            axum::http::Request::builder()
+                .uri("/api/meetings/export-meeting/export?kind=json&language=en")
+                .body(axum::body::Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(export.status(), StatusCode::OK);
+    let bundle: Value =
+        serde_json::from_slice(&export.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(bundle["version"], 3);
+    assert_eq!(
+        bundle["session"]["manualSnapshots"][0]["participants"][0]["screenName"],
+        "Ada"
+    );
+    assert_eq!(bundle["session"]["raiseHandCaptures"][0]["totalCount"], 1);
+    let (_, saved) = store.get_state("export-meeting").unwrap();
+    assert!(!saved["exportedAt"].is_null());
+    assert_eq!(saved["needsExport"], false);
 }
 #[tokio::test]
 async fn backup_import_revision_conflict_and_state_notification() {
+    use http_body_util::BodyExt;
     use tower::ServiceExt;
     let store = Arc::new(
         Store::open(std::env::temp_dir().join(format!("zc-api-import-{}.db", now()))).unwrap(),
@@ -3344,6 +4076,7 @@ async fn backup_import_revision_conflict_and_state_notification() {
             "/api/backup",
             get(api_export_backup).post(api_restore_backup),
         )
+        .route("/api/backup/preview", post(api_backup_preview))
         .route("/api/records/export", get(api_export_records))
         .route("/api/records/delete", post(api_delete_records))
         .route("/api/config/:key", get(api_get_config).put(api_put_config))
@@ -3382,6 +4115,39 @@ async fn backup_import_revision_conflict_and_state_notification() {
             .len(),
         1
     );
+    let preview_backup = json!({"version":3,"exportedAt":7,"rosterPeople":[],"aliasMappings":[],"attendanceProfiles":[],"settings":{},"records":[{"meeting":{"instanceId":"m2","meetingNumber":"2","startedAt":2,"isHost":false},"events":[]}]});
+    let preview_req = axum::http::Request::builder()
+        .method("POST")
+        .uri("/api/backup/preview")
+        .header("content-type", "application/json")
+        .body(axum::body::Body::from(preview_backup.to_string()))
+        .unwrap();
+    let preview_response = api.clone().oneshot(preview_req).await.unwrap();
+    assert_eq!(preview_response.status(), StatusCode::OK);
+    let preview: Value = serde_json::from_slice(
+        &preview_response
+            .into_body()
+            .collect()
+            .await
+            .unwrap()
+            .to_bytes(),
+    )
+    .unwrap();
+    assert_eq!(preview["current"]["records"], 1);
+    assert_eq!(preview["backup"]["records"], 1);
+    assert_eq!(preview["errors"], json!([]));
+    let invalid = json!({"version":3,"rosterPeople":"bad","aliasMappings":[],"attendanceProfiles":[],"settings":{},"records":[]});
+    let invalid_req = axum::http::Request::builder()
+        .method("POST")
+        .uri("/api/backup")
+        .header("content-type", "application/json")
+        .body(axum::body::Body::from(invalid.to_string()))
+        .unwrap();
+    assert_eq!(
+        api.clone().oneshot(invalid_req).await.unwrap().status(),
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+    assert!(store.meeting("m1").unwrap().is_some());
     let req = axum::http::Request::builder()
         .uri("/api/backup")
         .body(axum::body::Body::empty())
@@ -3444,113 +4210,364 @@ async fn backup_import_revision_conflict_and_state_notification() {
 async fn reconciliation_decisions_commit_aliases_atomically_and_revert_keeps_aliases() {
     use http_body_util::BodyExt;
     use tower::ServiceExt;
-    let store=Arc::new(Store::open(std::env::temp_dir().join(format!("zc-reconcile-{}.db",now()))).unwrap());
+    let store = Arc::new(
+        Store::open(std::env::temp_dir().join(format!("zc-reconcile-{}.db", now()))).unwrap(),
+    );
     store.upsert_meeting(&json!({"instanceId":"rec-1","meetingNumber":"1","topic":"Demo","startedAt":1,"isHost":false}),None,1).unwrap();
-    store.put_doc("roster",0,&json!([
-        {"personId":1,"canonicalName":"Ada Lovelace","pinyin":"ada lovelace","active":true},
-        {"personId":2,"canonicalName":"Grace Hopper","pinyin":"grace hopper","active":true}
-    ]),now()).unwrap().unwrap();
+    store
+        .put_doc(
+            "roster",
+            0,
+            &json!([
+                {"personId":1,"canonicalName":"Ada Lovelace","pinyin":"ada lovelace","active":true},
+                {"personId":2,"canonicalName":"Grace Hopper","pinyin":"grace hopper","active":true}
+            ]),
+            now(),
+        )
+        .unwrap()
+        .unwrap();
     store.put_doc("aliases",0,&json!([{"zoomName":"Known Nick","personId":2,"notes":""},{"zoomName":"Guest Nick","personId":1,"notes":""},{"zoomName":"Shared Nick","personId":1,"notes":""}]),now()).unwrap().unwrap();
-    let app=App{tx:broadcast::channel(8).0,tracker:Arc::new(Mutex::new(Tracker::default())),session:Arc::new(Mutex::new(None)),shutdown:Arc::new(AtomicBool::new(false)),port:47812,allowed:vec![],ui:None,log_dir:std::env::temp_dir(),store:store.clone(),provider:Arc::new(StubRecordProvider),record_updates:Arc::new(Mutex::new(Default::default())),link:Default::default()};
-    let api=Router::new().route("/api/meetings/:id/reconciliation",post(api_reconciliation_decision)).route("/api/meetings/:id/state",get(api_get_state)).with_state(app);
-    async fn post_decision(api:&Router,body:Value)->axum::http::Response<axum::body::Body>{let req=axum::http::Request::builder().method("POST").uri("/api/meetings/rec-1/reconciliation").header("content-type","application/json").body(axum::body::Body::from(body.to_string())).unwrap();api.clone().oneshot(req).await.unwrap()}
-    let decision=|id:&str,name:&str,action:&str,person:Option<u64>|{let mut d=json!({"id":id,"sessionParticipantId":id,"zoomName":name,"zoomNameAtDecision":name,"action":action,"createdAt":"2026-11-17T00:00:00Z"});if let Some(p)=person{d["personId"]=json!(p)}d};
-    let state=json!({"mode":"roster","decisions":[]});
+    let app = App {
+        tx: broadcast::channel(8).0,
+        tracker: Arc::new(Mutex::new(Tracker::default())),
+        session: Arc::new(Mutex::new(None)),
+        shutdown: Arc::new(AtomicBool::new(false)),
+        port: 47812,
+        allowed: vec![],
+        ui: None,
+        log_dir: std::env::temp_dir(),
+        store: store.clone(),
+        provider: Arc::new(StubRecordProvider),
+        record_updates: Arc::new(Mutex::new(Default::default())),
+        link: Default::default(),
+    };
+    let api = Router::new()
+        .route(
+            "/api/meetings/:id/reconciliation",
+            post(api_reconciliation_decision),
+        )
+        .route("/api/meetings/:id/state", get(api_get_state))
+        .with_state(app);
+    async fn post_decision(api: &Router, body: Value) -> axum::http::Response<axum::body::Body> {
+        let req = axum::http::Request::builder()
+            .method("POST")
+            .uri("/api/meetings/rec-1/reconciliation")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(body.to_string()))
+            .unwrap();
+        api.clone().oneshot(req).await.unwrap()
+    }
+    let decision = |id: &str, name: &str, action: &str, person: Option<u64>| {
+        let mut d = json!({"id":id,"sessionParticipantId":id,"zoomName":name,"zoomNameAtDecision":name,"action":action,"createdAt":"2026-11-17T00:00:00Z"});
+        if let Some(p) = person {
+            d["personId"] = json!(p)
+        }
+        d
+    };
+    let state = json!({"mode":"roster","decisions":[]});
     let conflict=post_decision(&api,json!({"revision":0,"aliasesRevision":1,"value":state,"decision":decision("d0","Known Nick","match",Some(1))})).await;
-    assert_eq!(conflict.status(),StatusCode::UNPROCESSABLE_ENTITY);
-    assert_eq!(store.get_state("rec-1").unwrap().0,0,"alias conflict must not write the decision");
-    assert_eq!(store.get_doc("aliases").unwrap().1[0]["personId"],2);
+    assert_eq!(conflict.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        store.get_state("rec-1").unwrap().0,
+        0,
+        "alias conflict must not write the decision"
+    );
+    assert_eq!(store.get_doc("aliases").unwrap().1[0]["personId"], 2);
     let matched=post_decision(&api,json!({"revision":0,"aliasesRevision":1,"value":state,"decision":decision("d1","New Nick","match",Some(1))})).await;
-    assert_eq!(matched.status(),StatusCode::OK);
-    assert_eq!(store.get_state("rec-1").unwrap().1["reconciliationDecisions"][0]["action"],"match");
-    assert!(store.get_doc("aliases").unwrap().1.as_array().unwrap().iter().any(|a|a["zoomName"]=="New Nick"&&a["personId"]==1));
+    assert_eq!(matched.status(), StatusCode::OK);
+    assert_eq!(
+        store.get_state("rec-1").unwrap().1["reconciliationDecisions"][0]["action"],
+        "match"
+    );
+    assert!(store
+        .get_doc("aliases")
+        .unwrap()
+        .1
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|a| a["zoomName"] == "New Nick" && a["personId"] == 1));
     let guest=post_decision(&api,json!({"revision":1,"aliasesRevision":2,"value":store.get_state("rec-1").unwrap().1,"decision":decision("d2","Guest Nick","guest",None)})).await;
-    assert_eq!(guest.status(),StatusCode::OK);assert!(!store.get_doc("aliases").unwrap().1.as_array().unwrap().iter().any(|a|a["zoomName"]=="Guest Nick"));
+    assert_eq!(guest.status(), StatusCode::OK);
+    assert!(!store
+        .get_doc("aliases")
+        .unwrap()
+        .1
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|a| a["zoomName"] == "Guest Nick"));
     let split=post_decision(&api,json!({"revision":2,"aliasesRevision":3,"value":store.get_state("rec-1").unwrap().1,"decision":decision("d3","Shared Nick","split",None)})).await;
-    assert_eq!(split.status(),StatusCode::OK);assert!(!store.get_doc("aliases").unwrap().1.as_array().unwrap().iter().any(|a|a["zoomName"]=="Shared Nick"));
+    assert_eq!(split.status(), StatusCode::OK);
+    assert!(!store
+        .get_doc("aliases")
+        .unwrap()
+        .1
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|a| a["zoomName"] == "Shared Nick"));
     let revert=post_decision(&api,json!({"revision":3,"aliasesRevision":4,"value":store.get_state("rec-1").unwrap().1,"revertId":"d1"})).await;
-    assert_eq!(revert.status(),StatusCode::OK);let stored=store.get_state("rec-1").unwrap().1;assert!(!stored["reconciliationDecisions"].as_array().unwrap().iter().any(|d|d["id"]=="d1"));assert!(store.get_doc("aliases").unwrap().1.as_array().unwrap().iter().any(|a|a["zoomName"]=="New Nick"),"revert leaves aliases in place");
-    let stale=post_decision(&api,json!({"revision":0,"aliasesRevision":4,"value":state,"decision":decision("d4","Other Nick","guest",None)})).await;assert_eq!(stale.status(),StatusCode::CONFLICT);
-    let _=matched.into_body().collect().await.unwrap();
+    assert_eq!(revert.status(), StatusCode::OK);
+    let stored = store.get_state("rec-1").unwrap().1;
+    assert!(!stored["reconciliationDecisions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|d| d["id"] == "d1"));
+    assert!(
+        store
+            .get_doc("aliases")
+            .unwrap()
+            .1
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|a| a["zoomName"] == "New Nick"),
+        "revert leaves aliases in place"
+    );
+    let stale=post_decision(&api,json!({"revision":0,"aliasesRevision":4,"value":state,"decision":decision("d4","Other Nick","guest",None)})).await;
+    assert_eq!(stale.status(), StatusCode::CONFLICT);
+    let _ = matched.into_body().collect().await.unwrap();
 }
 
 #[test]
 fn imported_attendflow_session_keeps_derived_rows_and_marks_read_only_source() {
-    let bundle=json!({"version":3,"session":{"sessionId":"af-1","metadata":{"meetingId":"123456","meetingTopic":"Example","startedAt":1700000000000_u64},"derivedRows":[{"zoomName":"Ada","currentStatus":"present"}]}});
-    let imported=normalize_imported_record(&bundle,0).unwrap();
-    assert_eq!(imported["source"],"imported");
-    assert_eq!(imported["meeting"]["source"],"imported");
-    assert_eq!(imported["record"]["rows"][0]["zoomName"],"Ada");
+    let bundle = json!({"version":3,"session":{"sessionId":"af-1","metadata":{"meetingId":"123456","meetingTopic":"Example","startedAt":1700000000000_u64},"derivedRows":[{"zoomName":"Ada","currentStatus":"present"}]}});
+    let imported = normalize_imported_record(&bundle, 0).unwrap();
+    assert_eq!(imported["source"], "imported");
+    assert_eq!(imported["meeting"]["source"], "imported");
+    assert_eq!(imported["record"]["rows"][0]["zoomName"], "Ada");
 }
 
 #[test]
 fn exported_iso_session_start_and_end_times_import_as_milliseconds() {
-    let bundle=json!({"version":3,"exportedAt":"2026-11-17T00:00:00Z","session":{"sessionId":"exported-1","meetingId":"123","meetingTopic":"Example","startedAt":"2026-11-17T00:00:01.000Z","endedAt":"2026-11-17T00:01:01.000Z","derivedRows":[]}});
-    let imported=normalize_imported_record(&bundle,0).unwrap();
-    assert_eq!(imported["meeting"]["startedAt"],1_794_873_601_000_u64);
-    assert_eq!(imported["meeting"]["endedAt"],1_794_873_661_000_u64);
+    let bundle = json!({"version":3,"exportedAt":"2026-11-17T00:00:00Z","session":{"sessionId":"exported-1","meetingId":"123","meetingTopic":"Example","startedAt":"2026-11-17T00:00:01.000Z","endedAt":"2026-11-17T00:01:01.000Z","derivedRows":[]}});
+    let imported = normalize_imported_record(&bundle, 0).unwrap();
+    assert_eq!(imported["meeting"]["startedAt"], 1_794_873_601_000_u64);
+    assert_eq!(imported["meeting"]["endedAt"], 1_794_873_661_000_u64);
 }
 
 #[test]
 fn profile_validation_rejects_bad_wildcards_thresholds_and_default_removal() {
-    let store=Arc::new(Store::open(std::env::temp_dir().join(format!("zc-profile-validation-{}.db",now()))).unwrap());
-    let factory=json!([{"id":"default-all","name":"All participants","includedSubgroups":[],"lateAfterMinutes":10,"returnWindowMinutes":8,"meetingIds":[],"topicKeywords":[],"groupSortOrder":[],"active":true}]);
-    store.put_doc("profiles",0,&factory,now()).unwrap().unwrap();
-    let app=App{tx:broadcast::channel(2).0,tracker:Arc::new(Mutex::new(Tracker::default())),session:Arc::new(Mutex::new(None)),shutdown:Arc::new(AtomicBool::new(false)),port:47812,allowed:vec![],ui:None,log_dir:std::env::temp_dir(),store,provider:Arc::new(StubRecordProvider),record_updates:Arc::new(Mutex::new(Default::default())),link:Default::default()};
-    assert!(validate_config(&app,"profiles",&json!([])).unwrap().contains("required"));
-    let mut renamed=factory.clone();renamed[0]["name"]=json!("Renamed");
-    assert!(validate_config(&app,"profiles",&renamed).unwrap().contains("name is locked"));
-    let mut wildcard=factory.clone();wildcard[0]["includedSubgroups"]=json!(["team-**"]);
-    assert!(validate_config(&app,"profiles",&wildcard).unwrap().contains("wildcard"));
-    let mut threshold=factory;threshold[0]["lateAfterMinutes"]=json!(0);
-    assert!(validate_config(&app,"profiles",&threshold).unwrap().contains("positive integer"));
+    let store = Arc::new(
+        Store::open(std::env::temp_dir().join(format!("zc-profile-validation-{}.db", now())))
+            .unwrap(),
+    );
+    let factory = json!([{"id":"default-all","name":"All participants","includedSubgroups":[],"lateAfterMinutes":10,"returnWindowMinutes":8,"meetingIds":[],"topicKeywords":[],"groupSortOrder":[],"active":true}]);
+    store
+        .put_doc("profiles", 0, &factory, now())
+        .unwrap()
+        .unwrap();
+    let app = App {
+        tx: broadcast::channel(2).0,
+        tracker: Arc::new(Mutex::new(Tracker::default())),
+        session: Arc::new(Mutex::new(None)),
+        shutdown: Arc::new(AtomicBool::new(false)),
+        port: 47812,
+        allowed: vec![],
+        ui: None,
+        log_dir: std::env::temp_dir(),
+        store,
+        provider: Arc::new(StubRecordProvider),
+        record_updates: Arc::new(Mutex::new(Default::default())),
+        link: Default::default(),
+    };
+    assert!(validate_config(&app, "profiles", &json!([]))
+        .unwrap()
+        .contains("required"));
+    let mut renamed = factory.clone();
+    renamed[0]["name"] = json!("Renamed");
+    assert!(validate_config(&app, "profiles", &renamed)
+        .unwrap()
+        .contains("name is locked"));
+    let mut wildcard = factory.clone();
+    wildcard[0]["includedSubgroups"] = json!(["team-**"]);
+    assert!(validate_config(&app, "profiles", &wildcard)
+        .unwrap()
+        .contains("wildcard"));
+    let mut threshold = factory;
+    threshold[0]["lateAfterMinutes"] = json!(0);
+    assert!(validate_config(&app, "profiles", &threshold)
+        .unwrap()
+        .contains("positive integer"));
 }
 
 #[tokio::test]
 async fn example_data_conflict_aborts_all_three_config_documents() {
-    let store=Arc::new(Store::open(std::env::temp_dir().join(format!("zc-example-conflict-{}.db",now()))).unwrap());
-    let original=json!([{"personId":1,"canonicalName":"Existing"}]);store.put_doc("roster",0,&original,now()).unwrap().unwrap();
-    let app=App{tx:broadcast::channel(2).0,tracker:Arc::new(Mutex::new(Tracker::default())),session:Arc::new(Mutex::new(None)),shutdown:Arc::new(AtomicBool::new(false)),port:47812,allowed:vec![],ui:None,log_dir:std::env::temp_dir(),store:store.clone(),provider:Arc::new(StubRecordProvider),record_updates:Arc::new(Mutex::new(Default::default())),link:Default::default()};
-    let body=json!({"roster":[{"personId":2,"canonicalName":"Existing"}],"aliases":[{"zoomName":"Alias","personId":2}],"profiles":[{"id":"example-one","name":"Example"}]});
-    let response=api_example_data_commit(State(app),HeaderMap::new(),Json(body)).await;
-    assert_eq!(response.status(),StatusCode::CONFLICT);
-    assert_eq!(store.get_doc("roster").unwrap().1,original);
-    assert_eq!(store.get_doc("aliases").unwrap().1,json!([]));
-    assert_eq!(store.get_doc("profiles").unwrap().1,json!([]));
+    let store = Arc::new(
+        Store::open(std::env::temp_dir().join(format!("zc-example-conflict-{}.db", now())))
+            .unwrap(),
+    );
+    let original = json!([{"personId":1,"canonicalName":"Existing"}]);
+    store
+        .put_doc("roster", 0, &original, now())
+        .unwrap()
+        .unwrap();
+    let app = App {
+        tx: broadcast::channel(2).0,
+        tracker: Arc::new(Mutex::new(Tracker::default())),
+        session: Arc::new(Mutex::new(None)),
+        shutdown: Arc::new(AtomicBool::new(false)),
+        port: 47812,
+        allowed: vec![],
+        ui: None,
+        log_dir: std::env::temp_dir(),
+        store: store.clone(),
+        provider: Arc::new(StubRecordProvider),
+        record_updates: Arc::new(Mutex::new(Default::default())),
+        link: Default::default(),
+    };
+    let body = json!({"roster":[{"personId":2,"canonicalName":"Existing"}],"aliases":[{"zoomName":"Alias","personId":2}],"profiles":[{"id":"example-one","name":"Example"}]});
+    let response = api_example_data_commit(State(app), HeaderMap::new(), Json(body)).await;
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert_eq!(store.get_doc("roster").unwrap().1, original);
+    assert_eq!(store.get_doc("aliases").unwrap().1, json!([]));
+    assert_eq!(store.get_doc("profiles").unwrap().1, json!([]));
 }
 
 #[tokio::test]
 async fn profile_json_import_preview_and_commit_upsert_by_id() {
-    use http_body_util::BodyExt; use tower::ServiceExt;
-    let store=Arc::new(Store::open(std::env::temp_dir().join(format!("zc-profile-import-{}.db",now()))).unwrap());
-    let factory=json!([{"id":"default-all","name":"All participants","includedSubgroups":[],"lateAfterMinutes":10,"returnWindowMinutes":8,"meetingIds":[],"topicKeywords":[],"groupSortOrder":[],"active":true}]);store.put_doc("profiles",0,&factory,now()).unwrap().unwrap();
-    let app=App{tx:broadcast::channel(2).0,tracker:Arc::new(Mutex::new(Tracker::default())),session:Arc::new(Mutex::new(None)),shutdown:Arc::new(AtomicBool::new(false)),port:47812,allowed:vec![],ui:None,log_dir:std::env::temp_dir(),store:store.clone(),provider:Arc::new(StubRecordProvider),record_updates:Arc::new(Mutex::new(Default::default())),link:Default::default()};
-    let api=Router::new().route("/api/profiles/import/preview",post(api_profiles_import_preview)).route("/api/profiles/import/commit",post(api_profiles_import_commit)).with_state(app);
-    let incoming=json!({"profiles":[{"id":"p1","name":"Profile one","description":"x","includedSubgroups":["Team-*"],"lateAfterMinutes":5,"returnWindowMinutes":6,"meetingIds":[],"topicKeywords":[],"groupSortOrder":[],"active":true,"blacklist":["ignored"]}]});
-    let req=axum::http::Request::builder().method("POST").uri("/api/profiles/import/preview").header("content-type","application/json").body(axum::body::Body::from(incoming.to_string())).unwrap();
-    let response=api.clone().oneshot(req).await.unwrap();assert_eq!(response.status(),StatusCode::OK);let plan:Value=serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap();
-    assert_eq!(plan["changes"][0]["action"],"add");assert!(plan["value"][1]["blacklist"].is_null());
-    let req=axum::http::Request::builder().method("POST").uri("/api/profiles/import/commit").header("content-type","application/json").body(axum::body::Body::from(plan.to_string())).unwrap();
-    assert_eq!(api.oneshot(req).await.unwrap().status(),StatusCode::OK);assert_eq!(store.get_doc("profiles").unwrap().1.as_array().unwrap().len(),2);
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+    let store = Arc::new(
+        Store::open(std::env::temp_dir().join(format!("zc-profile-import-{}.db", now()))).unwrap(),
+    );
+    let factory = json!([{"id":"default-all","name":"All participants","includedSubgroups":[],"lateAfterMinutes":10,"returnWindowMinutes":8,"meetingIds":[],"topicKeywords":[],"groupSortOrder":[],"active":true}]);
+    store
+        .put_doc("profiles", 0, &factory, now())
+        .unwrap()
+        .unwrap();
+    let app = App {
+        tx: broadcast::channel(2).0,
+        tracker: Arc::new(Mutex::new(Tracker::default())),
+        session: Arc::new(Mutex::new(None)),
+        shutdown: Arc::new(AtomicBool::new(false)),
+        port: 47812,
+        allowed: vec![],
+        ui: None,
+        log_dir: std::env::temp_dir(),
+        store: store.clone(),
+        provider: Arc::new(StubRecordProvider),
+        record_updates: Arc::new(Mutex::new(Default::default())),
+        link: Default::default(),
+    };
+    let api = Router::new()
+        .route(
+            "/api/profiles/import/preview",
+            post(api_profiles_import_preview),
+        )
+        .route(
+            "/api/profiles/import/commit",
+            post(api_profiles_import_commit),
+        )
+        .with_state(app);
+    let incoming = json!({"profiles":[{"id":"p1","name":"Profile one","description":"x","includedSubgroups":["Team-*"],"lateAfterMinutes":5,"returnWindowMinutes":6,"meetingIds":[],"topicKeywords":[],"groupSortOrder":[],"active":true,"blacklist":["ignored"]}]});
+    let req = axum::http::Request::builder()
+        .method("POST")
+        .uri("/api/profiles/import/preview")
+        .header("content-type", "application/json")
+        .body(axum::body::Body::from(incoming.to_string()))
+        .unwrap();
+    let response = api.clone().oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let plan: Value =
+        serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(plan["changes"][0]["action"], "add");
+    assert!(plan["value"][1]["blacklist"].is_null());
+    let req = axum::http::Request::builder()
+        .method("POST")
+        .uri("/api/profiles/import/commit")
+        .header("content-type", "application/json")
+        .body(axum::body::Body::from(plan.to_string()))
+        .unwrap();
+    assert_eq!(api.oneshot(req).await.unwrap().status(), StatusCode::OK);
+    assert_eq!(
+        store
+            .get_doc("profiles")
+            .unwrap()
+            .1
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
 }
 
 #[tokio::test]
 async fn attendflow_record_import_preview_then_commit_stores_derived_rows() {
-    use http_body_util::BodyExt; use tower::ServiceExt;
-    let store=Arc::new(Store::open(std::env::temp_dir().join(format!("zc-record-import-{}.db",now()))).unwrap());
-    let app=App{tx:broadcast::channel(2).0,tracker:Arc::new(Mutex::new(Tracker::default())),session:Arc::new(Mutex::new(None)),shutdown:Arc::new(AtomicBool::new(false)),port:47812,allowed:vec![],ui:None,log_dir:std::env::temp_dir(),store:store.clone(),provider:Arc::new(StubRecordProvider),record_updates:Arc::new(Mutex::new(Default::default())),link:Default::default()};
-    let api=Router::new().route("/api/records/import/preview",post(api_records_import_preview)).route("/api/records/import/commit",post(api_records_import_commit)).route("/api/meetings/:id/record",get(api_record)).with_state(app);
-    let input=json!({"version":3,"session":{"sessionId":"af-session","metadata":{"meetingId":"4321","meetingTopic":"Imported session","startedAt":1700000000000_u64},"derivedRows":[{"zoomName":"Ada","currentStatus":"present"}]}});
-    let req=axum::http::Request::builder().method("POST").uri("/api/records/import/preview").header("content-type","application/json").body(axum::body::Body::from(input.to_string())).unwrap();
-    let response=api.clone().oneshot(req).await.unwrap();let plan:Value=serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap();assert_eq!(plan["plans"][0]["action"],"add");
-    let req=axum::http::Request::builder().method("POST").uri("/api/records/import/commit").header("content-type","application/json").body(axum::body::Body::from(plan.to_string())).unwrap();assert_eq!(api.clone().oneshot(req).await.unwrap().status(),StatusCode::OK);
-    let id=plan["plans"][0]["value"]["meeting"]["instanceId"].as_str().unwrap();assert!(store.meeting(id).unwrap().is_some());let req=axum::http::Request::builder().uri(format!("/api/meetings/{id}/record")).body(axum::body::Body::empty()).unwrap();let response=api.oneshot(req).await.unwrap();assert_eq!(response.status(),StatusCode::OK);let record:Value=serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap();assert_eq!(record["rows"][0]["zoomName"],"Ada");
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+    let store = Arc::new(
+        Store::open(std::env::temp_dir().join(format!("zc-record-import-{}.db", now()))).unwrap(),
+    );
+    let app = App {
+        tx: broadcast::channel(2).0,
+        tracker: Arc::new(Mutex::new(Tracker::default())),
+        session: Arc::new(Mutex::new(None)),
+        shutdown: Arc::new(AtomicBool::new(false)),
+        port: 47812,
+        allowed: vec![],
+        ui: None,
+        log_dir: std::env::temp_dir(),
+        store: store.clone(),
+        provider: Arc::new(StubRecordProvider),
+        record_updates: Arc::new(Mutex::new(Default::default())),
+        link: Default::default(),
+    };
+    let api = Router::new()
+        .route(
+            "/api/records/import/preview",
+            post(api_records_import_preview),
+        )
+        .route(
+            "/api/records/import/commit",
+            post(api_records_import_commit),
+        )
+        .route("/api/meetings/:id/record", get(api_record))
+        .with_state(app);
+    let input = json!({"version":3,"session":{"sessionId":"af-session","metadata":{"meetingId":"4321","meetingTopic":"Imported session","startedAt":1700000000000_u64},"derivedRows":[{"zoomName":"Ada","currentStatus":"present"}]}});
+    let req = axum::http::Request::builder()
+        .method("POST")
+        .uri("/api/records/import/preview")
+        .header("content-type", "application/json")
+        .body(axum::body::Body::from(input.to_string()))
+        .unwrap();
+    let response = api.clone().oneshot(req).await.unwrap();
+    let plan: Value =
+        serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(plan["plans"][0]["action"], "add");
+    let req = axum::http::Request::builder()
+        .method("POST")
+        .uri("/api/records/import/commit")
+        .header("content-type", "application/json")
+        .body(axum::body::Body::from(plan.to_string()))
+        .unwrap();
+    assert_eq!(
+        api.clone().oneshot(req).await.unwrap().status(),
+        StatusCode::OK
+    );
+    let id = plan["plans"][0]["value"]["meeting"]["instanceId"]
+        .as_str()
+        .unwrap();
+    assert!(store.meeting(id).unwrap().is_some());
+    let req = axum::http::Request::builder()
+        .uri(format!("/api/meetings/{id}/record"))
+        .body(axum::body::Body::empty())
+        .unwrap();
+    let response = api.oneshot(req).await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let record: Value =
+        serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(record["rows"][0]["zoomName"], "Ada");
 }
 #[tokio::test]
 async fn zoom_endpoints_report_status_and_reject_foreign_origins() {
     use http_body_util::BodyExt;
     use tower::ServiceExt;
-    let store = Arc::new(Store::open(std::env::temp_dir().join(format!("zc-zoom-status-{}.db", now()))).unwrap());
+    let store = Arc::new(
+        Store::open(std::env::temp_dir().join(format!("zc-zoom-status-{}.db", now()))).unwrap(),
+    );
     let app = App {
         tx: broadcast::channel(8).0,
         tracker: Arc::new(Mutex::new(Tracker::default())),
@@ -3565,7 +4582,10 @@ async fn zoom_endpoints_report_status_and_reject_foreign_origins() {
         record_updates: Arc::new(Mutex::new(Default::default())),
         link: Default::default(),
     };
-    set_zoom(&app, ZoomStatus::new(ZoomState::SignedOut, "").with_reason("session_expired"));
+    set_zoom(
+        &app,
+        ZoomStatus::new(ZoomState::SignedOut, "").with_reason("session_expired"),
+    );
     let api = Router::new()
         .route("/api/zoom", get(api_zoom_status))
         .route("/api/zoom/sign-in", post(api_zoom_sign_in))
@@ -3578,9 +4598,14 @@ async fn zoom_endpoints_report_status_and_reject_foreign_origins() {
         }
         b.body(axum::body::Body::empty()).unwrap()
     };
-    let r = api.clone().oneshot(req("GET", "/api/zoom", None)).await.unwrap();
+    let r = api
+        .clone()
+        .oneshot(req("GET", "/api/zoom", None))
+        .await
+        .unwrap();
     assert_eq!(r.status(), StatusCode::OK);
-    let v: Value = serde_json::from_slice(&r.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    let v: Value =
+        serde_json::from_slice(&r.into_body().collect().await.unwrap().to_bytes()).unwrap();
     assert_eq!(v["state"], "signed_out");
     assert_eq!(v["reason"], "session_expired");
     // POSTs need this app's Origin: missing or foreign origins never reach the token store.
