@@ -32,7 +32,13 @@ use zoom_bridge::{Event, Participant, Session};
 use crate::config::Config;
 use crate::connection::{classify_start_error, ZoomLink, ZoomState, ZoomStatus};
 use crate::{open_browser, start_session};
+use crate::window_state::{self, Mode, Rect, WindowState};
 use anyhow::Context;
+use std::sync::OnceLock;
+
+#[derive(Clone, Debug)]
+enum AppEvent { Title(String), Window { mode: Option<Mode>, pinned: Option<bool> } }
+static WINDOW: OnceLock<Mutex<Option<(tao::event_loop::EventLoopProxy<AppEvent>, WindowState)>>> = OnceLock::new();
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct User {
@@ -814,6 +820,7 @@ pub fn run(
             .route("/api/meetings", get(api_meetings))
             .route("/api/live/new-record", post(api_new_record))
             .route("/api/zoom", get(api_zoom_status))
+            .route("/api/window", get(api_window_get).post(api_window_post))
             .route("/api/zoom/sign-in", post(api_zoom_sign_in))
             .route("/api/zoom/sign-out", post(api_zoom_sign_out))
             .route("/api/records/export", get(api_export_records))
@@ -882,18 +889,31 @@ pub fn app() -> anyhow::Result<()> {
         }
         std::thread::sleep(Duration::from_millis(100));
     }
-    let event_loop = EventLoopBuilder::<String>::with_user_event().build();
+    let event_loop = EventLoopBuilder::<AppEvent>::with_user_event().build();
     let title_proxy = event_loop.create_proxy();
+    let mut state = window_state::load(window_state_path());
+    let proxy = event_loop.create_proxy();
+    *WINDOW.get_or_init(|| Mutex::new(None)).lock().unwrap() = Some((proxy, state.clone()));
     // Icon resource 1 is embedded by build.rs (packaging/assets/app.ico).
     let icon = {
         use tao::platform::windows::IconExtWindows;
         tao::window::Icon::from_resource(1, None).ok()
     };
-    let window = WindowBuilder::new()
+    let monitors: Vec<Rect> = event_loop.available_monitors().map(|m| {
+        let scale=m.scale_factor(); let p=m.position(); let s=m.size();
+        Rect { x:(p.x as f64/scale).round() as i32, y:(p.y as f64/scale).round() as i32, width:(s.width as f64/scale).round() as u32, height:(s.height as f64/scale).round() as u32 }
+    }).collect();
+    let saved = match state.mode { Mode::Full => state.full, Mode::Compact => state.compact };
+    let restored = saved.filter(|r| window_state::usable(*r, &monitors));
+    let (w,h) = restored.map(|r|(r.width,r.height)).unwrap_or_else(|| match state.mode { Mode::Full => window_state::full_default(), Mode::Compact => window_state::compact_default() });
+    let mut builder = WindowBuilder::new()
         .with_title("AttendFlow Desktop")
         .with_window_icon(icon)
-        .with_inner_size(tao::dpi::LogicalSize::new(1280.0, 820.0))
-        .build(&event_loop)?;
+        .with_inner_size(tao::dpi::LogicalSize::new(w as f64, h as f64));
+    if let Some(r) = restored { builder = builder.with_position(tao::dpi::LogicalPosition::new(r.x as f64, r.y as f64)); }
+    let window = builder.build(&event_loop)?;
+    window.set_always_on_top(state.pinned);
+    window.set_min_inner_size(Some(match state.mode { Mode::Full => tao::dpi::LogicalSize::new(900.0,600.0), Mode::Compact => { let (w,h)=window_state::compact_min(); tao::dpi::LogicalSize::new(w as f64,h as f64) }}));
     // WebView2 profile in LOCALAPPDATA: the default (next to the exe) is read-only
     // when installed under Program Files or as an MSIX package.
     let mut web_context = wry::WebContext::new(
@@ -904,7 +924,7 @@ pub fn app() -> anyhow::Result<()> {
     let _webview = wry::WebViewBuilder::new_with_web_context(&mut web_context)
         .with_url(&url)
         .with_document_title_changed_handler(move |title| {
-            let _ = title_proxy.send_event(title);
+            let _ = title_proxy.send_event(AppEvent::Title(title));
         })
         .with_download_started_handler(|download_url, suggested_path| {
             if !download_url.contains("/api/config/roster/export")
@@ -941,20 +961,57 @@ pub fn app() -> anyhow::Result<()> {
             }
         })
         .build(&window)?;
+    let mut last_geometry_save = std::time::Instant::now();
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::Wait;
         match event {
-            Event::UserEvent(title) => window.set_title(&title),
+            Event::UserEvent(AppEvent::Title(title)) => window.set_title(&title),
+            Event::UserEvent(AppEvent::Window { mode, pinned }) => {
+                if let Some(m) = mode {
+                    if m != state.mode {
+                        if let Some(r) = logical_window_rect(&window) { match state.mode { Mode::Full => state.full=Some(r), Mode::Compact => state.compact=Some(r) } }
+                        let top = window.outer_position().ok().map(|p| { let s=window.current_monitor().map(|m|m.scale_factor()).unwrap_or(1.0); ( (p.x as f64/s).round() as i32, (p.y as f64/s).round() as i32) }).unwrap_or((0,0));
+                        match m {
+                            Mode::Compact => {
+                                let z=window_state::compact_min(); window.set_min_inner_size(Some(tao::dpi::LogicalSize::new(z.0 as f64,z.1 as f64)));
+                                let size=state.compact.map(|r|(r.width,r.height)).unwrap_or_else(window_state::compact_default);
+                                window.set_inner_size(tao::dpi::LogicalSize::new(size.0 as f64,size.1 as f64));
+                                window.set_outer_position(tao::dpi::LogicalPosition::new(top.0 as f64,top.1 as f64));
+                            }
+                            Mode::Full => {
+                                let saved=state.full.filter(|r|window_state::usable(*r,&monitors));
+                                if let Some(r)=saved { window.set_outer_position(tao::dpi::LogicalPosition::new(r.x as f64,r.y as f64)); window.set_inner_size(tao::dpi::LogicalSize::new(r.width as f64,r.height as f64)); }
+                                else { let s=window_state::full_default(); window.set_inner_size(tao::dpi::LogicalSize::new(s.0 as f64,s.1 as f64)); }
+                                window.set_min_inner_size(Some(tao::dpi::LogicalSize::new(900.0,600.0)));
+                            }
+                        }
+                        state.mode=m;
+                    }
+                }
+                if let Some(p) = pinned { window.set_always_on_top(p); }
+                window_state::save(window_state_path(), &state);
+                sync_window_state(&state);
+            }
+            Event::WindowEvent {
+                event: WindowEvent::Moved(_) | WindowEvent::Resized(_),
+                ..
+            } => {
+                if let Some(r)=logical_window_rect(&window) { match state.mode { Mode::Full=>state.full=Some(r), Mode::Compact=>state.compact=Some(r) } }
+                if last_geometry_save.elapsed() >= Duration::from_secs(2) { window_state::save(window_state_path(),&state); sync_window_state(&state); last_geometry_save=std::time::Instant::now(); }
+            }
             Event::WindowEvent {
                 event: WindowEvent::CloseRequested,
                 ..
             } => {
+                if let Some(r)=logical_window_rect(&window) { match state.mode { Mode::Full=>state.full=Some(r), Mode::Compact=>state.compact=Some(r) } }
+                window_state::save(window_state_path(),&state); sync_window_state(&state);
                 *control_flow = ControlFlow::Exit;
             }
             _ => {}
         }
     });
 }
+fn sync_window_state(state: &WindowState) { if let Some((_, shared))=WINDOW.get_or_init(||Mutex::new(None)).lock().unwrap().as_mut() { *shared=state.clone(); } }
 fn publish(a: &App, events: Vec<Value>) {
     let changed = events.iter().any(|e| {
         e["kind"] == "instance_started"
@@ -1361,6 +1418,62 @@ async fn api_zoom_status(State(a): State<App>, headers: HeaderMap) -> Response {
         return r;
     }
     Json(a.link.status.lock().unwrap().wire()).into_response()
+}
+
+fn window_json(state: &WindowState) -> Value { json!({"available":true,"mode":state.mode,"pinned":state.pinned}) }
+fn apply_request(state: &mut WindowState, mode: Option<Mode>, pinned: Option<bool>) -> bool {
+    let before = state.clone();
+    if let Some(mode) = mode { state.mode = mode; }
+    if let Some(pinned) = pinned { state.pinned = pinned; }
+    *state != before
+}
+async fn api_window_get() -> Response {
+    let guard = WINDOW.get_or_init(|| Mutex::new(None)).lock().unwrap();
+    match guard.as_ref() { Some((_, state)) => Json(window_json(state)).into_response(), None => Json(json!({"available":false,"mode":"full","pinned":false})).into_response() }
+}
+#[derive(Deserialize)] struct WindowRequest { mode: Option<Mode>, pinned: Option<bool> }
+async fn api_window_post(headers: HeaderMap, Json(request): Json<WindowRequest>) -> Response {
+    let Some(origin) = headers.get("origin").and_then(|v| v.to_str().ok()) else { return StatusCode::FORBIDDEN.into_response(); };
+    if !origin.starts_with("http://127.0.0.1:47812") && !origin.starts_with("http://localhost:47812") { return StatusCode::FORBIDDEN.into_response(); }
+    let mut guard = WINDOW.get_or_init(|| Mutex::new(None)).lock().unwrap();
+    let Some((proxy, state)) = guard.as_mut() else { return (StatusCode::CONFLICT, Json(json!({"error":"no_window"}))).into_response(); };
+    let changed = apply_request(state, request.mode, request.pinned);
+    if changed { let _ = proxy.send_event(AppEvent::Window { mode: request.mode, pinned: request.pinned }); window_state::save(window_state_path(), state); }
+    Json(window_json(state)).into_response()
+}
+fn window_state_path() -> PathBuf { std::env::var_os("LOCALAPPDATA").map(PathBuf::from).unwrap_or_else(std::env::temp_dir).join("zoom-companion").join("window.json") }
+fn logical_window_rect(window: &tao::window::Window) -> Option<Rect> {
+    let scale=window.current_monitor().map(|m|m.scale_factor()).unwrap_or(1.0);
+    let p=window.outer_position().ok()?; let s=window.inner_size();
+    if s.width==0 || s.height==0 { return None; }
+    Some(Rect{x:(p.x as f64/scale).round() as i32,y:(p.y as f64/scale).round() as i32,width:(s.width as f64/scale).round() as u32,height:(s.height as f64/scale).round() as u32})
+}
+
+#[cfg(test)]
+mod window_route_tests {
+    use super::*;
+    use axum::body::Body;
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+    #[test]
+    fn apply_request_changes_only_requested_values() {
+        let mut state = WindowState::default();
+        assert!(apply_request(&mut state, Some(Mode::Compact), Some(true)));
+        assert_eq!(state.mode, Mode::Compact);
+        assert!(state.pinned);
+        assert!(!apply_request(&mut state, None, None));
+    }
+    #[tokio::test]
+    async fn window_route_unavailable_without_native_window() {
+        *WINDOW.get_or_init(|| Mutex::new(None)).lock().unwrap() = None;
+        let app = Router::new().route("/api/window", get(api_window_get).post(api_window_post));
+        let response = app.clone().oneshot(axum::http::Request::builder().uri("/api/window").body(Body::empty()).unwrap()).await.unwrap();
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let value: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(value["available"], false);
+        let response = app.oneshot(axum::http::Request::builder().method("POST").uri("/api/window").header("origin", "http://127.0.0.1:47812").header("content-type", "application/json").body(Body::from("{\"pinned\":true}")).unwrap()).await.unwrap();
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+    }
 }
 
 /// Starts the browser sign-in (PKCE, loopback on an ephemeral port) and returns at

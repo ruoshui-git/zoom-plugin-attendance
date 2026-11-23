@@ -222,7 +222,8 @@ Tick items off here as they land.
 - SQLite storage that survives browser resets; append-only JSONL logs as backup.
 - Import of AttendFlow backups and session bundles (migration path).
 - In-app Zoom sign-in/sign-out with token revocation; Zoom connection banner.
-- Native window (WebView2), tray; browser access via `zoom-companion serve`.
+- Native window (WebView2); browser access via `zoom-companion serve`.
+- Always-on-top pin and a compact live window; window mode, size, position and pin are remembered.
 - Hand log closes raises when a participant leaves with a hand up, and lowers from the participant
   flag (lower-all, flag-only).
 - Custom record names (rename any record; default title stays visible).
