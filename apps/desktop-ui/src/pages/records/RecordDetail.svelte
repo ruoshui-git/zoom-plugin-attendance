@@ -7,6 +7,8 @@
   import { filterRowsByTag, eventTypeCounts, deriveHandEntries } from '../../lib/record-tools';
 import { getLiveStatusLabel, getMatchStatusLabel, getParticipantLocationLabel, getRecordSourceLabel } from '../../lib/session-labels';
   import ExportMenu from '../../lib/common/ExportMenu.svelte';
+  import RecordNameEditor from '../../lib/common/RecordNameEditor.svelte';
+  import { recordTitle } from '../../lib/record-title';
   import StatusBadge from '../../lib/common/StatusBadge.svelte';
   import { statusLabel, statusStyle } from '../../lib/status-style';
   import NameMatchingPanel from '../../lib/NameMatchingPanel.svelte';
@@ -79,7 +81,7 @@ import { eventMatchesSearch } from '../../lib/event-search';
 <section class="detail">
   {#if $record.loading}<p class="empty">{t('加载中…','Loading…')}</p>{:else}
   <div class="header">
-    <div class="title"><h2>{$meeting?.topic || $meeting?.meetingNumber}</h2><div class="badges"><span>{$record.mode === 'roster' ? t('花名册','Roster') : t('普通模式','Generic')}</span><span>{getRecordSourceLabel($meeting?.source || 'meeting_live',$language as any).label}</span><small>{$meeting?.meetingNumber} · {$record.summary?.total ?? attendanceRows.length} {t('位参与者','participants')}</small></div></div>
+    <div class="title"><h2>{recordTitle({...$meeting, customName: $stateValue.customName}).primary}</h2>{#if recordTitle({...$meeting, customName: $stateValue.customName}).secondary}<small class="muted">{recordTitle({...$meeting, customName: $stateValue.customName}).secondary}</small>{/if}<RecordNameEditor target="viewed" customName={$stateValue.customName || ""} /><div class="badges"><span>{$record.mode === 'roster' ? t('花名册','Roster') : t('普通模式','Generic')}</span><span>{getRecordSourceLabel($meeting?.source || 'meeting_live',$language as any).label}</span><small>{$meeting?.meetingNumber} · {$record.summary?.total ?? attendanceRows.length} {t('位参与者','participants')}</small></div></div>
     <div class="actions"><ExportMenu disabled={$busyKeys.has('record-export')} labels={{ all:t('导出全部','Export All'), json:t('导出 JSON','Export JSON'), attendance:t('导出考勤 CSV','Export Attendance CSV'), manual:t('导出手动记录 CSV','Export Manual Records CSV') }} onExport={handleExport}/><button class="danger" disabled={!$meeting?.endedAt || $busyKeys.has('record-delete')} onclick={handleDelete}>{$busyKeys.has('record-delete') ? t('删除中…','Deleting…') : t('删除','Delete')}</button></div>
   </div>
   <div class="record-tabs" role="tablist" aria-label={t('记录详情','Record detail')}>{#each primary as item}<button role="tab" aria-selected={tab===item[0]} class:active={tab===item[0]} onclick={() => {tab=item[0];search='';status='';}}>{label(item)}{#if item[0]==='attendance'}<small>{$record.summary?.total ?? ($record.rows || []).length}</small>{:else if item[0]==='events'}<small>{movement.length}</small>{:else if item[0]==='hands'}<small>{handEntries.length}</small>{:else if item[0]==='snapshots'}<small>{$stateValue.manualSnapshots?.length || 0}</small>{/if}</button>{/each}</div>
