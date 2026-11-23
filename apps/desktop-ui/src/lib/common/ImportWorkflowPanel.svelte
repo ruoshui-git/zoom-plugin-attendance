@@ -1,8 +1,21 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   export let open = false;
   export let title = "";
   export let closeLabel = "Close";
   export let onClose: () => void = () => {};
+  let panel: HTMLDivElement;
+  onMount(() => {
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || !open || !panel) return;
+      const layers = Array.from(document.querySelectorAll<HTMLElement>("[role=dialog][aria-modal=true]"));
+      const top = layers[layers.length - 1];
+      if (top !== panel) return;
+      event.preventDefault(); event.stopImmediatePropagation(); onClose();
+    };
+    window.addEventListener("keydown", keydown, true);
+    return () => window.removeEventListener("keydown", keydown, true);
+  });
 </script>
 
 {#if open}
@@ -13,7 +26,7 @@
       if (event.target === event.currentTarget) onClose();
     }}
   >
-    <div class="panel" role="dialog" aria-modal="true" aria-label={title}>
+    <div class="panel" bind:this={panel} role="dialog" aria-modal="true" aria-label={title}>
       <header>
         <h2>{title}</h2>
         <button class="close" onclick={onClose} aria-label={closeLabel}>

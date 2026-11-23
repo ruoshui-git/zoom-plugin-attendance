@@ -1,7 +1,7 @@
 <script lang="ts">
   import { viewedMeeting as meeting, viewedRecord as record, viewedState as stateValue, viewedEvents as recordEvents, language, configs, settings } from '../../lib/stores';
   import { exportOne, exportAll, saveRecordState, deleteRecords } from '../../lib/api';
-  import { t, dateTime, timeOnly } from '../../lib/ui';
+  import { t, dateTime, timeOnly, confirmDialog } from '../../lib/ui';
   import { filterRowsByTag, filterEventsByType, eventTypeCounts, deriveHandEntries } from '../../lib/record-tools';
 import { getLiveStatusLabel, getMatchStatusLabel, getParticipantLocationLabel, getRecordSourceLabel } from '../../lib/session-labels';
   import ExportMenu from '../../lib/common/ExportMenu.svelte';
@@ -54,7 +54,7 @@ import { getLiveStatusLabel, getMatchStatusLabel, getParticipantLocationLabel, g
   function sortAria(key: RecordSortKey) { return sortKey !== key ? 'none' : sortDir === 'asc' ? 'ascending' : 'descending'; }
   function sortIndicator(key: RecordSortKey) { return sortKey !== key ? '↕' : sortDir === 'asc' ? '↑' : '↓'; }
   async function handleDelete() {
-    if (!$meeting?.endedAt || !confirm(t('确定删除此会议记录吗？此操作无法撤销。','Delete this meeting record? This cannot be undone.'))) return;
+    if (!$meeting?.endedAt || !(await confirmDialog({ title: t('删除考勤记录','Delete Attendance Record'), message: t('确定删除此会议记录吗？此操作无法撤销。','Delete this meeting record? This cannot be undone.'), destructive: true }))) return;
     await deleteRecords([$meeting.instanceId], 'viewed');
   }
 </script>
