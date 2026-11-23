@@ -37,6 +37,17 @@ its existing session engine already consumes.
   with `lastSeenAt` within 15 min, it **resumes** that instance (same id, seq continues).
 - `seq` is a per-instance monotonically increasing integer starting at 1.
 
+## Native meeting-view calls
+
+The `zoom-bridge` Rust `Session` exposes `meeting_view_type`,
+`switch_meeting_view`, and `wall_view_page`. Results arrive as
+`Event::AsyncResult` with operation names `GetMeetingViewType`,
+`Switch2MeetingView`, and `Switch2WallViewPrevOrNextPage`; the get call places
+the raw view type in `value` (0 ActiveSpeaker, 1 Wall/gallery, 2 MultiSpeaker,
+3 Other). These calls use the process-global `IUIActionToolkit` from
+`meeting::GetUIActionToolkit()` (no instance argument). The C adapter ABI is
+version 3.
+
 ## Data types
 
 ```jsonc
