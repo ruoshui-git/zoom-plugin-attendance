@@ -121,8 +121,8 @@ Tick items off here as they land.
 ### Feedback, dialogs, interaction
 
 - [x] Toasts: success/error/warning/info types with colors and icons, 5 s auto-dismiss, progress bar, pause on hover, close button, stacking.
-- [ ] Feedback on every action (AttendFlow: ~110 toast calls; desktop: ~19). Saves, deletes, imports, exports, captures, mode and profile switches, name-matching actions.
-- [ ] Busy states: buttons disabled with "…ing" labels while a request runs (AttendFlow: 25 components; desktop: name matching only). Prevents double submits.
+- [x] Feedback on every action (AttendFlow: ~110 toast calls; desktop: ~19). Saves, deletes, imports, exports, captures, mode and profile switches, name-matching actions.
+- [x] Busy states: buttons disabled with "…ing" labels while a request runs (AttendFlow: 25 components; desktop: name matching only). Prevents double submits.
 - [x] No native `alert()` (12) or `confirm()` (5): use toasts and `ConfirmDialog`.
 - [x] Bug: `SettingsPage` mounts a second `ConfirmDialog`, so each confirm on Settings opens twice.
 - [x] `ConfirmDialog`: Esc cancels, Enter confirms, focus moves into the dialog.
