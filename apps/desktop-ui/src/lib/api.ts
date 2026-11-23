@@ -212,8 +212,10 @@ export async function deleteRecords(ids: string[], target: DataTarget = "live") 
     throw Error("Record deletion failed");
   }
   set(s.selectedRecords, []);
-  if (target === "viewed") { set(s.viewedMeeting, null); set(s.viewedRecord, { rows: [], summary: {}, loading: false }); }
-  else set(s.meeting, null);
+  // Clear only what was actually deleted (the live meeting is never deletable).
+  const deleted = new Set(ids.map(String));
+  if (target === "viewed" || deleted.has(String(value(s.viewedMeeting)?.instanceId))) { set(s.viewedMeeting, null); set(s.viewedRecord, { rows: [], summary: {}, loading: false }); }
+  if (deleted.has(String(value(s.meeting)?.instanceId))) set(s.meeting, null);
   ids.forEach(invalidateRecord); await refresh({ changed: ids });
 }
 export async function previewRecordImport(eventOrData: Event | unknown) {

@@ -62,6 +62,44 @@ describe("LiveAttendanceView", () => {
     expect(container.textContent).not.toContain("unknown-x");
   });
 
+  it("shows manual snapshot participant id and match status columns", () => {
+    const { container } = render(LiveAttendanceView, { view: "manual", state: { manualSnapshots: [{ timestamp: "2026-01-01T12:00:00Z", participants: [
+      { participantUUID: "participant-1", screenName: "Ada", matchStatus: "matched" },
+    ] }] } });
+    expect(container.textContent).toContain("Participant ID");
+    expect(container.textContent).toContain("Match Status");
+    expect(container.textContent).toContain("participant-1");
+  });
+
+  it("counts entry chips, filters on toggle, and Clear Filters restores all", async () => {
+    const { container } = render(LiveAttendanceView, { view: "entry", record: { movementEvents: [
+      { type: "join", timestamp: "2026-01-01T10:00:00Z", participant: { screenName: "Ada" } },
+      { type: "leave", timestamp: "2026-01-01T11:00:00Z", participant: { screenName: "Ada" } },
+    ] } });
+    const chips = Array.from(container.querySelectorAll<HTMLButtonElement>(".filter-chips button"));
+    expect(chips).toHaveLength(7);
+    expect(chips.map((chip) => chip.textContent)).toContain("Joined · 1");
+    expect(chips.map((chip) => chip.textContent)).toContain("Left · 1");
+    await fireEvent.click(chips.find((chip) => chip.textContent?.startsWith("Left"))!);
+    expect(container.querySelectorAll("tbody tr")).toHaveLength(1);
+    expect(container.textContent).toContain("Joined");
+    expect(container.querySelector("tbody")?.textContent).not.toContain("Left");
+    await fireEvent.click(screen.getByRole("button", { name: "Clear Filters" }));
+    expect(container.querySelectorAll("tbody tr")).toHaveLength(2);
+  });
+
+  it("filters name changes by old and new names in the three-column table", async () => {
+    const { container } = render(LiveAttendanceView, { view: "names", record: { record: { nameChangeEvents: [
+      { timestamp: "2026-01-01T10:00:00Z", previousScreenName: "Old Ada", nextScreenName: "Ada New" },
+      { timestamp: "2026-01-01T11:00:00Z", previousScreenName: "Other", nextScreenName: "Someone Else" },
+    ] } } });
+    expect(Array.from(container.querySelectorAll("thead th")).map((th) => th.textContent)).toEqual(["Time", "Previous Name", "New Name"]);
+    await fireEvent.input(screen.getByPlaceholderText("Old/new name or pinyin"), { target: { value: "old ada" } });
+    expect(container.querySelectorAll("tbody tr")).toHaveLength(1);
+    expect(container.textContent).toContain("Ada New");
+    expect(container.textContent).not.toContain("Someone Else");
+  });
+
   it("shows full status names and toggles a preset off on a second click", async () => {
     const { container } = render(LiveAttendanceView, { view: "status", language: "en", record: { rows: [
       { canonicalName: "Late Member", currentStatus: "late", wasLate: true, tags: ["late"] },
