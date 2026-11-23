@@ -154,7 +154,6 @@ pub fn artifacts(
     if kind == "summary" || kind == "all" {
         let headers = if en {
             vec![
-                "meeting",
                 "#",
                 "id",
                 "canonicalName",
@@ -177,7 +176,6 @@ pub fn artifacts(
             ]
         } else {
             vec![
-                "会议",
                 "#",
                 "固定编号",
                 "姓名",
@@ -213,7 +211,6 @@ pub fn artifacts(
             .enumerate()
             .map(|(i, r)| {
                 vec![
-                    title.to_string(),
                     (i + 1).to_string(),
                     r["personId"]
                         .as_i64()
@@ -366,7 +363,7 @@ mod tests {
         let f = artifacts(&m, &r, &json!({}), &[], "now", "en", "summary").remove(0);
         assert_eq!(&f.bytes[..3], &[0xef, 0xbb, 0xbf]);
         let s = String::from_utf8(f.bytes[3..].to_vec()).unwrap();
-        assert!(s.starts_with("meeting,#,id,canonicalName,zoomName,zoomNameHistory,group,role,statusTags,location,matchStatus,attendanceScore,attendanceGrade,firstJoinAt,lastSeenAt,totalPresenceMinutes,absenceCount,sharedName,notes,waitingRoomMinutes\r\n"));
+        assert!(s.starts_with("#,id,canonicalName,zoomName,zoomNameHistory,group,role,statusTags,location,matchStatus,attendanceScore,attendanceGrade,firstJoinAt,lastSeenAt,totalPresenceMinutes,absenceCount,sharedName,notes,waitingRoomMinutes\r\n"));
         assert!(s.find("Excellent").unwrap() < s.find("Moderate").unwrap());
         assert!(s.find(",A,").unwrap() < s.find(",B,").unwrap());
     }
@@ -385,7 +382,7 @@ mod tests {
         .remove(0);
         assert_eq!(&summary.bytes[..3], &[0xef, 0xbb, 0xbf]);
         let summary_text = String::from_utf8(summary.bytes[3..].to_vec()).unwrap();
-        assert!(summary_text.starts_with("会议,#,固定编号,姓名,Zoom名称,改名历史,组别,角色,状态标签,当前位置,匹配状态,出勤分数,出勤等级,首次进入时间,最后出现时间,累计在线分钟,离开次数,是否疑似共用名称,备注,等候室分钟\r\n"));
+        assert!(summary_text.starts_with("#,固定编号,姓名,Zoom名称,改名历史,组别,角色,状态标签,当前位置,匹配状态,出勤分数,出勤等级,首次进入时间,最后出现时间,累计在线分钟,离开次数,是否疑似共用名称,备注,等候室分钟\r\n"));
         let f=artifacts(&m,&json!({}),&json!({"manualSnapshots":[{"timestamp":"t","participants":[{"screenName":"Ada","participantUUID":"u","location":"meeting","matchStatus":"matched"}]}]}),&[],"x","zh-CN","manual").remove(0);
         assert_eq!(&f.bytes[..3], &[0xef, 0xbb, 0xbf]);
         let s = String::from_utf8(f.bytes).unwrap();
