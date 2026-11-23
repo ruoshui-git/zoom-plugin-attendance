@@ -59,10 +59,9 @@
     };
     window.addEventListener("attendflow:confirm", listener);
     const keyboard = (event: KeyboardEvent) => {
+      // An open confirm dialog is always the top layer, even though it sits earlier in
+      // the DOM than the slide-overs and import panels that open it.
       if (!open || !dialog) return;
-      const layers = Array.from(document.querySelectorAll<HTMLElement>("[role=dialog][aria-modal=true]"));
-      const top = layers[layers.length - 1];
-      if (top !== dialog) return;
       if (event.key === "Escape") {
         event.preventDefault();
         event.stopImmediatePropagation();

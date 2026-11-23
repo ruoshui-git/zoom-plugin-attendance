@@ -96,9 +96,9 @@ describe("LiveAttendanceView", () => {
         { canonicalName: "Ada Lovelace", currentStatus: "present", hasBeenSeen: true, isCurrentlyPresent: true, tags: ["seen", "full_present"] },
         { canonicalName: "Grace Hopper", currentStatus: "leftEarly", hasBeenSeen: true, wasLate: true, tags: ["seen", "late", "left_early"] },
       ] } });
-    const stats = [...container.querySelectorAll(".filter-stack button small")].map((n) => n.textContent);
+    const stats = Array.from(container.querySelectorAll(".filter-stack button small")).map((n) => n.textContent);
     expect(stats).toEqual(["Seen", "Full Present", "Late", "Left Early", "Total"]);
-    const badgeRows = [...container.querySelectorAll("tbody tr")].map((tr) => [...tr.querySelectorAll(".badges > *")].map((b) => b.textContent?.trim()));
+    const badgeRows = Array.from(container.querySelectorAll("tbody tr")).map((tr) => Array.from(tr.querySelectorAll(".badges > *")).map((b) => b.textContent?.trim()));
     expect(badgeRows[0]).toEqual(["Full Present"]);
     expect(badgeRows[1]).toEqual(["Left Early", "Late", "Seen"]);
     expect(container.querySelector("thead button")).toBeNull();

@@ -4,7 +4,7 @@
   export let closeLabel = '';
   export let width = 720;
   export let onClose: () => void = () => {};
-  function handleKeydown(event: KeyboardEvent) { if (event.key === 'Escape' && open) onClose(); }
+  function handleKeydown(event: KeyboardEvent) { if (event.key === 'Escape' && open && !event.defaultPrevented) onClose(); }
 </script>
 <svelte:window on:keydown={handleKeydown} />
 {#if open}<div class="scrim"><button class="backdrop" aria-label={closeLabel} onclick={onClose}></button><div class="panel" role="dialog" aria-modal="true" tabindex="0" style={`width:min(${width}px,94vw)`} aria-label={title}><header><h2>{title}</h2><button aria-label={closeLabel} onclick={onClose}>×</button></header><div class="body"><slot /></div></div></div>{/if}
