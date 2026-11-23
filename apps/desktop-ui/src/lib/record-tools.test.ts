@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deriveHandEntries, eventTypeCounts, filterEventsByType, filterMeetings, filterRowsByTag, sortRows } from './record-tools';
+import { deriveHandEntries, handEntryActionLabel, eventTypeCounts, filterEventsByType, filterMeetings, filterRowsByTag, sortRows } from './record-tools';
 
 describe('record detail helpers', () => {
   it('filters records by date/topic search and mode/source/status', () => {
@@ -38,5 +38,28 @@ describe('record detail helpers', () => {
     expect(entries.map((e) => e.action)).toEqual(['raise','lower','raise']);
     expect(entries[0].screenName).toBe('Ada');
     expect(deriveHandEntries([{kind:'users',seq:6,at:20,users:[{userId:7,name:'Ada',raisedHand:true}]}]).map((e) => e.action)).toEqual(['raise']);
+  });
+  it('derives flag lowers, leave lowers, and deduplicates matching hand events', () => {
+    const events = [
+      {kind:'users',action:'sync_all',seq:1,at:1,users:[{userId:1,name:'A',raisedHand:true},{userId:2,name:'B',raisedHand:true}]},
+      {kind:'users',action:'update',seq:2,at:2,users:[{userId:1,name:'A',raisedHand:false}]},
+      {kind:'hand',seq:3,at:3,userId:1,raised:false},
+      {kind:'users',action:'left',seq:4,at:4,users:[{userId:2,name:'B'}]},
+    ];
+    const entries = deriveHandEntries(events);
+    expect(entries.map((e) => [e.action,e.reason])).toEqual([['raise',undefined],['raise',undefined],['lower',undefined],['lower','left']]);
+  });
+  it('deduplicates lowers across user flags, hand events, and all-hands markers', () => {
+    const events = [{kind:'users',action:'sync_all',seq:1,at:1,users:[{userId:1,raisedHand:true},{userId:2,raisedHand:true}]},
+      {kind:'users',action:'update',seq:2,at:2,users:[{userId:1,raisedHand:false},{userId:2,raisedHand:false}]},
+      {kind:'hand',seq:3,at:3,userId:1,raised:false},{kind:'hand',seq:4,at:4,userId:2,raised:false},
+      ...[5,6,7].map((seq) => ({kind:'all_hands_lowered',seq,at:seq}))];
+    expect(deriveHandEntries(events).filter((e) => e.action === 'lower')).toHaveLength(2);
+  });
+  it('preserves explicit left reason and localizes its label', () => {
+    const [, entry] = deriveHandEntries([{kind:'hand',seq:1,at:1,userId:1,raised:true},{kind:'hand',seq:2,at:2,userId:1,raised:false,reason:'left'}]);
+    expect(entry.reason).toBe('left');
+    expect(handEntryActionLabel(entry,'en')).toBe('Lowered (left meeting)');
+    expect(handEntryActionLabel(entry,'zh-CN')).toBe('已放下（离开会议）');
   });
 });
