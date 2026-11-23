@@ -6,6 +6,7 @@ import ConfigWorkspace from "./ConfigWorkspace.svelte";
 import RecordsPage from "../pages/RecordsPage.svelte";
 import RecordDetail from "../pages/records/RecordDetail.svelte";
 import * as stores from "./stores";
+import { switchMode } from "./api";
 import { toast } from "./toast";
 
 const flush = () => new Promise((r) => setTimeout(r, 0));
@@ -70,5 +71,19 @@ describe("action feedback (busy states and toasts)", () => {
     expect(toastTexts()).toContain("error:Delete failed: locked");
     expect((screen.getByRole("button", { name: "Delete" }) as HTMLButtonElement).disabled).toBe(false);
     stores.viewedMeeting.set(null);
+  });
+  it("switching to roster with no roster makes no request; a failed switch restores the previous mode", async () => {
+    const fetchMock = vi.fn(async () => new Response("boom", { status: 500 }));
+    vi.stubGlobal("fetch", fetchMock);
+    stores.meeting.set({ instanceId: "live-1" } as any);
+    stores.mode.set("generic");
+    stores.configs.set({ roster: [] } as any);
+    expect(await switchMode("roster")).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+    stores.configs.set({ roster: [{ personId: 1, canonicalName: "Ada" }] } as any);
+    await expect(switchMode("roster")).rejects.toThrow("boom");
+    expect(get(stores.mode)).toBe("generic");
+    expect(get(stores.stateValue).mode).toBe("generic");
+    stores.meeting.set(null);
   });
 });

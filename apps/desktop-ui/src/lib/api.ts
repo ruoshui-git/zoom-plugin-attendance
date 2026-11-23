@@ -491,17 +491,7 @@ export async function captureManual() {
     timestamp: new Date().toISOString(),
     participants,
   };
-  const nextState = { ...value(s.stateValue), manualSnapshots: [...(value(s.stateValue).manualSnapshots || []), snapshot] };
-  const response = await fetch(`/api/meetings/${active.instanceId}/state`, {
-    method: "PUT", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ revision: value(s.stateRevision), value: nextState }),
-  });
-  if (response.status === 409) { await loadState(); throw Error(t("数据已被修改，请重试", "Data changed; please retry")); }
-  if (!response.ok) throw Error(await response.text());
-  const data = await response.json();
-  if (value(s.meeting)?.instanceId !== active.instanceId) throw Error(t("会议已切换，请重试", "Meeting changed; please retry"));
-  set(s.stateRevision, data.revision); set(s.stateValue, data.value);
-  invalidateRecord(active.instanceId); await refresh({ changed: [active.instanceId] });
+  await saveRecordState({ manualSnapshots: [...(value(s.stateValue).manualSnapshots || []), snapshot] });
   return { timestamp: snapshot.timestamp, count: participants.length };
 }
 export async function captureHands() {
@@ -518,17 +508,7 @@ export async function captureHands() {
     screenNames: raised.map((user: any) => user.name || "Unknown"),
     totalCount: raised.length,
   };
-  const nextState = { ...value(s.stateValue), raiseHandCaptures: [...(value(s.stateValue).raiseHandCaptures || []), capture] };
-  const response = await fetch(`/api/meetings/${active.instanceId}/state`, {
-    method: "PUT", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ revision: value(s.stateRevision), value: nextState }),
-  });
-  if (response.status === 409) { await loadState(); throw Error(t("数据已被修改，请重试", "Data changed; please retry")); }
-  if (!response.ok) throw Error(await response.text());
-  const data = await response.json();
-  if (value(s.meeting)?.instanceId !== active.instanceId) throw Error(t("会议已切换，请重试", "Meeting changed; please retry"));
-  set(s.stateRevision, data.revision); set(s.stateValue, data.value);
-  invalidateRecord(active.instanceId); await refresh({ changed: [active.instanceId] });
+  await saveRecordState({ raiseHandCaptures: [...(value(s.stateValue).raiseHandCaptures || []), capture] });
   return true;
 }
 /** Saves meeting-state changes; resolves true when saved, false when the save failed. */
