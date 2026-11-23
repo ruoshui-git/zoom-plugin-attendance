@@ -13,6 +13,7 @@ mod connection;
 mod serve;
 mod record;
 mod record_export;
+mod window_state;
 
 use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
