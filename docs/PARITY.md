@@ -9,6 +9,12 @@ SessionRecord, derivation reference time, and roster-mode output variants. The R
 derive function and exact all-row comparison are not yet at parity; see the crate
 README and generator documentation for current scope.
 
+**How to use this file.** It is the single record of AttendFlow vs the desktop app:
+what is ported, what is open, what is skipped or not applicable, and what the desktop
+app adds. If AttendFlow (as shipped, `featureSet = 'mvp'`) has a feature *or an
+interaction* (keyboard, focus, busy state, feedback, click-through, flow) that is not
+in the desktop app and not listed under "Not carried over", it is a gap.
+
 Source: AttendFlow `main` @ 405abd5 (inventory 2026-11-17). Phase column: P1 / P2 / P3,
 **N/A** = exists only because of Zoom Apps constraints (replaced by a simpler mechanism),
 **OFF** = feature-flagged off in AttendFlow's `mvp` build (optional, P3).
@@ -104,21 +110,116 @@ Per-fixture results remain listed in
 | Import AttendFlow full backup v3 + session bundles (migration path) | P2 | partial: profile/record import paths; full backup import remains separate |
 | Bilingual UI zh-CN / en (inline `t(zh, en)`), export language separate | P1 (framework) / P2 |
 
-## Not carried over (by design)
+## Open parity gaps (audit 2026-11-23)
+
+Found by diffing every bilingual UI string between the apps, then reading both sides,
+including interaction code. Tick items off as they land.
+
+Found by diffing every bilingual UI string between the apps, then reading both sides.
+Tick items off here as they land.
+
+### Feedback, dialogs, interaction
+
+- [ ] Toasts: success/error/warning/info types with colors and icons, 5 s auto-dismiss, progress bar, pause on hover, close button, stacking.
+- [ ] Feedback on every action (AttendFlow: ~110 toast calls; desktop: ~19). Saves, deletes, imports, exports, captures, mode and profile switches, name-matching actions.
+- [ ] Busy states: buttons disabled with "…ing" labels while a request runs (AttendFlow: 25 components; desktop: name matching only). Prevents double submits.
+- [ ] No native `alert()` (12) or `confirm()` (5): use toasts and `ConfirmDialog`.
+- [ ] Bug: `SettingsPage` mounts a second `ConfirmDialog`, so each confirm on Settings opens twice.
+- [ ] `ConfirmDialog`: Esc cancels, Enter confirms, focus moves into the dialog.
+- [ ] Import panels and the import preview overlay close on Esc.
+- [ ] Export menu closes on outside click and Esc.
+- [ ] UI size slider applies on release, not on every drag step; the slider stays put on screen.
+- [ ] Roster person picker: one type-ahead field with ↑/↓/Enter/Esc and "No results" (desktop: a text box plus a separate dropdown).
+- [ ] Hover tooltips on icon-only buttons; full-text tooltips on truncated table cells.
+- [ ] Resizable table columns (owner: include).
+- [ ] Resizable record-detail slide-over (drag and keyboard).
+
+### Live meeting
+
+- [ ] 全程 (Full Present) shown in generic mode too (summary, filter, row badge replaces 到过).
+- [ ] Summary hides zero counts except 总计.
+- [ ] Summary visible above every live tab; clicking a count opens Status filtered by it; clicking 不计入 opens Name Matching.
+- [ ] Remove the stray ↕ in the 状态 header (name sort lives in the filter panel as A→Z/Z→A).
+- [ ] Duplicate-name banner (⚠ 重复姓名).
+- [ ] Generic mode: "Zoom 名称" column title and `#XXXX` suffixes for same-name people.
+- [ ] Roster mode: ⚠️ marker for people outside the profile's groups; "疑似重名或共用账号名" note.
+- [ ] Row tints per status, flash on update, waiting-room highlight.
+- [ ] 分组 column in roster mode only; times as HH:mm:ss; header "在线分钟".
+- [ ] Entry/Exit: one chip per event type with counts, and "Clear filters".
+- [ ] Pinyin search in Entry/Exit, Raise Hand and Name Changes.
+- [ ] Name Changes as a searchable Previous/New table (live and record detail).
+- [ ] Settings & Info: record ID, current mode, plain-language late/return rules, Restore default; fix the "Apply profile overrides" button that sends no values.
+- [ ] Manual attendance: Participant ID and match-status columns.
+- [ ] Name matching: one-click "拆分共用 (N)" suggestions (shared name and past meetings), "Current match:" line.
+
+### Records
+
+- [ ] Record overview: duration, profile name (not ID), revision, export status, meeting UUID, operator-action counts (manual records, decisions, unmatched, guests).
+- [ ] Record import: several files or pasted JSON.
+- [ ] Records list uses the same "Bulk Select" mode as the Configuration tables.
+- [ ] Remove the Mode, Source and Status dropdown filters from the Records list (added by Codex in `63dd3a8` without an owner decision; owner 2026-11-23: remove).
+
+### Configuration
+
+- [ ] Import preview: summary counts (total, adds, updates, deletes, rejected, warnings, applicable) and readable Before/After instead of raw JSON; scroll to the preview when it opens.
+
+### Settings
+
+- [ ] Restore full backup: preview with backup version, date and "current → backup" counts per dataset, then full replacement (records included).
+- [ ] Clear local data resets everything (see "Changed on purpose").
+
+## Not carried over
+
+### Skipped by owner decision
+
+| AttendFlow feature | Decision | Date |
+|---|---|---|
+| Stop / Start attendance record (stop dialog, stopped state, "start new record") | Left out for now. Capture starts automatically and a record is one meeting instance. Revisit if a "stop counting" switch is wanted. | 2026-11-23 |
+| Home page (cards, backup reminder, "N records not downloaded" reminder) | Skipped. The sidebar replaces the home cards; the Records list shows Downloaded/Ended status. | 2026-11-23 |
+| A mid-meeting panel reload closes the record and starts a new one | Companion keeps the instance; a UI reload resumes it. | 2026-11-17 |
+| Waiting-room time counts as attendance | Separate field (`waitingRoomMinutes`); non-hosts cannot see the waiting room. | 2026-11-17 |
+| A record can restart after the meeting ends (phantom session) | An ended instance is never reopened. | 2026-11-17 |
+| Archive analytics, Operations tab, special participants, blacklist actions | OFF in shipped AttendFlow (`showArchiveAnalytics`, `showMeetingOperations`, `enableProfileSpecialParticipants`, `enableProfileBlacklist`); optional P3 modules. | — |
+| Design-system demo page | Developer-only in AttendFlow. | — |
+
+### Not applicable to a desktop app
 
 | AttendFlow mechanism | Why / replacement |
 |---|---|
-| Main ↔ Meeting postMessage sync, heartbeat, fallback closure, sessionRevision/ack/cleanup | one process, one store |
-| Alias mutation outbox + Sync Review | single writer: decisions write aliases directly (same validation rules) |
-| Separate Dexie DBs, orphaned-session cleanup | SQLite in the companion; one record per meeting instance |
-| Remote download worker + download center | native/browser download from the local server |
-| Install page, Firebase | not needed |
-| Host/co-host gating, limited mode | Plugin SDK works as attendee |
-| Mid-meeting reload splits records | companion keeps the instance; UI reload resumes |
+| Install page, Zoom App install flow, Firebase | Not a Zoom App; installer/package and in-app Zoom sign-in instead |
+| Main ↔ Meeting sync: Sync button, "Settings connected" status, postMessage, heartbeat, fallback closure, sessionRevision/ack/cleanup | One process, one store; live updates over `/bridge` |
+| Alias mutation outbox, Sync Review workspace, processed alias requests | Single writer: decisions write aliases directly (same validation rules) |
+| Download center / export tray (prepare, retry, copy to clipboard), remote download worker | Direct download from the local server |
+| Host/co-host gating, limited mode, "Insufficient privilege" screen | Plugin SDK works as a plain attendee |
+| Collapse/expand window and window-mode toggles | Zoom side-panel sizing; normal desktop window |
+| Separate Meeting-panel and Settings-panel UI sizes, quick size switch in the meeting header | One window, one UI size in Settings |
+| "↻ Refresh current roster" in the status table | The list updates live |
+| SDK event recording controls | Zoom Apps developer tool; per-instance JSONL logs instead |
+| "Back up regularly, Zoom may clear your data" warning | Data is in SQLite under `%LOCALAPPDATA%` |
+| Separate Dexie DBs, orphaned-session cleanup | SQLite (`attend-store`); one record per meeting instance |
 
-## Plugin-SDK extras (P3)
+### Changed on purpose
 
-Background capture without UI; real join times from meeting start; waiting-room view +
-admit / auto-admit roster matches (host); raised-hand state at connect; unknown-arrival
-alerts; meeting history across restarts; OFF features (special participants, blacklist
-actions, archive analytics) as optional modules.
+| AttendFlow | Desktop |
+|---|---|
+| Home + breadcrumb + page tabs | Sidebar navigation (Live, Records, Configuration, Settings) |
+| Settings "Clear local data" | Same scope (owner 2026-11-23: match the original). Clearing only records is done from the Records list: select all, Delete selected |
+| Records list: start date/time prefix search, no sorting | Search also matches topic, meeting number and end time; click a column header to sort (added by Codex in `63dd3a8`, kept by owner 2026-11-23) |
+
+## Desktop additions
+
+- Works as a plain attendee: full participant list and live join/leave without host/co-host
+  (Plugin SDK; SDK-NOTES "In-meeting observations").
+- Background capture without the UI open; the record survives UI reloads and companion
+  restarts (resume, including quiet meetings via a 30 s heartbeat).
+- Real join times from when the companion first sees the meeting.
+- Waiting-room location and minutes (host), kept separate from attendance.
+- Raised-hand state at connect.
+- One engine (`attend-engine`, Rust) for capture and records; derivation matches
+  AttendFlow exactly (parity goldens above).
+- SQLite storage that survives browser resets; append-only JSONL logs as backup.
+- Import of AttendFlow backups and session bundles (migration path).
+- In-app Zoom sign-in/sign-out with token revocation; Zoom connection banner.
+- Native window (WebView2), tray; browser access via `zoom-companion serve`.
+- Planned (P3): auto-admit roster matches from the waiting room (host), unknown-arrival
+  alerts, autostart, notifications.
