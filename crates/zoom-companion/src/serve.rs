@@ -826,6 +826,7 @@ pub fn run(
             .route("/api/profiles/import/commit", post(api_profiles_import_commit))
             .route("/api/config/example-data", post(api_example_data_commit))
             .route("/api/meetings", get(api_meetings))
+            .route("/api/live/new-record", post(api_new_record))
             .route("/api/zoom", get(api_zoom_status))
             .route("/api/zoom/sign-in", post(api_zoom_sign_in))
             .route("/api/zoom/sign-out", post(api_zoom_sign_out))
@@ -3057,6 +3058,21 @@ async fn api_meetings(State(a): State<App>, headers: HeaderMap) -> Response {
             Json(rows).into_response()
         }
         Err(e) => api_error(e),
+    }
+}
+async fn api_new_record(State(a): State<App>, headers: HeaderMap) -> Response {
+    if let Some(r) = api_origin(&a, &headers) { return r; }
+    let mut tracker = a.tracker.lock().unwrap();
+    if tracker.meeting.is_none() {
+        return Json(json!({"error":"no_active_meeting"})).into_response_with_status(StatusCode::CONFLICT);
+    }
+    let events = tracker.split();
+    let id = tracker.meeting.as_ref().map(|m| m.instance_id.clone());
+    drop(tracker);
+    publish(&a, events);
+    match id {
+        Some(instance_id) => Json(json!({"instanceId":instance_id})).into_response(),
+        None => Json(json!({"error":"no_active_meeting"})).into_response_with_status(StatusCode::CONFLICT),
     }
 }
 async fn api_meeting(
