@@ -9,7 +9,7 @@
   let editing = false;
   let draft = '';
   let input: HTMLInputElement;
-  function begin() { draft = customName || ''; editing = true; setTimeout(() => input?.focus(), 0); }
+  function begin() { draft = customName || ''; editing = true; setTimeout(() => { input?.focus(); input?.select(); }, 0); }
   function cancel() { editing = false; draft = customName || ''; }
   async function save() {
     if (!editing) return;

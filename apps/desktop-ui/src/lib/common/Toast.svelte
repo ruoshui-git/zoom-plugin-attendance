@@ -34,5 +34,7 @@
   .toast-dismiss{flex:none;width:1.75rem;min-height:1.75rem;margin:-.25rem -.25rem 0 0;padding:0;border:0;background:transparent;color:var(--muted);font-size:1rem}.toast-dismiss:hover{background:var(--surface-soft);color:var(--text)}
   .toast-progress{position:absolute;bottom:0;left:0;right:0;height:3px;background:var(--line);overflow:hidden}.toast-progress-bar{height:100%;background:currentColor;transition:width .05s linear}.toast-success .toast-progress-bar{color:var(--success)}.toast-error .toast-progress-bar{color:var(--danger)}.toast-warning .toast-progress-bar{color:var(--warning)}.toast-info .toast-progress-bar{color:var(--accent)}
   @keyframes toast-in{from{transform:translateX(30%);opacity:0}to{transform:translateX(0);opacity:1}}
+  /* Small windows (compact live view): slim toasts along the bottom edge instead of a tall stack over the content. */
+  @media(max-width:480px),(max-height:360px){.toast-container{top:auto;bottom:.4rem;left:.4rem;right:.4rem;width:auto;max-height:45vh;gap:.3rem}.toast{padding:.35rem .5rem .5rem;gap:.4rem;border-left-width:3px}.toast-message{font-size:11px;line-height:1.3}.toast-icon{font-size:.8rem;width:.9rem}.toast-dismiss{width:1.3rem;min-height:1.3rem;font-size:.8rem}}
   @media(prefers-reduced-motion:reduce){.toast{animation:none}.toast-progress-bar{transition:none}}
 </style>
