@@ -2,6 +2,7 @@
   import { fade } from "svelte/transition";
   import { toast } from "../toast";
   import { t } from "../ui";
+  import Tooltip from "./Tooltip.svelte";
   import type { ToastMessage, ToastType } from "./toast-types";
   let { toasts = [], onDismiss }: { toasts: ToastMessage[]; onDismiss: (id: string) => void } = $props();
   let progress = $state(new Map<string, number>());
@@ -18,7 +19,7 @@
     <div class="toast toast-{item.type}" role="status" out:fade={{ duration: 200 }} onmouseenter={() => toast.pause(item.id)} onmouseleave={() => toast.resume(item.id)}>
       <span class="toast-icon" aria-hidden="true">{icons[item.type]}</span>
       <span class="toast-message">{item.message}</span>
-      <button type="button" class="toast-dismiss" onclick={() => onDismiss(item.id)} aria-label={t("关闭", "Close")}>✕</button>
+      <Tooltip text={t("关闭", "Close")}><button type="button" class="toast-dismiss" onclick={() => onDismiss(item.id)} aria-label={t("关闭", "Close")}>✕</button></Tooltip>
       {#if item.duration > 0}<div class="toast-progress"><div class="toast-progress-bar" style="width: {progress.get(item.id) ?? toast.getProgress(item.id)}%"></div></div>{/if}
     </div>
   {/each}

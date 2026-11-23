@@ -7,6 +7,7 @@
   import { PointerActivationConstraints } from "@dnd-kit/dom";
   import { createSortable } from "@dnd-kit/svelte/sortable";
   import { move } from "@dnd-kit/helpers";
+  import Tooltip from "./Tooltip.svelte";
   export let rows: any[] = [];
   export let roster: any[] = [];
   export let configGroups: string[] = [];
@@ -48,10 +49,10 @@
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
   <div class="filter-section-bar" role="button" aria-expanded={filterOpen} tabindex="0" onclick={() => filterOpen = !filterOpen} onkeydown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); filterOpen = !filterOpen; } }}>
     <span class="filter-toggle-btn"><span class="filter-toggle-icon">{filterOpen ? '▼' : '▶'}</span><span>{t('筛选与排序', 'Filters & Sort')} · {t('分组', 'groups')} {rosterMode ? selectedGroups.length : 0}/{rosterMode ? groupNames.length : 0}</span></span>
-    <div class="filter-section-actions" role="group" onclick={(event) => event.stopPropagation()}><button class="filter-section-btn" aria-label={t('全部重置','Reset All')} onclick={reset}>↺</button><button class="filter-section-btn" aria-label={t('全部展开','Expand All')} onclick={() => { expectationOpen = true; groupOpen = true; }}>⊞</button><button class="filter-section-btn" aria-label={t('全部折叠','Collapse All')} onclick={() => { expectationOpen = false; groupOpen = false; }}>⊟</button></div>
+    <div class="filter-section-actions" role="group" onclick={(event) => event.stopPropagation()}><Tooltip text={t('全部重置','Reset All')}><button class="filter-section-btn" aria-label={t('全部重置','Reset All')} onclick={reset}>↺</button></Tooltip><Tooltip text={t('全部展开','Expand All')}><button class="filter-section-btn" aria-label={t('全部展开','Expand All')} onclick={() => { expectationOpen = true; groupOpen = true; }}>⊞</button></Tooltip><Tooltip text={t('全部折叠','Collapse All')}><button class="filter-section-btn" aria-label={t('全部折叠','Collapse All')} onclick={() => { expectationOpen = false; groupOpen = false; }}>⊟</button></Tooltip></div>
   </div>
   {#if filterOpen}
-    <div class="filter-panel-body"><div class="filter-name-search"><div class="filter-name-input-wrap"><input class="filter-name-input" aria-label={t('搜索姓名','Search names')} placeholder={t('姓名/拼音…','Name / pinyin…')} bind:value={search}/>{#if search}<button class="filter-name-clear" aria-label={t('清除','Clear')} onclick={() => search = ''}>✕</button>{/if}</div><button class="sort-dir-btn" aria-label={t('切换姓名排序方向','Toggle name sort direction')} onclick={() => ascending = !ascending}>{ascending ? 'A→Z' : 'Z→A'}</button></div>
+    <div class="filter-panel-body"><div class="filter-name-search"><div class="filter-name-input-wrap"><input class="filter-name-input" aria-label={t('搜索姓名','Search names')} placeholder={t('姓名/拼音…','Name / pinyin…')} bind:value={search}/>{#if search}<Tooltip text={t('清除','Clear')}><button class="filter-name-clear" aria-label={t('清除','Clear')} onclick={() => search = ''}>✕</button></Tooltip>{/if}</div><Tooltip text={t('切换姓名排序方向','Toggle name sort direction')}><button class="sort-dir-btn" aria-label={t('切换姓名排序方向','Toggle name sort direction')} onclick={() => ascending = !ascending}>{ascending ? 'A→Z' : 'Z→A'}</button></Tooltip></div>
     {#if rosterMode}      <DragDropProvider {sensors} onDragEnd={handleDragEnd}>{#each sectionOrder.filter((s) => s !== 'expectation' || rows.some((r: any) => r.isExpected === false)) as section, si (section)}
         {@const sortable = createSortable({id: section, index: si, type: 'filter-section', accept: 'filter-section'})}
         <div class="section-wrapper" data-dragging={sortable.isDragging ? 'true' : undefined} data-over={sortable.isDropTarget ? 'true' : undefined} {@attach sortable.attach}>
