@@ -886,12 +886,18 @@ pub fn app() -> anyhow::Result<()> {
         use tao::platform::windows::IconExtWindows;
         tao::window::Icon::from_resource(1, None).ok()
     };
-    let (w,h) = match state.mode { Mode::Full => window_state::full_default(), Mode::Compact => window_state::compact_default() };
+    let monitors: Vec<Rect> = event_loop.available_monitors().map(|m| {
+        let scale=m.scale_factor(); let p=m.position(); let s=m.size();
+        Rect { x:(p.x as f64/scale).round() as i32, y:(p.y as f64/scale).round() as i32, width:(s.width as f64/scale).round() as u32, height:(s.height as f64/scale).round() as u32 }
+    }).collect();
+    let saved = match state.mode { Mode::Full => state.full, Mode::Compact => state.compact };
+    let restored = saved.filter(|r| window_state::usable(*r, &monitors));
+    let (w,h) = restored.map(|r|(r.width,r.height)).unwrap_or_else(|| match state.mode { Mode::Full => window_state::full_default(), Mode::Compact => window_state::compact_default() });
     let mut builder = WindowBuilder::new()
         .with_title("AttendFlow Desktop")
         .with_window_icon(icon)
         .with_inner_size(tao::dpi::LogicalSize::new(w as f64, h as f64));
-    if let Some(r) = match state.mode { Mode::Full => state.full, Mode::Compact => state.compact } { builder = builder.with_position(tao::dpi::LogicalPosition::new(r.x as f64, r.y as f64)).with_inner_size(tao::dpi::LogicalSize::new(r.width as f64,r.height as f64)); }
+    if let Some(r) = restored { builder = builder.with_position(tao::dpi::LogicalPosition::new(r.x as f64, r.y as f64)); }
     let window = builder.build(&event_loop)?;
     window.set_always_on_top(state.pinned);
     window.set_min_inner_size(Some(match state.mode { Mode::Full => tao::dpi::LogicalSize::new(900.0,600.0), Mode::Compact => { let (w,h)=window_state::compact_min(); tao::dpi::LogicalSize::new(w as f64,h as f64) }}));
