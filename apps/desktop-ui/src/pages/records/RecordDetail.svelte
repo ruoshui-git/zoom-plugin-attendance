@@ -2,6 +2,7 @@
   import { viewedMeeting as meeting, viewedRecord as record, viewedState as stateValue, viewedEvents as recordEvents, language, configs, settings } from '../../lib/stores';
   import { exportOne, exportAll, saveRecordState, deleteRecords } from '../../lib/api';
   import { toast } from '../../lib/toast';
+  import { runBusy, busyKeys } from '../../lib/busy';
   import { t, dateTime, timeOnly, confirmDialog } from '../../lib/ui';
   import { filterRowsByTag, eventTypeCounts, deriveHandEntries } from '../../lib/record-tools';
 import { getLiveStatusLabel, getMatchStatusLabel, getParticipantLocationLabel, getRecordSourceLabel } from '../../lib/session-labels';
@@ -57,17 +58,17 @@ import { eventMatchesSearch } from '../../lib/event-search';
   const movementLabels: Record<string, string[]> = { joinedBefore:['启动时已加入','Already in meeting at startup'], join:['进入会议','Joined meeting'], leave:['离开会议','Left meeting'], waitingRoomJoinFromOutside:['进入等候室','Entered waiting room'], waitingRoomJoinFromMeeting:['移至等候室','Moved to waiting room'], waitingRoomJoinedBefore:['启动时已在等候室','In waiting room at startup'], waitingRoomLeave:['离开等候室','Left waiting room'] };
   function label(pair: string[]) { return t(pair[1], pair[2]); }
   function eventName(type: string) { const pair = movementLabels[type]; return pair ? t(pair[0], pair[1]) : t('未知','Unknown'); }
-  async function changeMode(value: string) { await saveRecordState({ mode: value }, 'viewed'); }
-  async function handleExport(kind: string) { if (kind === 'all') await exportAll('viewed'); else await exportOne(kind, 'viewed'); }
+  async function changeMode(value: string) { await runBusy('record-mode', async () => { try { await saveRecordState({ mode: value }, 'viewed'); } catch (error: any) { toast.error(`${t('保存失败：', 'Save failed: ')}${error.message}`); } }); }
+  async function handleExport(kind: string) { await runBusy('record-export', async () => { try { if (kind === 'all') await exportAll('viewed'); else await exportOne(kind, 'viewed'); toast.success(t('导出成功。','Export succeeded.')); } catch (error: any) { toast.error(`${t('导出失败：','Export failed: ')}${error.message}`); } }); }
   function toggleSort(key: RecordSortKey) { const next = nextRecordSort({ key: sortKey, dir: sortDir }, key); sortKey = next.key; sortDir = next.dir; }
   function sortAria(key: RecordSortKey) { return sortKey !== key ? 'none' : sortDir === 'asc' ? 'ascending' : 'descending'; }
   function sortIndicator(key: RecordSortKey) { return sortKey !== key ? '↕' : sortDir === 'asc' ? '↑' : '↓'; }
   async function handleDelete() {
     if (!$meeting?.endedAt || !(await confirmDialog({ title: t('删除考勤记录','Delete Attendance Record'), message: t('确定删除此会议记录吗？此操作无法撤销。','Delete this meeting record? This cannot be undone.'), destructive: true }))) return;
-    try {
+    await runBusy('record-delete', async () => { try {
       await deleteRecords([$meeting.instanceId], 'viewed');
       toast.success(t('考勤记录已删除。','Attendance record deleted.'));
-    } catch { /* deleteRecords already showed the error */ }
+    } catch (error: any) { toast.error(`${t('删除失败：','Delete failed: ')}${error.message}`); } });
   }
 </script>
 
@@ -75,14 +76,14 @@ import { eventMatchesSearch } from '../../lib/event-search';
   {#if $record.loading}<p class="empty">{t('加载中…','Loading…')}</p>{:else}
   <div class="header">
     <div class="title"><h2>{$meeting?.topic || $meeting?.meetingNumber}</h2><div class="badges"><span>{$record.mode === 'roster' ? t('花名册','Roster') : t('普通模式','Generic')}</span><span>{getRecordSourceLabel($meeting?.source || 'meeting_live',$language as any).label}</span><small>{$meeting?.meetingNumber} · {$record.summary?.total ?? attendanceRows.length} {t('位参与者','participants')}</small></div></div>
-    <div class="actions"><ExportMenu labels={{ all:t('导出全部','Export All'), json:t('导出 JSON','Export JSON'), attendance:t('导出考勤 CSV','Export Attendance CSV'), manual:t('导出手动记录 CSV','Export Manual Records CSV') }} onExport={handleExport}/><button class="danger" disabled={!$meeting?.endedAt} onclick={handleDelete}>{t('删除','Delete')}</button></div>
+    <div class="actions"><ExportMenu disabled={$busyKeys.has('record-export')} labels={{ all:t('导出全部','Export All'), json:t('导出 JSON','Export JSON'), attendance:t('导出考勤 CSV','Export Attendance CSV'), manual:t('导出手动记录 CSV','Export Manual Records CSV') }} onExport={handleExport}/><button class="danger" disabled={!$meeting?.endedAt || $busyKeys.has('record-delete')} onclick={handleDelete}>{$busyKeys.has('record-delete') ? t('删除中…','Deleting…') : t('删除','Delete')}</button></div>
   </div>
   <div class="record-tabs" role="tablist" aria-label={t('记录详情','Record detail')}>{#each primary as item}<button role="tab" aria-selected={tab===item[0]} class:active={tab===item[0]} onclick={() => {tab=item[0];search='';status='';}}>{label(item)}{#if item[0]==='attendance'}<small>{$record.summary?.total ?? ($record.rows || []).length}</small>{:else if item[0]==='events'}<small>{movement.length}</small>{:else if item[0]==='hands'}<small>{handEntries.length}</small>{:else if item[0]==='snapshots'}<small>{$stateValue.manualSnapshots?.length || 0}</small>{/if}</button>{/each}</div>
   {#if tab==='attendance'}
     <div class="secondary" role="tablist" aria-label={t('自动考勤标签','Auto Attendance tabs')}>{#each secondary as item}<button role="tab" aria-selected={subtab===item[0]} class:active={subtab===item[0]} onclick={() => subtab=item[0]}>{label(item)}</button>{/each}</div>
     {#if subtab==='status'}
       <div class="summary-row"><SortableFilterStack items={statItems} active={status} onSelect={(id) => status = status === id ? '' : id} /></div>
-      <div class="mode-row"><b>{t('出席情况','Attendance Status')}</b><div class="segmented"><button class:chosen={$record.mode!=='roster'} onclick={() => changeMode('generic')}>{t('普通模式','Generic')}</button><button class:chosen={$record.mode==='roster'} onclick={() => changeMode('roster')}>{t('花名册','Roster')}</button></div></div>
+      <div class="mode-row"><b>{t('出席情况','Attendance Status')}</b><div class="segmented"><button disabled={$busyKeys.has('record-mode')} class:chosen={$record.mode!=='roster'} onclick={() => changeMode('generic')}>{t('普通模式','Generic')}</button><button disabled={$busyKeys.has('record-mode')} class:chosen={$record.mode==='roster'} onclick={() => changeMode('roster')}>{t('花名册','Roster')}</button></div></div>
       <AttendanceFilterPanel rows={attendanceRows} roster={$configs.roster || []} configGroups={groupNames} {profile} {mode} language={$language} initiallyOpen={!$settings.filterDefaultsClosed} activeFilter={status} bind:ascending onActiveFilterChange={(value) => status = value} onRows={(value) => filteredRows = value} />
       <div class="table-wrap"><table><thead><tr><th>#</th><th aria-sort={sortAria('name')}><button type="button" class="sort-header" onclick={() => toggleSort('name')}>{t('姓名','Name')} <span class:active={sortKey === 'name'}>{sortIndicator('name')}</span></button></th><th>{t('状态','Status')}</th><th aria-sort={sortAria('score')}><button type="button" class="sort-header" onclick={() => toggleSort('score')}>{t('出勤率','Score')} <span class:active={sortKey === 'score'}>{sortIndicator('score')}</span></button></th><th>{t('标签','Tags')}</th><th>{t('分组','Group')}</th><th>{t('姓名匹配','Name Match')}</th><th aria-sort={sortAria('firstJoin')}><button type="button" class="sort-header" onclick={() => toggleSort('firstJoin')}>{t('首次加入','First Join')} <span class:active={sortKey === 'firstJoin'}>{sortIndicator('firstJoin')}</span></button></th><th aria-sort={sortAria('minutes')}><button type="button" class="sort-header" onclick={() => toggleSort('minutes')}>{t('分钟','Minutes')} <span class:active={sortKey === 'minutes'}>{sortIndicator('minutes')}</span></button></th></tr></thead><tbody>{#each rows as row,i}<tr><td>{i+1}</td><td class="participant-name"><b>{row.canonicalName || row.zoomName}</b><small>{row.pinyin || row.zoomNames?.join(', ')}</small></td><td><div class='tag-list'>{#each recordStatusTags(row) as chip}<StatusBadge status={chip === 'missing' ? 'absent' : chip} label={statusLabel(chip === 'missing' ? 'absent' : chip,$language)} />{/each}</div></td><td><span class="score" class:score-high={(row.score || 0)>=95} class:score-mid={(row.score || 0)>=80 && (row.score || 0)<95} class:score-low={(row.score || 0)<80}>{Math.round(row.score || 0)}%</span></td><td><div class="tag-list">{#each (row.tags || []).filter((chip: string) => chip !== 'total' && chip !== 'ignored' && chip !== 'unmatched') as chip}<StatusBadge status={chip} label={statusLabel(chip,$language)} />{/each}</div></td><td class="group-cell" title={groupLabel(row.group, $language)}>{groupLabel(row.group, $language)}</td><td>{#if row.matchStatus === 'matched' || row.canonicalName}<StatusBadge label={t('已关联','Matched')} tone="success" />{:else}—{/if}</td><td>{row.firstJoinAt ? timeOnly(row.firstJoinAt) : '—'}</td><td>{Math.round(row.totalPresenceMinutes || 0)}</td></tr>{:else}<tr><td colspan="9" class="empty">{t('没有符合条件的参与者','No matching participants')}</td></tr>{/each}</tbody></table></div>
     {:else if subtab==='matching'}<NameMatchingPanel rows={$record.rows || []} decisions={$stateValue.reconciliationDecisions || []} roster={$configs.roster || []} aliases={$configs.aliases || []} nameChanges={names} language={$language} readOnly={true}/>

@@ -208,8 +208,8 @@ export async function deleteRecords(ids: string[], target: DataTarget = "live") 
     body: JSON.stringify({ instanceIds: ids }),
   });
   if (!response.ok) {
-    toast.error(t("无法删除正在进行的会议。", "Active meetings cannot be deleted."));
-    throw Error("Record deletion failed");
+    const reason = await response.text().catch(() => "");
+    throw Error(reason || t("无法删除正在进行的会议。", "Active meetings cannot be deleted."));
   }
   set(s.selectedRecords, []);
   // Clear only what was actually deleted (the live meeting is never deletable).
@@ -237,10 +237,10 @@ export async function previewRecordImport(eventOrData: Event | unknown) {
       body: JSON.stringify(data),
     });
     const preview = await response.json();
+    if (!response.ok) throw Error(preview.message || t("预览失败", "Preview failed"));
     set(s.recordImportPreview, preview);
-    if (!response.ok) throw Error(preview.message || "Preview failed");
   } catch (error: any) {
-    toast.error(error.message);
+    throw error;
   } finally { if (eventOrData instanceof Event) (eventOrData.currentTarget as HTMLInputElement).value = ""; }
 }
 export async function commitRecordImport() {
@@ -251,8 +251,8 @@ export async function commitRecordImport() {
     body: JSON.stringify(preview),
   });
   if (!response.ok) {
-    toast.error((await response.json()).message || "Import failed");
-    return;
+    const message = await response.json().catch(() => ({}));
+    throw Error(message.message || t("导入失败", "Import failed"));
   }
   set(s.recordImportPreview, null);
   const imported = (await response.clone().json().catch(() => ({}))).imported;
@@ -450,7 +450,7 @@ export async function saveRecordState(patch: any, target: DataTarget = "live") {
   });
   if (response.status === 409) {
     await loadState(target);
-    return;
+    throw Error(t("保存失败：数据已被其他窗口修改，请重试。", "Save failed: data changed in another window. Please retry."));
   }
   if (!response.ok) throw Error(await response.text());
   const data = await response.json();
