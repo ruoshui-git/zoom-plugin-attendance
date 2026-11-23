@@ -39,4 +39,15 @@ describe('nextRecordSort', () => {
     expect(nextRecordSort({ key: 'minutes', dir: 'desc' }, 'minutes')).toEqual({ key: '', dir: 'asc' });
     expect(nextRecordSort({ key: 'minutes', dir: 'desc' }, 'name')).toEqual({ key: 'name', dir: 'asc' });
   });
+  it('sorts camera minutes and mic opens with missing media last in both directions', () => {
+    const media = [
+      { id: 'x', cameraOnMinutes: 5, media: { unmuteCount: 2 } },
+      { id: 'none' },
+      { id: 'y', cameraOnMinutes: 30, media: { unmuteCount: 0 } },
+    ];
+    expect(sortRecordRows(media, 'camera', 'asc').map((row) => row.id)).toEqual(['x', 'y', 'none']);
+    expect(sortRecordRows(media, 'camera', 'desc').map((row) => row.id)).toEqual(['y', 'x', 'none']);
+    expect(sortRecordRows(media, 'mic', 'asc').map((row) => row.id)).toEqual(['y', 'x', 'none']);
+    expect(sortRecordRows(media, 'mic', 'desc').map((row) => row.id)).toEqual(['x', 'y', 'none']);
+  });
 });

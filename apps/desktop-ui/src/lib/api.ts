@@ -473,27 +473,28 @@ export async function saveRecordState(patch: any, target: DataTarget = "live") {
   // Mode/decision changes alter the record (and its count in the Records list) for either target.
   invalidateRecord(active.instanceId); await refresh({ changed: [active.instanceId] });
 }
+/** One participant of a manual attendance capture, including the camera state at capture time. */
+export function manualSnapshotParticipant(user: any, rows: any[]) {
+  const row = rows.find((item: any) => item.zoomNames?.includes(user.name) || item.zoomName === user.name);
+  return {
+    participantUUID: String(user.userId),
+    screenName: user.name,
+    screenNamePinyin: row?.pinyin || "",
+    role: user.host ? "host" : "participant",
+    location: user.waitingRoom ? "waiting-room" : "meeting",
+    sessionParticipantId: row?.sessionParticipantId,
+    matchedPersonId: row?.personId,
+    matchedCanonicalName: row?.canonicalName,
+    matchStatus: row?.matchStatus || "not-applicable",
+    ...(typeof user.videoOn === "boolean" ? { videoOn: user.videoOn } : {}),
+  };
+}
+
 export async function captureManual() {
   const active = value(s.meeting);
   if (!active) throw Error(t("没有活动会议", "No active meeting"));
   const record = value(s.record);
-  const participants = currentUsers().map((user: any) => {
-    const row = (record.rows || []).find(
-      (item: any) =>
-        item.zoomNames?.includes(user.name) || item.zoomName === user.name,
-    );
-    return {
-      participantUUID: String(user.userId),
-      screenName: user.name,
-      screenNamePinyin: row?.pinyin || "",
-      role: user.host ? "host" : "participant",
-      location: user.waitingRoom ? "waiting-room" : "meeting",
-      sessionParticipantId: row?.sessionParticipantId,
-      matchedPersonId: row?.personId,
-      matchedCanonicalName: row?.canonicalName,
-      matchStatus: row?.matchStatus || "not-applicable",
-    };
-  });
+  const participants = currentUsers().map((user: any) => manualSnapshotParticipant(user, record.rows || []));
   const snapshot = {
     id: `manual-${Date.now()}`,
     timestamp: new Date().toISOString(),

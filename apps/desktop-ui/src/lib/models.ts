@@ -131,6 +131,8 @@ export interface SnapshotParticipant extends ZoomParticipantRecord {
   matchedPersonId?: number;
   matchedCanonicalName?: string;
   matchStatus: MatchStatus;
+  /** Camera state at capture time (desktop addition). */
+  videoOn?: boolean;
 }
 
 export interface ManualSnapshot {
