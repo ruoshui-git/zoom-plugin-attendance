@@ -2,13 +2,13 @@
 use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug)]
-struct Frame { width: u32, height: u32, bgra: Vec<u8> }
+pub(crate) struct Frame { pub width: u32, pub height: u32, pub bgra: Vec<u8> }
 
-fn luma(bgra: &[u8], i: usize) -> u8 {
+pub(crate) fn luma(bgra: &[u8], i: usize) -> u8 {
     ((bgra[i] as u32 * 29 + bgra[i+1] as u32 * 150 + bgra[i+2] as u32 * 77) >> 8) as u8
 }
 
-fn downsample_luma(frame: &Frame, cols: u32, rows: u32) -> Vec<u8> {
+pub(crate) fn downsample_luma(frame: &Frame, cols: u32, rows: u32) -> Vec<u8> {
     if cols == 0 || rows == 0 || frame.width == 0 || frame.height == 0 { return vec![]; }
     let mut out = Vec::with_capacity((cols * rows) as usize);
     for gy in 0..rows { for gx in 0..cols {
@@ -20,13 +20,13 @@ fn downsample_luma(frame: &Frame, cols: u32, rows: u32) -> Vec<u8> {
     }} out
 }
 
-fn frames_nearly_identical(a: &Frame, b: &Frame, threshold: f32) -> bool {
+pub(crate) fn frames_nearly_identical(a: &Frame, b: &Frame, threshold: f32) -> bool {
     if a.width != b.width || a.height != b.height || a.width == 0 || a.height == 0 { return false; }
     let (aa,bb)=(downsample_luma(a,64,36),downsample_luma(b,64,36));
     aa.iter().zip(&bb).map(|(x,y)|x.abs_diff(*y) as f32).sum::<f32>() / aa.len().max(1) as f32 <= threshold
 }
 
-fn count_dark_tiles(frame: &Frame) -> u32 {
+pub(crate) fn count_dark_tiles(frame: &Frame) -> u32 {
     const W: usize=96; const H: usize=54;
     let g=downsample_luma(frame,W as u32,H as u32); let mut seen=vec![false;g.len()]; let mut count=0;
     for start in 0..g.len() { if seen[start] || g[start]>=18 {continue} let mut q=vec![start]; seen[start]=true; let(mut minx,mut maxx,mut miny,mut maxy)=(start%W,start%W,start/W,start/W);
@@ -39,20 +39,32 @@ fn count_dark_tiles(frame: &Frame) -> u32 {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-enum Decision { Wait, Accept{frame_index:usize,waited_ms:u64,dark_tiles:u32}, Timeout{frame_index:usize,waited_ms:u64,dark_tiles:u32} }
-struct TileWait { frames: Vec<(Frame,u64)>, start_ms: Option<u64> }
+pub(crate) enum Decision { Wait, Accept{frame_index:usize,waited_ms:u64,dark_tiles:u32}, Timeout{frame_index:usize,waited_ms:u64,dark_tiles:u32} }
+/// R-D.4 tile-load wait for one gallery page. Keeps only the latest frame (frames are large).
+pub(crate) struct TileWait { last: Option<(Frame, u32)>, start_ms: Option<u64>, count: usize }
 impl TileWait {
- fn new()->Self{Self{frames:vec![],start_ms:None}}
- fn push(&mut self,frame:Frame,at_ms:u64)->Decision{
-   let start=*self.start_ms.get_or_insert(at_ms);let current=count_dark_tiles(&frame);let prev=self.frames.last().map(|(f,_)|count_dark_tiles(f));self.frames.push((frame,at_ms));let idx=self.frames.len()-1;let waited=at_ms.saturating_sub(start);
-   if idx>0 && frames_nearly_identical(&self.frames[idx-1].0,&self.frames[idx].0,2.0) && prev.is_some_and(|p|current>=p){return Decision::Accept{frame_index:idx,waited_ms:waited,dark_tiles:current}}
-   if waited>=10_000{return Decision::Timeout{frame_index:idx,waited_ms:waited,dark_tiles:current}} Decision::Wait
- }
+    pub(crate) fn new() -> Self { Self { last: None, start_ms: None, count: 0 } }
+    /// Accept once two consecutive frames are nearly identical and the dark-tile count stopped
+    /// falling; time out after 10 s (the last frame is kept either way).
+    pub(crate) fn push(&mut self, frame: Frame, at_ms: u64) -> Decision {
+        let start = *self.start_ms.get_or_insert(at_ms);
+        let waited = at_ms.saturating_sub(start);
+        let dark = count_dark_tiles(&frame);
+        let stable = self.last.as_ref().is_some_and(|(prev, prev_dark)| dark >= *prev_dark && frames_nearly_identical(prev, &frame, 2.0));
+        let index = self.count;
+        self.count += 1;
+        self.last = Some((frame, dark));
+        if stable { return Decision::Accept { frame_index: index, waited_ms: waited, dark_tiles: dark }; }
+        if waited >= 10_000 { return Decision::Timeout { frame_index: index, waited_ms: waited, dark_tiles: dark }; }
+        Decision::Wait
+    }
+    /// The latest frame (the accepted or timed-out one after `push` decided).
+    pub(crate) fn into_frame(self) -> Option<Frame> { self.last.map(|(frame, _)| frame) }
 }
-fn page_repeats(previous_pages:&[Vec<u8>],current:&[u8])->bool{previous_pages.iter().any(|p|p==current)}
-fn captures_dir(local_app_data:&Path,instance_id:&str)->PathBuf{let clean:String=instance_id.chars().map(|c|if c.is_ascii_alphanumeric()||c=='-'||c=='_'{c}else{'_'}).collect();local_app_data.join("zoom-companion").join("captures").join(clean)}
-fn page_file_name(index:usize,at_ms:u64)->String{format!("page-{:02}-{}.png",index,at_ms)}
-fn encode_png(frame:&Frame)->Vec<u8>{
+pub(crate) fn page_repeats(previous_pages:&[Vec<u8>],current:&[u8])->bool{previous_pages.iter().any(|p|p==current)}
+pub(crate) fn captures_dir(local_app_data:&Path,instance_id:&str)->PathBuf{let clean:String=instance_id.chars().map(|c|if c.is_ascii_alphanumeric()||c=='-'||c=='_'{c}else{'_'}).collect();local_app_data.join("zoom-companion").join("captures").join(clean)}
+pub(crate) fn page_file_name(index:usize,at_ms:u64)->String{format!("page-{:02}-{}.png",index,at_ms)}
+pub(crate) fn encode_png(frame:&Frame)->Vec<u8>{
  let mut rgba=Vec::with_capacity(frame.width as usize*frame.height as usize*4);for p in frame.bgra.chunks_exact(4){rgba.extend_from_slice(&[p[2],p[1],p[0],p[3]])}
  let mut out=Vec::new();{let mut enc=png::Encoder::new(&mut out,frame.width,frame.height);enc.set_color(png::ColorType::Rgba);enc.set_depth(png::BitDepth::Eight);let mut w=enc.write_header().expect("PNG header");w.write_image_data(&rgba).expect("PNG pixels");}out
 }
