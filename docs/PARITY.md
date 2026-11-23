@@ -210,6 +210,7 @@ Tick items off here as they land.
 
 ## Desktop additions
 
+- Custom record names (rename any record; default title stays visible).
 - Works as a plain attendee: full participant list and live join/leave without host/co-host
   (Plugin SDK; SDK-NOTES "In-meeting observations").
 - Background capture without the UI open; the record survives UI reloads and companion
