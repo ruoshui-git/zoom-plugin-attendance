@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { recordTitle } from '../lib/record-title';
   import { viewedMeeting, meetings, recordCounts, recordModes, selectedRecords, recordImportPreview } from '../lib/stores';
   import { exportRecords, deleteRecords, previewRecordImport, commitRecordImport, loadViewedRecord } from '../lib/api';
   import { t, dateTime, confirmDialog } from '../lib/ui';
@@ -17,7 +18,7 @@
   let importText = '';
   $: filtered = filterMeetings($meetings, { search });
   $: columns = [
-    { key: 'topic', label: t('会议','Meeting'), value: (item: any) => item.topic || item.meetingNumber || '—' },
+    { key: 'topic', label: t('会议','Meeting'), value: (item: any) => recordTitle(item).primary, secondary: (item: any) => recordTitle(item).secondary },
     { key: 'startedAt', label: t('开始时间','Started'), value: (item: any) => item.startedAt ? dateTime(item.startedAt) : '—', sortValue: (item: any) => Date.parse(item.startedAt || '') || 0 },
     { key: 'endedAt', label: t('结束时间','Ended'), value: (item: any) => item.endedAt ? dateTime(item.endedAt) : '—', sortValue: (item: any) => Date.parse(item.endedAt || '') || 0 },
     { key: 'mode', label: t('考勤模式','Attendance Mode'), value: (item: any) => (($recordModes[item.instanceId] || item.mode) === 'roster') ? t('花名册','Roster') : t('普通模式','Generic') },

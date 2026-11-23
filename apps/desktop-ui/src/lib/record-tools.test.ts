@@ -10,6 +10,7 @@ describe('record detail helpers', () => {
     expect(filterMeetings(meetings, { search: '2025-03-15', mode: 'roster', source: 'imported', status: 'ended' })).toEqual([meetings[0]]);
     expect(filterMeetings(meetings, { search: 'student', status: 'active' })).toEqual([meetings[1]]);
     expect(filterMeetings(meetings, { search: 'absent' })).toEqual([]);
+    expect(filterMeetings([{ topic: 'Default', customName: 'Quarterly planning' }], { search: 'quarterly' })).toHaveLength(1);
   });
   const rows = [
     { zoomName: 'Bee', pinyin: 'bee', score: 50, totalPresenceMinutes: 20, tags: ['seen'], hasBeenSeen: true },

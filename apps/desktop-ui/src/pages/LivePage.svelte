@@ -13,6 +13,8 @@
   import { filterRowsByTag } from "../lib/record-tools";
   import { busyKeys, runBusy } from "../lib/busy";
   import { toast } from "../lib/toast";
+  import RecordNameEditor from "../lib/common/RecordNameEditor.svelte";
+  import { recordTitle } from "../lib/record-title";
 
   let primary = "attendance";
   let secondary = "status";
@@ -65,7 +67,7 @@
 
 {#if $meeting}
   <section class="meet-head compact-head">
-    <div class="meeting-title"><b title={$meeting.topic || t("未命名会议", "Untitled meeting")}>{$meeting.topic || t("未命名会议", "Untitled meeting")}</b><span class="meeting-number">#{ $meeting.meetingNumber || "—" }</span><span>{dateTime($meeting.startedAt)}</span></div>
+    <div class="meeting-title"><b title={$meeting.topic || t("未命名会议", "Untitled meeting")}>{recordTitle({...$meeting, customName: $stateValue.customName}, $meeting.topic || t("未命名会议", "Untitled meeting")).primary}</b>{#if recordTitle({...$meeting, customName: $stateValue.customName}, $meeting.topic || t("未命名会议", "Untitled meeting")).secondary}<small>{recordTitle({...$meeting, customName: $stateValue.customName}, $meeting.topic || t("未命名会议", "Untitled meeting")).secondary}</small>{/if}<RecordNameEditor customName={$stateValue.customName || ""} /><span class="meeting-number">#{ $meeting.meetingNumber || "—" }</span><span>{dateTime($meeting.startedAt)}</span></div>
     <div class="head-controls">
       <span class="live-status"><i></i>{liveLabel}</span>
       <label class="profile"><span>{t("配置", "Profile")}</span><select aria-label={t("考勤配置", "Attendance profile")} disabled={$busyKeys.has("live-profile")} value={$stateValue.selectedProfileId || profileGuess()?.id || "default-all"} onchange={(e) => changeProfile(e.currentTarget.value)}>

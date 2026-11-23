@@ -210,8 +210,6 @@ Tick items off here as they land.
 
 ## Desktop additions
 
-- Hand log closes raises when a participant leaves with a hand up, and lowers from the participant flag (lower-all, flag-only).
-
 - Works as a plain attendee: full participant list and live join/leave without host/co-host
   (Plugin SDK; SDK-NOTES "In-meeting observations").
 - Background capture without the UI open; the record survives UI reloads and companion
@@ -225,5 +223,8 @@ Tick items off here as they land.
 - Import of AttendFlow backups and session bundles (migration path).
 - In-app Zoom sign-in/sign-out with token revocation; Zoom connection banner.
 - Native window (WebView2), tray; browser access via `zoom-companion serve`.
+- Hand log closes raises when a participant leaves with a hand up, and lowers from the participant
+  flag (lower-all, flag-only).
+- Custom record names (rename any record; default title stays visible).
 - Planned (P3): auto-admit roster matches from the waiting room (host), unknown-arrival
   alerts, autostart, notifications.

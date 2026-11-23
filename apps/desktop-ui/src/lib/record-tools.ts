@@ -3,7 +3,7 @@ export const statusTags = ['seen', 'full_present', 'late', 'returned', 'left_ear
 export function filterMeetings(meetings: any[], options: { search?: string; mode?: string; source?: string; status?: string } = {}) {
   const search = (options.search || '').trim().toLocaleLowerCase();
   return meetings.filter((meeting) => {
-    const text = `${meeting.topic || ''} ${meeting.meetingNumber || ''} ${meeting.startedAt || ''} ${meeting.endedAt || ''}`.toLocaleLowerCase();
+    const text = `${meeting.customName || ''} ${meeting.topic || ''} ${meeting.meetingNumber || ''} ${meeting.startedAt || ''} ${meeting.endedAt || ''}`.toLocaleLowerCase();
     if (search && !text.includes(search)) return false;
     if (options.mode && options.mode !== 'all' && (meeting.mode || 'generic') !== options.mode) return false;
     if (options.source && options.source !== 'all' && (meeting.source || 'live') !== options.source) return false;

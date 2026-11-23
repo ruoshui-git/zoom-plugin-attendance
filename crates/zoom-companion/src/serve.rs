@@ -3014,7 +3014,17 @@ async fn api_meetings(State(a): State<App>, headers: HeaderMap) -> Response {
         return r;
     }
     match a.store.meeting_summaries() {
-        Ok(rows) => Json(rows).into_response(),
+        Ok(mut rows) => {
+            for row in &mut rows {
+                let id = row["instanceId"].as_str().unwrap_or_default();
+                if let Ok((_, state)) = a.store.get_state(id) {
+                    if let Some(name) = state.get("customName").and_then(Value::as_str) {
+                        row["customName"] = json!(name);
+                    }
+                }
+            }
+            Json(rows).into_response()
+        }
         Err(e) => api_error(e),
     }
 }
@@ -3027,7 +3037,14 @@ async fn api_meeting(
         return r;
     }
     match a.store.meeting(&id) {
-        Ok(Some(v)) => Json(v).into_response(),
+        Ok(Some(mut v)) => {
+            if let Ok((_, state)) = a.store.get_state(&id) {
+                if let Some(name) = state.get("customName").and_then(Value::as_str) {
+                    v["customName"] = json!(name);
+                }
+            }
+            Json(v).into_response()
+        }
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         Err(e) => api_error(e),
     }
@@ -3378,7 +3395,11 @@ async fn api_put_state(
     let Some(rev) = body["revision"].as_u64() else {
         return StatusCode::BAD_REQUEST.into_response();
     };
-    let val = body.get("value").cloned().unwrap_or(json!({}));
+    let mut val = body.get("value").cloned().unwrap_or(json!({}));
+    if let Some(name) = val.get("customName").and_then(Value::as_str).map(str::trim) {
+        if name.is_empty() { val.as_object_mut().map(|o| o.remove("customName")); }
+        else { val["customName"] = json!(name.chars().take(100).collect::<String>()); }
+    }
     match a.store.put_state(&id, rev, &val, now()) {
         Ok(Ok(revision)) => {
             emit_record_updated(&a, &id);
@@ -4250,6 +4271,57 @@ async fn record_state_captures_persist_and_export_marks_downloaded() {
     assert_eq!(saved["needsExport"], false);
 }
 #[tokio::test]
+async fn custom_name_saved_trimmed_and_listed() {
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+    let store = Arc::new(
+        Store::open(std::env::temp_dir().join(format!("zc-custom-name-{}.db", now()))).unwrap(),
+    );
+    store.upsert_meeting(&json!({"instanceId":"named","meetingNumber":"42","topic":"Default topic","startedAt":1000,"isHost":false}), None, 1).unwrap();
+    let app = App {
+        tx: broadcast::channel(8).0,
+        tracker: Arc::new(Mutex::new(Tracker::default())),
+        session: Arc::new(Mutex::new(None)),
+        shutdown: Arc::new(AtomicBool::new(false)),
+        port: 47812,
+        allowed: vec![],
+        ui: None,
+        log_dir: std::env::temp_dir(),
+        store: store.clone(),
+        provider: Arc::new(StubRecordProvider),
+        record_updates: Arc::new(Mutex::new(Default::default())),
+        link: Default::default(),
+    };
+    let api = Router::new()
+        .route("/api/meetings", get(api_meetings))
+        .route("/api/meetings/:id", get(api_meeting))
+        .route("/api/meetings/:id/state", get(api_get_state).put(api_put_state))
+        .with_state(app);
+    let put = |revision: u64, name: String| {
+        axum::http::Request::builder()
+            .method("PUT")
+            .uri("/api/meetings/named/state")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(json!({"revision":revision,"value":{"customName":name}}).to_string()))
+            .unwrap()
+    };
+    let get = |uri: &str| axum::http::Request::builder().uri(uri).body(axum::body::Body::empty()).unwrap();
+    assert_eq!(api.clone().oneshot(put(0, "  Part 2  ".into())).await.unwrap().status(), StatusCode::OK);
+    assert_eq!(store.get_state("named").unwrap().1["customName"], "Part 2");
+    let list: Value = serde_json::from_slice(&api.clone().oneshot(get("/api/meetings")).await.unwrap().into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(list[0]["customName"], "Part 2");
+    assert_eq!(list[0]["topic"], "Default topic");
+    let one: Value = serde_json::from_slice(&api.clone().oneshot(get("/api/meetings/named")).await.unwrap().into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert_eq!(one["customName"], "Part 2");
+    // Over-long names are cut to 100 characters; a blank name restores the default.
+    assert_eq!(api.clone().oneshot(put(1, "名".repeat(150))).await.unwrap().status(), StatusCode::OK);
+    assert_eq!(store.get_state("named").unwrap().1["customName"].as_str().unwrap().chars().count(), 100);
+    assert_eq!(api.clone().oneshot(put(2, "   ".into())).await.unwrap().status(), StatusCode::OK);
+    assert!(store.get_state("named").unwrap().1.get("customName").is_none());
+    let list: Value = serde_json::from_slice(&api.oneshot(get("/api/meetings")).await.unwrap().into_body().collect().await.unwrap().to_bytes()).unwrap();
+    assert!(list[0].get("customName").is_none());
+}
+#[tokio::test]
 async fn full_backup_round_trip_keeps_meeting_state() {
     use http_body_util::BodyExt;
     use tower::ServiceExt;
@@ -4257,7 +4329,7 @@ async fn full_backup_round_trip_keeps_meeting_state() {
         Store::open(std::env::temp_dir().join(format!("zc-api-roundtrip-{}.db", now()))).unwrap(),
     );
     store.upsert_meeting(&json!({"instanceId":"m1","meetingNumber":"1","topic":"Demo","startedAt":1,"isHost":false}),Some((5,"ended".into())),1).unwrap();
-    let saved = json!({"mode":"roster","selectedProfileId":"p1","manualSnapshots":[{"id":"s1","participants":[]}],"reconciliationDecisions":[{"id":"d1","action":"guest"}],"exportedAt":9});
+    let saved = json!({"mode":"roster","customName":"Week 3 – part 1","selectedProfileId":"p1","manualSnapshots":[{"id":"s1","participants":[]}],"reconciliationDecisions":[{"id":"d1","action":"guest"}],"exportedAt":9});
     store.put_state("m1", 0, &saved, 2).unwrap().unwrap();
     let (tx, _) = broadcast::channel(8);
     let app = App {
