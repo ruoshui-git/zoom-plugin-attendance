@@ -45,6 +45,24 @@ describe("RecordDetail attendance filters", () => {
     expect(screen.getByText("Ada")).toBeTruthy();
   });
 
+  it('renders reaction feedback, Yes check-in, counts, and searchable log', async () => {
+    language.set('zh-CN');
+    uiLanguage.set('zh-CN');
+    meeting.set({ startedAt: '2026-01-01T10:00:00' } as any);
+    recordEvents.set([
+      { kind: 'users', at: 1, users: [{ userId: 7, name: 'Ada' }] },
+      { kind: 'feedback', seq: 2, at: new Date(2026, 0, 1, 10, 1).getTime(), userId: 7, type: 2 },
+      { kind: 'reaction', seq: 3, at: new Date(2026, 0, 1, 10, 2).getTime(), userId: 7, type: 2 },
+    ] as any);
+    const { container } = render(RecordDetail);
+    await fireEvent.click(screen.getByRole('tab', { name: /反应与反馈/ }));
+    expect(container.textContent).toContain('应用连接前设置的反馈不可见');
+    expect(container.textContent).toContain('Ada');
+    expect(container.textContent).toContain('点赞');
+    expect(container.textContent).toContain('1');
+    expect(screen.getByLabelText('开始时间')).toBeTruthy();
+  });
+
   it("localizes manual attendance values and hides unknown raw values in Chinese", async () => {
     language.set("zh-CN");
     uiLanguage.set("zh-CN");

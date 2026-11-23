@@ -489,6 +489,14 @@ impl Tracker {
                     out.push(v)
                 }
             }
+            Event::Other { name, code, value, .. } if name == "OnEmojiFeedbackReceived" => {
+                if code != 1 {
+                    if let Some(v) = self.emit("feedback", json!({"userId":value as u32,"type":code})) { out.push(v) }
+                }
+            }
+            Event::Other { name, code, value, .. } if name == "OnEmojiReactionReceived" => {
+                if let Some(v) = self.emit("reaction", json!({"userId":value as u32,"type":code})) { out.push(v) }
+            }
             Event::Other { name, .. } if name == "OnAllHandsLowered" => {
                 if let Some(v) = self.emit("all_hands_lowered", json!({})) {
                     out.push(v)
@@ -1999,6 +2007,19 @@ mod tests {
         for code in [1, 0, 2, 9] {
             assert!(hands_of(&t.apply(other("OnEmojiFeedbackReceived", code, 5), None)).is_empty());
         }
+    }
+    #[test]
+    fn tracker_feedback_and_reaction_events() {
+        let mut t = hand_tracker();
+        let yes = t.apply(other("OnEmojiFeedbackReceived", 2, 5), None);
+        assert_eq!(yes[0]["kind"], "feedback");
+        assert_eq!(yes[0]["userId"], 5);
+        assert_eq!(yes[0]["type"], 2);
+        assert!(t.apply(other("OnEmojiFeedbackReceived", 1, 5), None).is_empty());
+        let reaction = t.apply(other("OnEmojiReactionReceived", 2, 5), None);
+        assert_eq!(reaction[0]["kind"], "reaction");
+        assert_eq!(reaction[0]["userId"], 5);
+        assert_eq!(reaction[0]["type"], 2);
     }
     #[test]
     fn tracker_hand_flag_refresh_emits_only_changes() {
