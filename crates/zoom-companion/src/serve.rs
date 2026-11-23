@@ -1624,6 +1624,27 @@ mod tests {
         assert_eq!(end["seq"], 3);
     }
     #[test]
+    fn split_without_meeting_is_noop() {
+        let mut t = Tracker::default();
+        assert!(t.split().is_empty());
+    }
+    #[test]
+    fn tracker_split_ends_with_manual_split_and_seeds_new_instance() {
+        let mut t = Tracker::default();
+        t.start("123".into(), "topic".into(), 1, 3, None);
+        t.users = vec![User { user_id: 17, name: "Guest".into(), host: false, myself: false, waiting_room: false,
+            audio_muted: false, video_on: false, audio_type: 0, raised_hand: false, talking: false, spotlighted: false }];
+        let old = t.meeting.as_ref().unwrap().instance_id.clone();
+        let out = t.split();
+        assert_eq!(out[0]["kind"], "instance_ended");
+        assert_eq!(out[0]["reason"], "manual_split");
+        assert_eq!(out[1]["kind"], "instance_started");
+        assert_ne!(out[1]["instanceId"], old);
+        assert_eq!(out[2]["kind"], "users");
+        assert_eq!(out[2]["action"], "sync_all");
+        assert_eq!(out[2]["users"][0]["userId"], 17);
+    }
+    #[test]
     fn waiting_admission_pair_and_rename() {
         let mut t = Tracker::default();
         t.start("1".into(), "".into(), 1, 3, None);
