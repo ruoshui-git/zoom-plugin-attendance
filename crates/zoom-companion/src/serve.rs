@@ -321,24 +321,10 @@ impl Tracker {
         let users = self.users.clone();
         let mut out = self.end("manual_split").into_iter().collect::<Vec<_>>();
         self.users = users;
+        while now() <= m.started_at { std::thread::sleep(Duration::from_millis(1)); }
         let mut started = self.start_with_snapshot(
             m.meeting_number, m.topic, m.meeting_type, m.status, m.myself,
         );
-        let old_id = out.first().and_then(|e| e["instanceId"].as_str()).map(str::to_owned);
-        let mut relog = None;
-        if let (Some(old_id), Some(new_meeting)) = (old_id, self.meeting.as_mut()) {
-            if new_meeting.instance_id == old_id {
-                let bumped = new_meeting.started_at.saturating_add(1);
-                new_meeting.started_at = bumped;
-                new_meeting.instance_id = format!("pz-{}-{bumped}", new_meeting.meeting_number);
-                if let Some(event) = started.first_mut() {
-                    event["instanceId"] = json!(new_meeting.instance_id);
-                    event["meeting"]["instanceId"] = json!(new_meeting.instance_id);
-                }
-                relog = Some(new_meeting.clone());
-            }
-        }
-        if let Some(meeting) = relog { self.prepare_log(&meeting); }
         out.append(&mut started);
         out
     }
@@ -1642,7 +1628,44 @@ mod tests {
         assert_ne!(out[1]["instanceId"], old);
         assert_eq!(out[2]["kind"], "users");
         assert_eq!(out[2]["action"], "sync_all");
+        assert_eq!(out[2]["instanceId"], out[1]["instanceId"]);
         assert_eq!(out[2]["users"][0]["userId"], 17);
+    }
+    #[test]
+    fn split_record_is_resumed_not_old() {
+        let path = std::env::temp_dir().join(format!("zc-test-split-resume-{}", now()));
+        let mut t = Tracker::new(Some(path.clone()));
+        t.start("7".into(), "Topic".into(), 1, 3, None);
+        let old_id = t.meeting.as_ref().unwrap().instance_id.clone();
+        t.users = vec![User { user_id: 17, name: "Guest".into(), host: false, myself: false, waiting_room: false,
+            audio_muted: false, video_on: false, audio_type: 0, raised_hand: false, talking: false, spotlighted: false }];
+        let split = t.split();
+        let new_id = split[1]["instanceId"].as_str().unwrap().to_owned();
+        assert_ne!(old_id, new_id);
+        drop(t);
+        let mut resumed = Tracker::new(Some(path.clone()));
+        let event = resumed.start("7".into(), "Topic".into(), 1, 3, None).unwrap();
+        assert_eq!(event["kind"], "instance_resumed");
+        assert_eq!(event["instanceId"], new_id);
+        assert_ne!(event["instanceId"], old_id);
+        let _ = fs::remove_dir_all(path);
+    }
+    #[test]
+    fn split_snapshot_rebuilds_as_joined_before() {
+        let mut t = Tracker::default();
+        t.start("7".into(), "Topic".into(), 1, 3, None);
+        t.users = vec![User { user_id: 17, name: "Guest".into(), host: false, myself: false, waiting_room: false,
+            audio_muted: false, video_on: false, audio_type: 0, raised_hand: false, talking: false, spotlighted: false }];
+        let split = t.split();
+        let meeting = t.meeting.as_ref().unwrap();
+        let events = split.iter().filter(|e| e["instanceId"] == meeting.instance_id).cloned().collect::<Vec<_>>();
+        let record = EngineRecordProvider.try_build_record(
+            &json!({"instanceId":meeting.instance_id,"meetingNumber":"7","topic":"Topic","startedAt":meeting.started_at}),
+            &events, &json!({"roster":[],"aliases":[],"profiles":[]}), &json!({"mode":"generic"}), now()+1000,
+        ).unwrap();
+        let row = record["rows"].as_array().unwrap().iter().find(|r| r["zoomName"] == "Guest").unwrap();
+        assert!(row["firstJoinAt"].is_string());
+        assert_eq!(row["isCurrentlyPresent"], true);
     }
     #[test]
     fn waiting_admission_pair_and_rename() {
