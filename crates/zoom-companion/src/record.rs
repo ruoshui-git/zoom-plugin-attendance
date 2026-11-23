@@ -202,6 +202,7 @@ impl RecordProvider for EngineRecordProvider {
         )
         .map_err(|error| error.to_string())?;
         let duration_minutes = (reference_ms.saturating_sub(started_ms) as f64 / 60_000.0).max(0.0);
+        let media = attend_engine::media_by_participant(events, reference_ms);
         let mut rows = serde_json::to_value(&record.rows).map_err(|error| error.to_string())?;
         if let Some(rows) = rows.as_array_mut() {
             for row in rows.iter_mut() {
@@ -214,6 +215,17 @@ impl RecordProvider for EngineRecordProvider {
                 if never_in_meeting && waited && row["currentStatus"] != "missing" {
                     row["currentStatus"] = json!("waitingRoomOnly");
                     row["tags"] = json!(["waiting_room_only"]);
+                }
+                let mut ids = row["participantUUIDs"].as_array().cloned().unwrap_or_default();
+                if let Some(id)=row["participantUUID"].as_str(){ids.push(json!(id));}
+                let stats: Vec<_> = ids.iter().filter_map(Value::as_str).filter_map(|id|media.get(id)).collect();
+                if !stats.is_empty() {
+                    let m=attend_engine::merge_media(&stats);
+                    row["cameraOnMinutes"]=json!((m.camera_on_ms as f64/60000.0).round());
+                    row["cameraOffMinutes"]=json!(((m.camera_known_ms.saturating_sub(m.camera_on_ms)) as f64/60000.0).round());
+                    row["cameraOnPercent"]=if m.camera_known_ms==0 {Value::Null} else {json!((m.camera_on_ms as f64*100.0/m.camera_known_ms as f64).round())};
+                    row["unmutedMinutes"]=json!((m.unmuted_ms as f64/60000.0).round());
+                    row["media"]=json!(m);
                 }
             }
             for row in rows {
