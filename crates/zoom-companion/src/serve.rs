@@ -2772,16 +2772,8 @@ async fn api_config_import_commit(
     let Some(value) = body.get("value") else {
         return StatusCode::BAD_REQUEST.into_response();
     };
-    if body["changes"]
-        .as_array()
-        .is_some_and(|cs| cs.iter().any(|c| c["action"] == "Reject"))
-    {
-        return (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(json!({"error":"validation_error","message":"Import contains rejected rows"})),
-        )
-            .into_response();
-    }
+    // Like AttendFlow: rejected rows are skipped; the previewed `value` already
+    // contains only the applicable rows, and it is validated below.
     if let Some(message) = validate_config(&a, &key, value) {
         return (
             StatusCode::UNPROCESSABLE_ENTITY,
@@ -3751,7 +3743,7 @@ async fn roster_csv_preview_api_decodes_and_returns_commit_plan() {
         .uri("/api/config/roster/import/preview")
         .header("content-type", "application/json")
         .body(axum::body::Body::from(
-            json!({"csv":"id,姓名,分组\n,张三,一组"}).to_string(),
+            json!({"csv":"id,姓名,分组,delete\n,张三,一组,\n99,,,1"}).to_string(),
         ))
         .unwrap();
     let response = api.clone().oneshot(req).await.unwrap();
@@ -3759,6 +3751,9 @@ async fn roster_csv_preview_api_decodes_and_returns_commit_plan() {
     let body: Value =
         serde_json::from_slice(&response.into_body().collect().await.unwrap().to_bytes()).unwrap();
     assert_eq!(body["changes"][0]["action"], "Add");
+    // The second row (delete of an unknown id) is rejected and skipped, like AttendFlow.
+    assert_eq!(body["changes"][1]["action"], "Reject");
+    assert_eq!(body["value"].as_array().unwrap().len(), 1);
     assert_eq!(body["value"][0]["canonicalName"], "张三");
     let req = axum::http::Request::builder()
         .method("POST")
