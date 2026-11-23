@@ -953,7 +953,27 @@ pub fn app() -> anyhow::Result<()> {
         match event {
             Event::UserEvent(AppEvent::Title(title)) => window.set_title(&title),
             Event::UserEvent(AppEvent::Window { mode, pinned }) => {
-                if let Some(m) = mode { state.mode = m; let size = match m { Mode::Full => window_state::full_default(), Mode::Compact => window_state::compact_default() }; window.set_inner_size(tao::dpi::LogicalSize::new(size.0 as f64,size.1 as f64)); window.set_min_inner_size(Some(match m { Mode::Full => tao::dpi::LogicalSize::new(900.0,600.0), Mode::Compact => {let z=window_state::compact_min();tao::dpi::LogicalSize::new(z.0 as f64,z.1 as f64)}})); }
+                if let Some(m) = mode {
+                    if m != state.mode {
+                        if let Some(r) = logical_window_rect(&window) { match state.mode { Mode::Full => state.full=Some(r), Mode::Compact => state.compact=Some(r) } }
+                        let top = window.outer_position().ok().map(|p| { let s=window.current_monitor().map(|m|m.scale_factor()).unwrap_or(1.0); ( (p.x as f64/s).round() as i32, (p.y as f64/s).round() as i32) }).unwrap_or((0,0));
+                        match m {
+                            Mode::Compact => {
+                                let z=window_state::compact_min(); window.set_min_inner_size(Some(tao::dpi::LogicalSize::new(z.0 as f64,z.1 as f64)));
+                                let size=state.compact.map(|r|(r.width,r.height)).unwrap_or_else(window_state::compact_default);
+                                window.set_inner_size(tao::dpi::LogicalSize::new(size.0 as f64,size.1 as f64));
+                                window.set_outer_position(tao::dpi::LogicalPosition::new(top.0 as f64,top.1 as f64));
+                            }
+                            Mode::Full => {
+                                let saved=state.full.filter(|r|window_state::usable(*r,&monitors));
+                                if let Some(r)=saved { window.set_outer_position(tao::dpi::LogicalPosition::new(r.x as f64,r.y as f64)); window.set_inner_size(tao::dpi::LogicalSize::new(r.width as f64,r.height as f64)); }
+                                else { let s=window_state::full_default(); window.set_inner_size(tao::dpi::LogicalSize::new(s.0 as f64,s.1 as f64)); }
+                                window.set_min_inner_size(Some(tao::dpi::LogicalSize::new(900.0,600.0)));
+                            }
+                        }
+                        state.mode=m;
+                    }
+                }
                 if let Some(p) = pinned { window.set_always_on_top(p); }
                 window_state::save(window_state_path(), &state);
             }
@@ -1397,6 +1417,12 @@ async fn api_window_post(headers: HeaderMap, Json(request): Json<WindowRequest>)
     Json(window_json(state)).into_response()
 }
 fn window_state_path() -> PathBuf { std::env::var_os("LOCALAPPDATA").map(PathBuf::from).unwrap_or_else(std::env::temp_dir).join("zoom-companion").join("window.json") }
+fn logical_window_rect(window: &tao::window::Window) -> Option<Rect> {
+    let scale=window.current_monitor().map(|m|m.scale_factor()).unwrap_or(1.0);
+    let p=window.outer_position().ok()?; let s=window.inner_size();
+    if s.width==0 || s.height==0 { return None; }
+    Some(Rect{x:(p.x as f64/scale).round() as i32,y:(p.y as f64/scale).round() as i32,width:(s.width as f64/scale).round() as u32,height:(s.height as f64/scale).round() as u32})
+}
 
 #[cfg(test)]
 mod window_route_tests {
