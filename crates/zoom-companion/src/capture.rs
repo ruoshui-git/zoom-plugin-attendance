@@ -73,8 +73,102 @@ pub(crate) fn list_zoom_windows() -> Vec<WindowCandidate> {
 #[cfg(not(windows))]
 pub(crate) fn list_zoom_windows() -> Vec<WindowCandidate> { Vec::new() }
 
+/// Captures one frame of a window with Windows Graphics Capture (works while the window is
+/// partly covered; not while minimized).
 #[cfg(windows)]
-pub(crate) fn capture_window(_hwnd: isize) -> Result<Frame, CaptureError> { Err(CaptureError::Failed("Windows Graphics Capture implementation pending".into())) }
+pub(crate) fn capture_window(hwnd: isize) -> Result<Frame, CaptureError> {
+    use windows::core::{factory, Interface};
+    use windows::Graphics::Capture::{Direct3D11CaptureFramePool, GraphicsCaptureItem, GraphicsCaptureSession};
+    use windows::Graphics::DirectX::Direct3D11::IDirect3DDevice;
+    use windows::Graphics::DirectX::DirectXPixelFormat;
+    use windows::Win32::Foundation::{HMODULE, HWND};
+    use windows::Win32::Graphics::Direct3D::D3D_DRIVER_TYPE_HARDWARE;
+    use windows::Win32::Graphics::Direct3D11::{
+        D3D11CreateDevice, ID3D11Device, ID3D11DeviceContext, ID3D11Texture2D, D3D11_CPU_ACCESS_READ,
+        D3D11_CREATE_DEVICE_BGRA_SUPPORT, D3D11_MAPPED_SUBRESOURCE, D3D11_MAP_READ, D3D11_SDK_VERSION,
+        D3D11_TEXTURE2D_DESC, D3D11_USAGE_STAGING,
+    };
+    use windows::Win32::Graphics::Dxgi::IDXGIDevice;
+    use windows::Win32::System::WinRT::Direct3D11::{CreateDirect3D11DeviceFromDXGIDevice, IDirect3DDxgiInterfaceAccess};
+    use windows::Win32::System::WinRT::Graphics::Capture::IGraphicsCaptureItemInterop;
+    use windows::Win32::System::WinRT::{RoInitialize, RO_INIT_MULTITHREADED};
+    use windows::Win32::UI::WindowsAndMessaging::IsIconic;
+
+    let fail = |what: &str, e: windows::core::Error| CaptureError::Failed(format!("{what}: {e}"));
+    let hwnd = HWND(hwnd as *mut core::ffi::c_void);
+    unsafe {
+        if IsIconic(hwnd).as_bool() {
+            return Err(CaptureError::Minimized);
+        }
+        // Already-initialised apartments return an error code we can ignore.
+        let _ = RoInitialize(RO_INIT_MULTITHREADED);
+    }
+    if !GraphicsCaptureSession::IsSupported().unwrap_or(false) {
+        return Err(CaptureError::Unsupported);
+    }
+    let mut device: Option<ID3D11Device> = None;
+    let mut context: Option<ID3D11DeviceContext> = None;
+    unsafe {
+        D3D11CreateDevice(None, D3D_DRIVER_TYPE_HARDWARE, HMODULE::default(), D3D11_CREATE_DEVICE_BGRA_SUPPORT, None, D3D11_SDK_VERSION, Some(&mut device), None, Some(&mut context))
+            .map_err(|e| fail("D3D11CreateDevice", e))?;
+    }
+    let device = device.ok_or_else(|| CaptureError::Failed("no D3D11 device".into()))?;
+    let context = context.ok_or_else(|| CaptureError::Failed("no D3D11 context".into()))?;
+    let dxgi: IDXGIDevice = device.cast().map_err(|e| fail("IDXGIDevice", e))?;
+    let d3d: IDirect3DDevice = unsafe { CreateDirect3D11DeviceFromDXGIDevice(&dxgi) }
+        .and_then(|inspectable| inspectable.cast())
+        .map_err(|e| fail("CreateDirect3D11DeviceFromDXGIDevice", e))?;
+    let interop = factory::<GraphicsCaptureItem, IGraphicsCaptureItemInterop>().map_err(|e| fail("capture interop", e))?;
+    let item: GraphicsCaptureItem = unsafe { interop.CreateForWindow(hwnd) }.map_err(|e| fail("CreateForWindow", e))?;
+    let size = item.Size().map_err(|e| fail("item size", e))?;
+    let pool = Direct3D11CaptureFramePool::CreateFreeThreaded(&d3d, DirectXPixelFormat::B8G8R8A8UIntNormalized, 1, size)
+        .map_err(|e| fail("frame pool", e))?;
+    let session = pool.CreateCaptureSession(&item).map_err(|e| fail("capture session", e))?;
+    let _ = session.SetIsCursorCaptureEnabled(false);
+    let _ = session.SetIsBorderRequired(false); // Windows 11+; older builds show a yellow border.
+    session.StartCapture().map_err(|e| fail("StartCapture", e))?;
+    let started = std::time::Instant::now();
+    let frame = loop {
+        if let Ok(frame) = pool.TryGetNextFrame() {
+            break frame;
+        }
+        if started.elapsed() > std::time::Duration::from_secs(2) {
+            let _ = session.Close();
+            let _ = pool.Close();
+            return Err(CaptureError::Timeout);
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    };
+    let result = (|| -> Result<Frame, CaptureError> {
+        let surface = frame.Surface().map_err(|e| fail("frame surface", e))?;
+        let access: IDirect3DDxgiInterfaceAccess = surface.cast().map_err(|e| fail("surface access", e))?;
+        let texture: ID3D11Texture2D = unsafe { access.GetInterface() }.map_err(|e| fail("surface texture", e))?;
+        let mut desc = D3D11_TEXTURE2D_DESC::default();
+        unsafe { texture.GetDesc(&mut desc) };
+        let staging_desc = D3D11_TEXTURE2D_DESC {
+            Usage: D3D11_USAGE_STAGING,
+            BindFlags: 0,
+            CPUAccessFlags: D3D11_CPU_ACCESS_READ.0 as u32,
+            MiscFlags: 0,
+            ..desc
+        };
+        let mut staging: Option<ID3D11Texture2D> = None;
+        unsafe { device.CreateTexture2D(&staging_desc, None, Some(&mut staging)) }.map_err(|e| fail("staging texture", e))?;
+        let staging = staging.ok_or_else(|| CaptureError::Failed("no staging texture".into()))?;
+        unsafe { context.CopyResource(&staging, &texture) };
+        let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
+        unsafe { context.Map(&staging, 0, D3D11_MAP_READ, 0, Some(&mut mapped)) }.map_err(|e| fail("map", e))?;
+        let pitch = mapped.RowPitch as usize;
+        let bytes = unsafe { std::slice::from_raw_parts(mapped.pData as *const u8, pitch * desc.Height as usize) };
+        let bgra = copy_rows(bytes, pitch, desc.Width, desc.Height);
+        unsafe { context.Unmap(&staging, 0) };
+        Ok(Frame { width: desc.Width, height: desc.Height, bgra })
+    })();
+    let _ = frame.Close();
+    let _ = session.Close();
+    let _ = pool.Close();
+    result
+}
 #[cfg(not(windows))]
 pub(crate) fn capture_window(_hwnd: isize) -> Result<Frame, CaptureError> { Err(CaptureError::Failed("capture is only available on Windows".into())) }
 
@@ -90,4 +184,24 @@ pub(crate) fn capture_meeting_window() -> Result<(Frame, WindowCandidate), Captu
  #[test] fn prefers_zoom_meeting_class_and_locale_independent_title(){ let xs=vec![c("Popup","Settings",900,700,false),c("VideoFrameWnd","Reunión 中文",500,400,false)]; assert_eq!(pick_meeting_window(&xs).unwrap().class,"VideoFrameWnd"); }
  #[test] fn selects_largest_nonempty_fallback(){ let xs=vec![c("Other","",900,700,false),c("Other","Zoom Workplace",600,500,false)]; assert_eq!(pick_meeting_window(&xs).unwrap().width,600); }
  #[test] fn minimized_class_is_last_resort(){ let xs=vec![c("ConfMultiTabContentWndClass","",1,1,true)]; assert!(pick_meeting_window(&xs).unwrap().minimized); }
+    /// Real Windows Graphics Capture smoke test on the taskbar (needs a desktop session):
+    /// `cargo test -p zoom-companion wgc_captures_taskbar -- --ignored`
+    #[cfg(windows)]
+    #[test]
+    #[ignore]
+    fn wgc_captures_taskbar() {
+        use windows_sys::Win32::UI::WindowsAndMessaging::FindWindowW;
+        let class: Vec<u16> = "Shell_TrayWnd ".encode_utf16().collect();
+        let hwnd = unsafe { FindWindowW(class.as_ptr(), std::ptr::null()) } as isize;
+        assert_ne!(hwnd, 0, "taskbar not found");
+        let frame = super::capture_window(hwnd).expect("capture");
+        assert!(frame.width > 100 && frame.height > 10, "{}x{}", frame.width, frame.height);
+        assert_eq!(frame.bgra.len(), (frame.width * frame.height * 4) as usize);
+        let distinct: std::collections::HashSet<_> = frame.bgra.chunks(4).take(200_000).map(|p| (p[0], p[1], p[2])).collect();
+        assert!(distinct.len() > 3, "frame looks blank");
+        if let Ok(dir) = std::env::var("ZC_WGC_DUMP") {
+            std::fs::write(std::path::Path::new(&dir).join("taskbar.png"), crate::proof::encode_png(&frame)).unwrap();
+        }
+    }
+
 }
