@@ -1,7 +1,7 @@
 <script lang="ts">
   import { meeting, record, recordEvents, stateValue, configs, language, mode, requestedLiveSubtab } from "../lib/stores";
-  import { captureManual, captureHands, applyOverrides, saveDecision, selectProfile, profileGuess, switchMode } from "../lib/api";
-  import { t, dateTime } from "../lib/ui";
+  import { captureManual, captureHands, applyOverrides, saveDecision, selectProfile, profileGuess, switchMode, startNewRecord } from "../lib/api";
+  import { t, dateTime, confirmDialog } from "../lib/ui";
   import ProfileOverrideForm from "../lib/ProfileOverrideForm.svelte";
   import NameMatchingPanel from "../lib/NameMatchingPanel.svelte";
   import PrimaryTabs from "../lib/common/PrimaryTabs.svelte";
@@ -63,6 +63,13 @@
       catch (error) { toast.error(`${t("保存失败：", "Save failed:")}${error instanceof Error ? error.message : String(error)}`); }
     });
   }
+  async function newRecord() {
+    if (!(await confirmDialog({ title: t("开始新记录？", "Start a new record?"), message: t("当前记录将在此刻结束，并为同一会议开始一条新记录。所有在场的人都会作为“会前已在”计入新记录。", "The current record ends now and a new record starts for the same meeting. Everyone present is counted as already in the meeting in the new record.") }))) return;
+    await runBusy("live-new-record", async () => {
+      try { await startNewRecord(); toast.success(t("已开始新记录", "New record started")); }
+      catch (error) { toast.error(`${t("开始新记录失败：", "Failed to start new record: ")}${error instanceof Error ? error.message : String(error)}`); }
+    });
+  }
 </script>
 
 {#if $meeting}
@@ -70,6 +77,7 @@
     <div class="meeting-title"><b title={$meeting.topic || t("未命名会议", "Untitled meeting")}>{recordTitle({...$meeting, customName: $stateValue.customName}, $meeting.topic || t("未命名会议", "Untitled meeting")).primary}</b>{#if recordTitle({...$meeting, customName: $stateValue.customName}, $meeting.topic || t("未命名会议", "Untitled meeting")).secondary}<small>{recordTitle({...$meeting, customName: $stateValue.customName}, $meeting.topic || t("未命名会议", "Untitled meeting")).secondary}</small>{/if}<RecordNameEditor customName={$stateValue.customName || ""} /><span class="meeting-number">#{ $meeting.meetingNumber || "—" }</span><span>{dateTime($meeting.startedAt)}</span></div>
     <div class="head-controls">
       <span class="live-status"><i></i>{liveLabel}</span>
+      <button disabled={$meeting.status === "ended" || !!$meeting.endedAt || $busyKeys.has("live-new-record")} onclick={newRecord}>{t("开始新记录", "Start new record")}</button>
       <label class="profile"><span>{t("配置", "Profile")}</span><select aria-label={t("考勤配置", "Attendance profile")} disabled={$busyKeys.has("live-profile")} value={$stateValue.selectedProfileId || profileGuess()?.id || "default-all"} onchange={(e) => changeProfile(e.currentTarget.value)}>
         {#each ($configs.profiles || []).filter((p: any) => p.active) as p}<option value={p.id}>{p.name}</option>{/each}
       </select></label>
