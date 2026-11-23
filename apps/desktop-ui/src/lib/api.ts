@@ -29,7 +29,7 @@ export async function get(path: string) {
 export async function startNewRecord() {
   const response = await fetch("/api/live/new-record", { method: "POST" });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw Error(data.error || `${response.status}`);
+  if (!response.ok) throw Error(data.error === "no_active_meeting" ? t("没有进行中的会议记录", "No meeting record is active") : data.error || `${response.status}`);
   return data;
 }
 export async function loadViewedRecord(meeting: s.Meeting) {
