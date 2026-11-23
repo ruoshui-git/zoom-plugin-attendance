@@ -33,6 +33,7 @@ rfd = { version = "0.15", default-features = false }
 clap = { version = "4", features = ["derive"] }
 tao = "0.30"
 wry = "0.53"
+png = "0.17"
 
 [dev-dependencies]
 tokio-tungstenite = "0.24"
