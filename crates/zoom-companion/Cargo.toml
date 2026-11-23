@@ -24,6 +24,7 @@ serde_json.workspace = true
 chrono = { version = "0.4", features = ["clock"] }
 toml.workspace = true
 windows-sys.workspace = true
+windows = { version = "0.61", features = ["Foundation", "Graphics", "Graphics_Capture", "Graphics_DirectX", "Graphics_DirectX_Direct3D11", "Win32_Foundation", "Win32_Graphics_Direct3D", "Win32_Graphics_Direct3D11", "Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common", "Win32_System_WinRT", "Win32_System_WinRT_Direct3D11", "Win32_System_WinRT_Graphics_Capture", "Win32_UI_WindowsAndMessaging"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal", "sync", "time"] }
 axum = { version = "0.7", features = ["ws"] }
 futures-util = "0.3"
