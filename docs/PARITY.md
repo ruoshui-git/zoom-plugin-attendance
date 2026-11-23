@@ -225,5 +225,7 @@ Tick items off here as they land.
 - Import of AttendFlow backups and session bundles (migration path).
 - In-app Zoom sign-in/sign-out with token revocation; Zoom connection banner.
 - Native window (WebView2), tray; browser access via `zoom-companion serve`.
+- Camera on/off minutes and %, mic unmute count and unmuted minutes (a proxy, not speech), audio
+  type markers (no audio / phone) per person; also rebuilt from logs recorded before this change.
 - Planned (P3): auto-admit roster matches from the waiting room (host), unknown-arrival
   alerts, autostart, notifications.

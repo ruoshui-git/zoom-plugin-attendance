@@ -218,13 +218,17 @@ impl RecordProvider for EngineRecordProvider {
                 }
                 let mut ids = row["participantUUIDs"].as_array().cloned().unwrap_or_default();
                 if let Some(id)=row["participantUUID"].as_str(){ids.push(json!(id));}
-                let stats: Vec<_> = ids.iter().filter_map(Value::as_str).filter_map(|id|media.get(id)).collect();
+                // participantUUID is usually also in participantUUIDs: count each id once.
+                let mut unique: Vec<&str> = ids.iter().filter_map(Value::as_str).collect();
+                unique.sort_unstable();
+                unique.dedup();
+                let stats: Vec<_> = unique.into_iter().filter_map(|id| media.get(id)).collect();
                 if !stats.is_empty() {
                     let m=attend_engine::merge_media(&stats);
-                    row["cameraOnMinutes"]=json!((m.camera_on_ms as f64/60000.0).round());
-                    row["cameraOffMinutes"]=json!(((m.camera_known_ms.saturating_sub(m.camera_on_ms)) as f64/60000.0).round());
-                    row["cameraOnPercent"]=if m.camera_known_ms==0 {Value::Null} else {json!((m.camera_on_ms as f64*100.0/m.camera_known_ms as f64).round())};
-                    row["unmutedMinutes"]=json!((m.unmuted_ms as f64/60000.0).round());
+                    row["cameraOnMinutes"]=json!((m.camera_on_ms as f64/60000.0).round() as u64);
+                    row["cameraOffMinutes"]=json!(((m.camera_known_ms.saturating_sub(m.camera_on_ms)) as f64/60000.0).round() as u64);
+                    row["cameraOnPercent"]=if m.camera_known_ms==0 {Value::Null} else {json!((m.camera_on_ms as f64*100.0/m.camera_known_ms as f64).round() as u64)};
+                    row["unmutedMinutes"]=json!((m.unmuted_ms as f64/60000.0).round() as u64);
                     row["media"]=json!(m);
                 }
             }
@@ -388,6 +392,17 @@ mod tests {
             )
             .unwrap_err();
         assert!(error.starts_with("invalid attendance config:"));
+    }
+
+    #[test]
+    fn record_rows_include_media_from_old_log() {
+        let start=1_794_893_640_000_u64;
+        let meeting=json!({"instanceId":"legacy","meetingNumber":"1","topic":"T","startedAt":start});
+        let events=vec![json!({"kind":"users","action":"sync_all","instanceId":"legacy","at":start,"users":[{"userId":9,"name":"Ada","videoOn":true,"audioMuted":true}]}),json!({"kind":"users","action":"update","instanceId":"legacy","at":start+60_000,"users":[{"userId":9,"name":"Ada","videoOn":false,"audioMuted":true}]})];
+        let record=EngineRecordProvider.try_build_record(&meeting,&events,&json!({}),&json!({"mode":"generic"}),start+120_000).unwrap();
+        let row=record["rows"].as_array().unwrap().iter().find(|r|r["zoomName"]=="Ada").unwrap();
+        assert_eq!(row["cameraOnMinutes"],json!(1)); assert_eq!(row["cameraOffMinutes"],json!(1));
+        assert_eq!(row["cameraOnPercent"],json!(50)); assert!(row["media"].is_object());
     }
 
     #[test]
