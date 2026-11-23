@@ -2,7 +2,7 @@ import { get as read } from "svelte/store";
 import { getExampleConfigBundle } from "./example-config-data";
 import { setUiLanguage } from "./i18n-core";
 import * as s from "./stores";
-import { t } from "./ui";
+import { t, confirmDialog } from "./ui";
 import { toast } from "./toast";
 
 const value = <T>(store: {
@@ -361,7 +361,7 @@ export async function editConfig(index: number, item: any) {
   }
 }
 export async function removeConfig(index: number) {
-  if (!confirm(t("确定删除此项目？", "Delete this item?"))) return;
+  if (!(await confirmDialog({ title: t("删除配置", "Delete Configuration"), message: t("确定删除此项目？", "Delete this item?"), destructive: true }))) return;
   const configTab = value(s.configTab);
   const next = [...(value(s.configs)[configTab] || [])];
   next.splice(index, 1);
@@ -652,12 +652,14 @@ export async function zoomSignIn() {
 }
 export async function zoomSignOut() {
   if (
-    !confirm(
-      t(
+    !(await confirmDialog({
+      title: t("退出 Zoom 登录", "Sign out of Zoom"),
+      message: t(
         "退出 Zoom 登录，并从你的 Zoom 账号中移除出勤助手桌面版？考勤记录会保留在这台电脑上。",
         "Sign out and remove AttendFlow Desktop from your Zoom account? Your attendance records stay on this computer.",
       ),
-    )
+      destructive: true,
+    }))
   )
     return false;
   const response = await fetch("/api/zoom/sign-out", { method: "POST" }).catch(

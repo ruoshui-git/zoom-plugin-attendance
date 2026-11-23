@@ -1,7 +1,7 @@
 <script lang="ts">
   import { viewedMeeting, meetings, recordCounts, recordModes, selectedRecords, recordImportPreview, language } from '../lib/stores';
   import { exportRecords, deleteRecords, previewRecordImport, commitRecordImport, loadViewedRecord } from '../lib/api';
-  import { t, dateTime } from '../lib/ui';
+  import { t, dateTime, confirmDialog } from '../lib/ui';
   import { filterMeetings } from '../lib/record-tools';
   import DataTable from '../lib/common/DataTable.svelte';
   import SlideOverPanel from '../lib/common/SlideOverPanel.svelte';
@@ -33,7 +33,7 @@
   async function exportSelection() { if ($selectedRecords.length) await exportRecords($selectedRecords); else await exportRecords(); }
   async function deleteSelection() {
     if (!$selectedRecords.length) return;
-    if (!confirm(t(`确定删除 ${$selectedRecords.length} 条会议记录吗？此操作无法撤销。`,`Delete ${$selectedRecords.length} meeting record(s)? This cannot be undone.`))) return;
+    if (!(await confirmDialog({ title: t('删除考勤记录','Delete Attendance Records'), message: t(`确定删除 ${$selectedRecords.length} 条会议记录吗？此操作无法撤销。`,`Delete ${$selectedRecords.length} meeting record(s)? This cannot be undone.`), destructive: true }))) return;
     await deleteRecords($selectedRecords);
   }
   function filterOptions(options: string[][]) { return options.map(([value, zh, en]) => ({ value, label: t(zh,en) })); }

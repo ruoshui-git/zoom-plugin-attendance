@@ -1,5 +1,9 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  let dialog: HTMLDivElement;
+  let cancelButton: HTMLButtonElement;
+  let confirmButton: HTMLButtonElement;
+  let previousFocus: HTMLElement | null = null;
 
   type Request = {
     title: string;
@@ -30,7 +34,9 @@
     cancelLabel = next.cancelLabel;
     destructive = next.destructive;
     activeResolve = next.resolve;
+    previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     open = true;
+    queueMicrotask(() => (destructive ? cancelButton : confirmButton)?.focus());
   }
 
   let activeResolve: ((value: boolean) => void) | null = null;
@@ -40,6 +46,7 @@
     const finish = activeResolve;
     activeResolve = null;
     open = false;
+    queueMicrotask(() => previousFocus?.focus());
     finish(value);
     queueMicrotask(showNext);
   }
@@ -51,7 +58,25 @@
       if (!open) showNext();
     };
     window.addEventListener("attendflow:confirm", listener);
-    return () => window.removeEventListener("attendflow:confirm", listener);
+    const keyboard = (event: KeyboardEvent) => {
+      if (!open || !dialog) return;
+      const layers = Array.from(document.querySelectorAll<HTMLElement>("[role=dialog][aria-modal=true]"));
+      const top = layers[layers.length - 1];
+      if (top !== dialog) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        resolve(false);
+      } else if (event.key === "Enter" && document.activeElement !== cancelButton) {
+        event.preventDefault();
+        resolve(true);
+      } else if (event.key === "Tab") {
+        event.preventDefault();
+        (document.activeElement === cancelButton ? confirmButton : cancelButton)?.focus();
+      }
+    };
+    window.addEventListener("keydown", keyboard, true);
+    return () => { window.removeEventListener("attendflow:confirm", listener); window.removeEventListener("keydown", keyboard, true); };
   });
 </script>
 
@@ -66,16 +91,18 @@
     <div
       class="dialog"
       role="dialog"
+      bind:this={dialog}
       aria-modal="true"
       aria-labelledby="confirm-title"
     >
       <h2 id="confirm-title">{title}</h2>
       <p>{message}</p>
       <footer>
-        <button onclick={() => resolve(false)}>{cancelLabel}</button>
+        <button bind:this={cancelButton} onclick={() => resolve(false)}>{cancelLabel}</button>
         <button
           class="primary"
           class:danger={destructive}
+          bind:this={confirmButton}
           onclick={() => resolve(true)}
         >
           {confirmLabel}

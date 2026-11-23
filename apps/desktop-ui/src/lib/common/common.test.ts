@@ -30,6 +30,26 @@ describe("shared controls", () => {
     expect(screen.queryByText("Delete?")).toBeNull();
   });
 
+  it("uses initial focus and resolves Escape as cancel and Enter as confirm", async () => {
+    render(ConfirmDialog);
+    const first = confirmDialog({ title: "First", message: "Cancel me" });
+    await screen.findByRole("dialog");
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Confirm" }));
+    await fireEvent.keyDown(window, { key: "Escape" });
+    await expect(first).resolves.toBe(false);
+    const second = confirmDialog({ title: "Second", message: "Confirm me" });
+    await screen.findByText("Second");
+    await fireEvent.keyDown(window, { key: "Enter" });
+    await expect(second).resolves.toBe(true);
+  });
+
+  it("focuses Cancel first for destructive confirmations", async () => {
+    render(ConfirmDialog);
+    void confirmDialog({ title: "Delete", message: "Remove?", destructive: true });
+    await screen.findByRole("dialog");
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Cancel" }));
+  });
+
   it("toggles its checked value", async () => {
     render(ToggleSwitch, { label: "Enabled", checked: false });
     const checkbox = screen.getByRole("checkbox") as HTMLInputElement;

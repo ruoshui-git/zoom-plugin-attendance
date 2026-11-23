@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import FormActions from "./common/FormActions.svelte";
   import ImportWorkflowPanel from "./common/ImportWorkflowPanel.svelte";
   import { confirmDialog } from "./ui";
@@ -31,6 +32,16 @@
   let pasteOpen = false;
   let importBytes: number[] | null = null;
   let file: HTMLInputElement;
+  onMount(() => {
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || !preview) return;
+      const layers = Array.from(document.querySelectorAll<HTMLElement>("[role=dialog][aria-modal=true]"));
+      if (layers.length) return;
+      event.preventDefault(); event.stopImmediatePropagation(); preview = null;
+    };
+    window.addEventListener("keydown", keydown, true);
+    return () => window.removeEventListener("keydown", keydown, true);
+  });
   const zh = () => language === "zh-CN";
   const t = (c: string, e: string) => (zh() ? c : e);
   function importActionLabel(action: unknown) {

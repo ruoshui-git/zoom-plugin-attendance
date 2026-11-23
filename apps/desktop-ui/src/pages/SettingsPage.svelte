@@ -63,7 +63,6 @@
   import { getLiveStatusLabel } from "../lib/session-labels";
   import { formatMinutes } from "../lib/formatting";
   import { zoomSidebarLabel, zoomSignedIn } from "../lib/zoom-status";
-  import ConfirmDialog from "../lib/common/ConfirmDialog.svelte";
   import ToggleSwitch from "../lib/common/ToggleSwitch.svelte";
   import { confirmDialog } from "../lib/ui";
   import { toast } from "../lib/toast";
@@ -169,7 +168,6 @@
     </div>
   </div>
 </section>
-<ConfirmDialog />
 <style>
   .ui-scale-control{max-width:420px;margin:16px 0 10px;color:#596273;font-size:12px}
   .ui-scale-heading,.ui-scale-ends{display:flex;justify-content:space-between;align-items:center}
