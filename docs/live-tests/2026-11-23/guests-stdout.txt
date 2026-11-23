@@ -1,0 +1,59 @@
+{"at":1795438486271,"iso":"2026-11-23T12:54:46.271Z","guest":"Guest_A","action":"join_attempt","attempt":1,"outcome":"joined"}
+{"at":1795438511382,"iso":"2026-11-23T12:55:11.382Z","guest":"Serve-G1","action":"join_attempt","attempt":1,"outcome":"joined"}
+{"at":1795438525559,"iso":"2026-11-23T12:55:25.559Z","guest":"Serve-G2","action":"join_attempt","attempt":1,"outcome":"joined"}
+{"at":1795438526037,"iso":"2026-11-23T12:55:26.037Z","guest":"Guest_B","action":"join_attempt","attempt":1,"outcome":"timeout"}
+{"at":1795438563966,"iso":"2026-11-23T12:56:03.966Z","guest":"Guest_B","action":"join_attempt","attempt":2,"outcome":"joined"}
+{"at":1795438563973,"iso":"2026-11-23T12:56:03.973Z","action":"all_joined","guests":["Guest_A","Serve-G1","Serve-G2","Guest_B"]}
+{"at":1795438637996,"iso":"2026-11-23T12:57:17.996Z","guest":"Guest_A","action":"raise","phase":"before"}
+{"at":1795438638083,"iso":"2026-11-23T12:57:18.083Z","guest":"Guest_A","action":"raise","phase":"done","result":null}
+{"at":1795438651151,"iso":"2026-11-23T12:57:31.151Z","guest":"Guest_A","action":"buttons","phase":"before"}
+{"at":1795438651180,"iso":"2026-11-23T12:57:31.180Z","guest":"Guest_A","action":"buttons","phase":"done","result":["Meeting information","Encryption information","My Notes","Got it","Zoom AI","View","Switch to Zoom Workplace Client","unmute my microphone","More audio controls","stop my video","More video controls","open the participants list pane,[5] particpants","Participants Settings","open the chat panel","Chat Settings","React","Share","More meeting control","Leave","View Options","screen share preview","more options","Pause share","Stop Share","Close","refresh","Close"]}
+{"at":1795438651184,"iso":"2026-11-23T12:57:31.184Z","guest":"Guest_A","action":"shot","phase":"before"}
+{"at":1795438651635,"iso":"2026-11-23T12:57:31.635Z","guest":"Guest_A","action":"shot","phase":"done","result":"..\\..\\docs\\live-tests\\2026-11-23\\shot-Guest_A-1795438651186.png"}
+{"at":1795438667274,"iso":"2026-11-23T12:57:47.274Z","guest":"Guest_A","action":"click","phase":"before"}
+{"at":1795438667306,"iso":"2026-11-23T12:57:47.306Z","guest":"Guest_A","action":"click","phase":"done","result":"Got it"}
+{"at":1795438667307,"iso":"2026-11-23T12:57:47.307Z","guest":"Serve-G1","action":"click","phase":"before"}
+{"at":1795438667325,"iso":"2026-11-23T12:57:47.325Z","guest":"Serve-G1","action":"click","phase":"done","result":"Got it"}
+{"at":1795438667326,"iso":"2026-11-23T12:57:47.326Z","guest":"Serve-G2","action":"click","phase":"before"}
+{"at":1795438667368,"iso":"2026-11-23T12:57:47.368Z","guest":"Serve-G2","action":"click","phase":"done","result":"Got it"}
+{"at":1795438667370,"iso":"2026-11-23T12:57:47.371Z","guest":"Guest_B","action":"click","phase":"before"}
+{"at":1795438667395,"iso":"2026-11-23T12:57:47.395Z","guest":"Guest_B","action":"click","phase":"done","result":"Got it"}
+{"at":1795438667397,"iso":"2026-11-23T12:57:47.397Z","guest":"Guest_A","action":"click","phase":"before"}
+{"at":1795438667562,"iso":"2026-11-23T12:57:47.562Z","guest":"Guest_A","action":"click","phase":"done","result":"React"}
+{"at":1795438671482,"iso":"2026-11-23T12:57:51.482Z","guest":"Guest_A","action":"buttons","phase":"before"}
+{"at":1795438671490,"iso":"2026-11-23T12:57:51.490Z","guest":"Guest_A","action":"buttons","phase":"done","result":["Meeting information","Encryption information","My Notes","Zoom AI","View","Switch to Zoom Workplace Client","unmute my microphone","More audio controls","stop my video","More video controls","open the participants list pane,[5] particpants","Participants Settings","open the chat panel","Chat Settings","React","clapping hands","thumbs up","face with tears of joy","face with open mouth","red heart","party popper","Yes","No","Slow down","Speed up","I'm away","Raise Hand","Be right back","Share","More meeting control","Leave","View Options","screen share preview","more options","Pause share","Stop Share","Close","refresh","Close"]}
+{"at":1795438682422,"iso":"2026-11-23T12:58:02.422Z","guest":"Guest_A","action":"click","phase":"before"}
+{"at":1795438682573,"iso":"2026-11-23T12:58:02.573Z","guest":"Guest_A","action":"click","phase":"done","result":"Raise Hand"}
+{"at":1795438702832,"iso":"2026-11-23T12:58:22.832Z","guest":"Guest_B","action":"click","phase":"before"}
+{"at":1795438702925,"iso":"2026-11-23T12:58:22.925Z","guest":"Guest_B","action":"click","phase":"done","result":"React"}
+{"at":1795438702927,"iso":"2026-11-23T12:58:22.927Z","guest":"Guest_B","action":"click","phase":"before"}
+{"at":1795438703012,"iso":"2026-11-23T12:58:23.012Z","guest":"Guest_B","action":"click","phase":"done","result":"Raise Hand"}
+{"at":1795438703014,"iso":"2026-11-23T12:58:23.014Z","guest":"Serve-G1","action":"click","phase":"before"}
+{"at":1795438703387,"iso":"2026-11-23T12:58:23.387Z","guest":"Serve-G1","action":"click","phase":"done","result":"React"}
+{"at":1795438703388,"iso":"2026-11-23T12:58:23.388Z","guest":"Serve-G1","action":"click","phase":"before"}
+{"at":1795438703609,"iso":"2026-11-23T12:58:23.609Z","guest":"Serve-G1","action":"click","phase":"done","result":"Raise Hand"}
+{"at":1795438714854,"iso":"2026-11-23T12:58:34.854Z","guest":"Guest_A","action":"click","phase":"before"}
+{"at":1795438714861,"iso":"2026-11-23T12:58:34.861Z","guest":"Guest_A","action":"click","phase":"done","result":null}
+{"at":1795438714862,"iso":"2026-11-23T12:58:34.862Z","guest":"Guest_A","action":"buttons","phase":"before"}
+{"at":1795438714865,"iso":"2026-11-23T12:58:34.865Z","guest":"Guest_A","action":"buttons","phase":"done","result":["Meeting information","Encryption information","My Notes","Zoom AI","View","Switch to Zoom Workplace Client","unmute my microphone","More audio controls","stop my video","More video controls","open the manage participants list pane,5 particpants","Participants Settings","open the chat panel","Chat Settings","React","Lower hand","Share","Host tools for share","Host tools","More meeting control","Leave","View Options","screen share preview","more options","Pause share","Stop Share","Close","refresh","Close"]}
+{"at":1795438724457,"iso":"2026-11-23T12:58:44.457Z","guest":"Guest_A","action":"click","phase":"before"}
+{"at":1795438724606,"iso":"2026-11-23T12:58:44.606Z","guest":"Guest_A","action":"click","phase":"done","result":"open the manage participants list pane,5 particpants"}
+{"at":1795438724609,"iso":"2026-11-23T12:58:44.609Z","guest":"Guest_A","action":"buttons","phase":"before"}
+{"at":1795438724630,"iso":"2026-11-23T12:58:44.630Z","guest":"Guest_A","action":"buttons","phase":"done","result":["Meeting information","Encryption information","My Notes","Zoom AI","View","Switch to Zoom Workplace Client","unmute my microphone","More audio controls","stop my video","More video controls","close the manage participants list pane","Participants Settings","open the chat panel","Chat Settings","React","Lower hand","Share","Host tools for share","Host tools","More meeting control","Leave","View Options","Pop Out","Close","Lower hand","Unmute","Stop Video","More options","Ask to Unmute","Ask For Start Video","More options","Lower hand","Ask to Unmute","Stop Video","More options","Lower hand","Ask to Unmute","Stop Video","More options","Ask to Unmute","Stop Video","More options","Invite","Mute All","More managing participants options","screen share preview","more options","Pause share","Stop Share","Close","refresh","Close"]}
+{"at":1795438724631,"iso":"2026-11-23T12:58:44.631Z","guest":"Guest_A","action":"shot","phase":"before"}
+{"at":1795438724911,"iso":"2026-11-23T12:58:44.911Z","guest":"Guest_A","action":"shot","phase":"done","result":"..\\..\\docs\\live-tests\\2026-11-23\\shot-Guest_A-1795438724632.png"}
+{"at":1795438734493,"iso":"2026-11-23T12:58:54.493Z","guest":"Guest_A","action":"click","phase":"before"}
+{"at":1795438734551,"iso":"2026-11-23T12:58:54.551Z","guest":"Guest_A","action":"click","phase":"done","result":"More managing participants options"}
+{"at":1795438734552,"iso":"2026-11-23T12:58:54.552Z","guest":"Guest_A","action":"buttons","phase":"before"}
+{"at":1795438734557,"iso":"2026-11-23T12:58:54.557Z","guest":"Guest_A","action":"buttons","phase":"done","result":["Meeting information","Encryption information","My Notes","Zoom AI","View","Switch to Zoom Workplace Client","unmute my microphone","More audio controls","stop my video","More video controls","close the manage participants list pane","Participants Settings","open the chat panel","Chat Settings","React","Lower hand","Share","Host tools for share","More meeting control","Leave","View Options","Pop Out","Close","Lower hand","Unmute","Stop Video","More options","Ask to Unmute","Ask For Start Video","More options","Lower hand","Ask to Unmute","Stop Video","More options","Lower hand","Ask to Unmute","Stop Video","More options","Ask to Unmute","Stop Video","More options","Invite","Mute All","More managing participants options","Ask all to unmute unselect","Mute all upon entry selected","Clear All Feedback","Host tools for participants","screen share preview","more options","Pause share","Stop Share","Close","refresh","Close"]}
+{"at":1795438743380,"iso":"2026-11-23T12:59:03.380Z","guest":"Guest_A","action":"shot","phase":"before"}
+{"at":1795438743575,"iso":"2026-11-23T12:59:03.575Z","guest":"Guest_A","action":"shot","phase":"done","result":"..\\..\\docs\\live-tests\\2026-11-23\\shot-Guest_A-1795438743382.png"}
+{"at":1795438768280,"iso":"2026-11-23T12:59:28.280Z","guest":"Guest_A","action":"leave","phase":"before"}
+{"at":1795438769635,"iso":"2026-11-23T12:59:29.635Z","guest":"Guest_A","action":"leave","phase":"done","result":"Leave Meeting"}
+{"at":1795438769636,"iso":"2026-11-23T12:59:29.636Z","guest":"Serve-G1","action":"leave","phase":"before"}
+{"at":1795438771015,"iso":"2026-11-23T12:59:31.015Z","guest":"Serve-G1","action":"leave","phase":"done","result":"Leave Meeting"}
+{"at":1795438771016,"iso":"2026-11-23T12:59:31.016Z","guest":"Serve-G2","action":"leave","phase":"before"}
+{"at":1795438772364,"iso":"2026-11-23T12:59:32.364Z","guest":"Serve-G2","action":"leave","phase":"done","result":"Leave Meeting"}
+{"at":1795438772365,"iso":"2026-11-23T12:59:32.365Z","guest":"Guest_B","action":"leave","phase":"before"}
+{"at":1795438773664,"iso":"2026-11-23T12:59:33.664Z","guest":"Guest_B","action":"leave","phase":"done","result":"Leave Meeting"}
+{"at":1795438775134,"iso":"2026-11-23T12:59:35.134Z","action":"quit"}

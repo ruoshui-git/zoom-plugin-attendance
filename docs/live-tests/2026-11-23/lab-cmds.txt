@@ -1,0 +1,25 @@
+status
+start 1234509876
+wr off
+note poll 1s start
+poll 1
+note T1 three hands raised (Guest_A, Guest_B, Serve-G1)
+cohost @Guest_A
+note restarting guests (tooling fix); all leave
+note guests rejoining (run 2)
+note H1 run2: raising hands Guest_A Guest_B Serve-G1
+cohost @Guest_A
+note H2 co-host clicks Clear All Feedback
+note H3 Serve-G1 raises then leaves with hand up
+note F1 Guest_B: feedback Yes, then thumbs up emoji, then I'm away, then video off/on
+note T1 Serve-G2 unmute (speech loop 6.7s talk / 10s silence)
+note T2 Serve-G2 mute
+note T3 Serve-G2 unmute again
+note T4 Serve-G2 mute
+note T5 Serve-G2 unmute (verification screenshots from Guest_B)
+note T6 Serve-G2 mute (end of talk tests)
+poll 0
+wr on
+note end of tests
+end
+quit

@@ -1,0 +1,159 @@
+{"at":1795438486271,"iso":"2026-11-23T12:54:46.271Z","guest":"Guest_A","action":"join_attempt","attempt":1,"outcome":"joined"}
+{"at":1795438511382,"iso":"2026-11-23T12:55:11.382Z","guest":"Serve-G1","action":"join_attempt","attempt":1,"outcome":"joined"}
+{"at":1795438525559,"iso":"2026-11-23T12:55:25.559Z","guest":"Serve-G2","action":"join_attempt","attempt":1,"outcome":"joined"}
+{"at":1795438526037,"iso":"2026-11-23T12:55:26.037Z","guest":"Guest_B","action":"join_attempt","attempt":1,"outcome":"timeout"}
+{"at":1795438563966,"iso":"2026-11-23T12:56:03.966Z","guest":"Guest_B","action":"join_attempt","attempt":2,"outcome":"joined"}
+{"at":1795438563973,"iso":"2026-11-23T12:56:03.973Z","action":"all_joined","guests":["Guest_A","Serve-G1","Serve-G2","Guest_B"]}
+{"at":1795438637996,"iso":"2026-11-23T12:57:17.996Z","guest":"Guest_A","action":"raise","phase":"before"}
+{"at":1795438638083,"iso":"2026-11-23T12:57:18.083Z","guest":"Guest_A","action":"raise","phase":"done","result":null}
+{"at":1795438651151,"iso":"2026-11-23T12:57:31.151Z","guest":"Guest_A","action":"buttons","phase":"before"}
+{"at":1795438651180,"iso":"2026-11-23T12:57:31.180Z","guest":"Guest_A","action":"buttons","phase":"done","result":["Meeting information","Encryption information","My Notes","Got it","Zoom AI","View","Switch to Zoom Workplace Client","unmute my microphone","More audio controls","stop my video","More video controls","open the participants list pane,[5] particpants","Participants Settings","open the chat panel","Chat Settings","React","Share","More meeting control","Leave","View Options","screen share preview","more options","Pause share","Stop Share","Close","refresh","Close"]}
+{"at":1795438651184,"iso":"2026-11-23T12:57:31.184Z","guest":"Guest_A","action":"shot","phase":"before"}
+{"at":1795438651635,"iso":"2026-11-23T12:57:31.635Z","guest":"Guest_A","action":"shot","phase":"done","result":"..\\..\\docs\\live-tests\\2026-11-23\\shot-Guest_A-1795438651186.png"}
+{"at":1795438667274,"iso":"2026-11-23T12:57:47.274Z","guest":"Guest_A","action":"click","phase":"before"}
+{"at":1795438667306,"iso":"2026-11-23T12:57:47.306Z","guest":"Guest_A","action":"click","phase":"done","result":"Got it"}
+{"at":1795438667307,"iso":"2026-11-23T12:57:47.307Z","guest":"Serve-G1","action":"click","phase":"before"}
+{"at":1795438667325,"iso":"2026-11-23T12:57:47.325Z","guest":"Serve-G1","action":"click","phase":"done","result":"Got it"}
+{"at":1795438667326,"iso":"2026-11-23T12:57:47.326Z","guest":"Serve-G2","action":"click","phase":"before"}
+{"at":1795438667368,"iso":"2026-11-23T12:57:47.368Z","guest":"Serve-G2","action":"click","phase":"done","result":"Got it"}
+{"at":1795438667370,"iso":"2026-11-23T12:57:47.371Z","guest":"Guest_B","action":"click","phase":"before"}
+{"at":1795438667395,"iso":"2026-11-23T12:57:47.395Z","guest":"Guest_B","action":"click","phase":"done","result":"Got it"}
+{"at":1795438667397,"iso":"2026-11-23T12:57:47.397Z","guest":"Guest_A","action":"click","phase":"before"}
+{"at":1795438667562,"iso":"2026-11-23T12:57:47.562Z","guest":"Guest_A","action":"click","phase":"done","result":"React"}
+{"at":1795438671482,"iso":"2026-11-23T12:57:51.482Z","guest":"Guest_A","action":"buttons","phase":"before"}
+{"at":1795438671490,"iso":"2026-11-23T12:57:51.490Z","guest":"Guest_A","action":"buttons","phase":"done","result":["Meeting information","Encryption information","My Notes","Zoom AI","View","Switch to Zoom Workplace Client","unmute my microphone","More audio controls","stop my video","More video controls","open the participants list pane,[5] particpants","Participants Settings","open the chat panel","Chat Settings","React","clapping hands","thumbs up","face with tears of joy","face with open mouth","red heart","party popper","Yes","No","Slow down","Speed up","I'm away","Raise Hand","Be right back","Share","More meeting control","Leave","View Options","screen share preview","more options","Pause share","Stop Share","Close","refresh","Close"]}
+{"at":1795438682422,"iso":"2026-11-23T12:58:02.422Z","guest":"Guest_A","action":"click","phase":"before"}
+{"at":1795438682573,"iso":"2026-11-23T12:58:02.573Z","guest":"Guest_A","action":"click","phase":"done","result":"Raise Hand"}
+{"at":1795438702832,"iso":"2026-11-23T12:58:22.832Z","guest":"Guest_B","action":"click","phase":"before"}
+{"at":1795438702925,"iso":"2026-11-23T12:58:22.925Z","guest":"Guest_B","action":"click","phase":"done","result":"React"}
+{"at":1795438702927,"iso":"2026-11-23T12:58:22.927Z","guest":"Guest_B","action":"click","phase":"before"}
+{"at":1795438703012,"iso":"2026-11-23T12:58:23.012Z","guest":"Guest_B","action":"click","phase":"done","result":"Raise Hand"}
+{"at":1795438703014,"iso":"2026-11-23T12:58:23.014Z","guest":"Serve-G1","action":"click","phase":"before"}
+{"at":1795438703387,"iso":"2026-11-23T12:58:23.387Z","guest":"Serve-G1","action":"click","phase":"done","result":"React"}
+{"at":1795438703388,"iso":"2026-11-23T12:58:23.388Z","guest":"Serve-G1","action":"click","phase":"before"}
+{"at":1795438703609,"iso":"2026-11-23T12:58:23.609Z","guest":"Serve-G1","action":"click","phase":"done","result":"Raise Hand"}
+{"at":1795438714854,"iso":"2026-11-23T12:58:34.854Z","guest":"Guest_A","action":"click","phase":"before"}
+{"at":1795438714861,"iso":"2026-11-23T12:58:34.861Z","guest":"Guest_A","action":"click","phase":"done","result":null}
+{"at":1795438714862,"iso":"2026-11-23T12:58:34.862Z","guest":"Guest_A","action":"buttons","phase":"before"}
+{"at":1795438714865,"iso":"2026-11-23T12:58:34.865Z","guest":"Guest_A","action":"buttons","phase":"done","result":["Meeting information","Encryption information","My Notes","Zoom AI","View","Switch to Zoom Workplace Client","unmute my microphone","More audio controls","stop my video","More video controls","open the manage participants list pane,5 particpants","Participants Settings","open the chat panel","Chat Settings","React","Lower hand","Share","Host tools for share","Host tools","More meeting control","Leave","View Options","screen share preview","more options","Pause share","Stop Share","Close","refresh","Close"]}
+{"at":1795438724457,"iso":"2026-11-23T12:58:44.457Z","guest":"Guest_A","action":"click","phase":"before"}
+{"at":1795438724606,"iso":"2026-11-23T12:58:44.606Z","guest":"Guest_A","action":"click","phase":"done","result":"open the manage participants list pane,5 particpants"}
+{"at":1795438724609,"iso":"2026-11-23T12:58:44.609Z","guest":"Guest_A","action":"buttons","phase":"before"}
+{"at":1795438724630,"iso":"2026-11-23T12:58:44.630Z","guest":"Guest_A","action":"buttons","phase":"done","result":["Meeting information","Encryption information","My Notes","Zoom AI","View","Switch to Zoom Workplace Client","unmute my microphone","More audio controls","stop my video","More video controls","close the manage participants list pane","Participants Settings","open the chat panel","Chat Settings","React","Lower hand","Share","Host tools for share","Host tools","More meeting control","Leave","View Options","Pop Out","Close","Lower hand","Unmute","Stop Video","More options","Ask to Unmute","Ask For Start Video","More options","Lower hand","Ask to Unmute","Stop Video","More options","Lower hand","Ask to Unmute","Stop Video","More options","Ask to Unmute","Stop Video","More options","Invite","Mute All","More managing participants options","screen share preview","more options","Pause share","Stop Share","Close","refresh","Close"]}
+{"at":1795438724631,"iso":"2026-11-23T12:58:44.631Z","guest":"Guest_A","action":"shot","phase":"before"}
+{"at":1795438724911,"iso":"2026-11-23T12:58:44.911Z","guest":"Guest_A","action":"shot","phase":"done","result":"..\\..\\docs\\live-tests\\2026-11-23\\shot-Guest_A-1795438724632.png"}
+{"at":1795438734493,"iso":"2026-11-23T12:58:54.493Z","guest":"Guest_A","action":"click","phase":"before"}
+{"at":1795438734551,"iso":"2026-11-23T12:58:54.551Z","guest":"Guest_A","action":"click","phase":"done","result":"More managing participants options"}
+{"at":1795438734552,"iso":"2026-11-23T12:58:54.552Z","guest":"Guest_A","action":"buttons","phase":"before"}
+{"at":1795438734557,"iso":"2026-11-23T12:58:54.557Z","guest":"Guest_A","action":"buttons","phase":"done","result":["Meeting information","Encryption information","My Notes","Zoom AI","View","Switch to Zoom Workplace Client","unmute my microphone","More audio controls","stop my video","More video controls","close the manage participants list pane","Participants Settings","open the chat panel","Chat Settings","React","Lower hand","Share","Host tools for share","More meeting control","Leave","View Options","Pop Out","Close","Lower hand","Unmute","Stop Video","More options","Ask to Unmute","Ask For Start Video","More options","Lower hand","Ask to Unmute","Stop Video","More options","Lower hand","Ask to Unmute","Stop Video","More options","Ask to Unmute","Stop Video","More options","Invite","Mute All","More managing participants options","Ask all to unmute unselect","Mute all upon entry selected","Clear All Feedback","Host tools for participants","screen share preview","more options","Pause share","Stop Share","Close","refresh","Close"]}
+{"at":1795438743380,"iso":"2026-11-23T12:59:03.380Z","guest":"Guest_A","action":"shot","phase":"before"}
+{"at":1795438743575,"iso":"2026-11-23T12:59:03.575Z","guest":"Guest_A","action":"shot","phase":"done","result":"..\\..\\docs\\live-tests\\2026-11-23\\shot-Guest_A-1795438743382.png"}
+{"at":1795438768280,"iso":"2026-11-23T12:59:28.280Z","guest":"Guest_A","action":"leave","phase":"before"}
+{"at":1795438769635,"iso":"2026-11-23T12:59:29.635Z","guest":"Guest_A","action":"leave","phase":"done","result":"Leave Meeting"}
+{"at":1795438769636,"iso":"2026-11-23T12:59:29.636Z","guest":"Serve-G1","action":"leave","phase":"before"}
+{"at":1795438771015,"iso":"2026-11-23T12:59:31.015Z","guest":"Serve-G1","action":"leave","phase":"done","result":"Leave Meeting"}
+{"at":1795438771016,"iso":"2026-11-23T12:59:31.016Z","guest":"Serve-G2","action":"leave","phase":"before"}
+{"at":1795438772364,"iso":"2026-11-23T12:59:32.364Z","guest":"Serve-G2","action":"leave","phase":"done","result":"Leave Meeting"}
+{"at":1795438772365,"iso":"2026-11-23T12:59:32.365Z","guest":"Guest_B","action":"leave","phase":"before"}
+{"at":1795438773664,"iso":"2026-11-23T12:59:33.664Z","guest":"Guest_B","action":"leave","phase":"done","result":"Leave Meeting"}
+{"at":1795438775134,"iso":"2026-11-23T12:59:35.134Z","action":"quit"}
+{"at":1795438853761,"iso":"2026-11-23T13:00:53.761Z","guest":"Serve-G1","action":"join_attempt","attempt":1,"outcome":"joined"}
+{"at":1795438864397,"iso":"2026-11-23T13:01:04.397Z","guest":"Guest_A","action":"join_attempt","attempt":1,"outcome":"timeout"}
+{"at":1795438866511,"iso":"2026-11-23T13:01:06.511Z","guest":"Serve-G2","action":"join_attempt","attempt":1,"outcome":"joined"}
+{"at":1795438872922,"iso":"2026-11-23T13:01:12.922Z","guest":"Guest_B","action":"join_attempt","attempt":1,"outcome":"timeout"}
+{"at":1795438896321,"iso":"2026-11-23T13:01:36.321Z","guest":"Guest_A","action":"join_attempt","attempt":2,"outcome":"joined"}
+{"at":1795438904921,"iso":"2026-11-23T13:01:44.921Z","guest":"Guest_B","action":"join_attempt","attempt":2,"outcome":"joined"}
+{"at":1795438904922,"iso":"2026-11-23T13:01:44.922Z","action":"all_joined","guests":["Serve-G1","Serve-G2","Guest_A","Guest_B"]}
+{"at":1795439023032,"iso":"2026-11-23T13:03:43.032Z","guest":"Serve-G1","action":"click","phase":"before"}
+{"at":1795439023043,"iso":"2026-11-23T13:03:43.043Z","guest":"Serve-G1","action":"click","phase":"done","result":null}
+{"at":1795439023044,"iso":"2026-11-23T13:03:43.044Z","guest":"Serve-G2","action":"click","phase":"before"}
+{"at":1795439023056,"iso":"2026-11-23T13:03:43.056Z","guest":"Serve-G2","action":"click","phase":"done","result":null}
+{"at":1795439023058,"iso":"2026-11-23T13:03:43.058Z","guest":"Guest_A","action":"click","phase":"before"}
+{"at":1795439023070,"iso":"2026-11-23T13:03:43.070Z","guest":"Guest_A","action":"click","phase":"done","result":null}
+{"at":1795439023071,"iso":"2026-11-23T13:03:43.071Z","guest":"Guest_B","action":"click","phase":"before"}
+{"at":1795439023077,"iso":"2026-11-23T13:03:43.077Z","guest":"Guest_B","action":"click","phase":"done","result":null}
+{"at":1795439023078,"iso":"2026-11-23T13:03:43.078Z","guest":"Guest_A","action":"click","phase":"before"}
+{"at":1795439023142,"iso":"2026-11-23T13:03:43.142Z","guest":"Guest_A","action":"click","phase":"done","result":"React"}
+{"at":1795439023143,"iso":"2026-11-23T13:03:43.143Z","guest":"Guest_A","action":"click","phase":"before"}
+{"at":1795439023209,"iso":"2026-11-23T13:03:43.209Z","guest":"Guest_A","action":"click","phase":"done","result":"Raise Hand"}
+{"at":1795439023209,"iso":"2026-11-23T13:03:43.209Z","guest":"Guest_B","action":"click","phase":"before"}
+{"at":1795439023312,"iso":"2026-11-23T13:03:43.312Z","guest":"Guest_B","action":"click","phase":"done","result":"React"}
+{"at":1795439023314,"iso":"2026-11-23T13:03:43.314Z","guest":"Guest_B","action":"click","phase":"before"}
+{"at":1795439023387,"iso":"2026-11-23T13:03:43.387Z","guest":"Guest_B","action":"click","phase":"done","result":"Raise Hand"}
+{"at":1795439023387,"iso":"2026-11-23T13:03:43.387Z","guest":"Serve-G1","action":"click","phase":"before"}
+{"at":1795439023487,"iso":"2026-11-23T13:03:43.487Z","guest":"Serve-G1","action":"click","phase":"done","result":"React"}
+{"at":1795439023488,"iso":"2026-11-23T13:03:43.488Z","guest":"Serve-G1","action":"click","phase":"before"}
+{"at":1795439023980,"iso":"2026-11-23T13:03:43.980Z","guest":"Serve-G1","action":"click","phase":"done","result":"Raise Hand"}
+{"at":1795439034932,"iso":"2026-11-23T13:03:54.932Z","guest":"Guest_A","action":"click","phase":"before"}
+{"at":1795439035045,"iso":"2026-11-23T13:03:55.045Z","guest":"Guest_A","action":"click","phase":"done","result":"open the manage participants list pane,5 particpants"}
+{"at":1795439035047,"iso":"2026-11-23T13:03:55.047Z","guest":"Guest_A","action":"click","phase":"before"}
+{"at":1795439035083,"iso":"2026-11-23T13:03:55.083Z","guest":"Guest_A","action":"click","phase":"done","result":"More managing participants options"}
+{"at":1795439039224,"iso":"2026-11-23T13:03:59.224Z","guest":"Guest_A","action":"text","phase":"before"}
+{"at":1795439039315,"iso":"2026-11-23T13:03:59.315Z","guest":"Guest_A","action":"text","phase":"done","result":"Clear All Feedback"}
+{"at":1795439056708,"iso":"2026-11-23T13:04:16.708Z","guest":"Serve-G1","action":"click","phase":"before"}
+{"at":1795439056759,"iso":"2026-11-23T13:04:16.759Z","guest":"Serve-G1","action":"click","phase":"done","result":"React"}
+{"at":1795439056760,"iso":"2026-11-23T13:04:16.760Z","guest":"Serve-G1","action":"click","phase":"before"}
+{"at":1795439056811,"iso":"2026-11-23T13:04:16.811Z","guest":"Serve-G1","action":"click","phase":"done","result":"Raise Hand"}
+{"at":1795439061740,"iso":"2026-11-23T13:04:21.740Z","guest":"Serve-G1","action":"leave","phase":"before"}
+{"at":1795439063039,"iso":"2026-11-23T13:04:23.039Z","guest":"Serve-G1","action":"leave","phase":"done","result":"Leave Meeting"}
+{"at":1795439086894,"iso":"2026-11-23T13:04:46.894Z","guest":"Guest_B","action":"click","phase":"before"}
+{"at":1795439086939,"iso":"2026-11-23T13:04:46.939Z","guest":"Guest_B","action":"click","phase":"done","result":"React"}
+{"at":1795439086940,"iso":"2026-11-23T13:04:46.940Z","guest":"Guest_B","action":"click","phase":"before"}
+{"at":1795439086966,"iso":"2026-11-23T13:04:46.966Z","guest":"Guest_B","action":"click","phase":"done","result":"Yes"}
+{"at":1795439091146,"iso":"2026-11-23T13:04:51.146Z","guest":"Guest_B","action":"click","phase":"before"}
+{"at":1795439091159,"iso":"2026-11-23T13:04:51.159Z","guest":"Guest_B","action":"click","phase":"done","result":"React"}
+{"at":1795439091160,"iso":"2026-11-23T13:04:51.160Z","guest":"Guest_B","action":"click","phase":"before"}
+{"at":1795439091200,"iso":"2026-11-23T13:04:51.200Z","guest":"Guest_B","action":"click","phase":"done","result":"thumbs up"}
+{"at":1795439095090,"iso":"2026-11-23T13:04:55.090Z","guest":"Guest_B","action":"click","phase":"before"}
+{"at":1795439095113,"iso":"2026-11-23T13:04:55.113Z","guest":"Guest_B","action":"click","phase":"done","result":"React"}
+{"at":1795439095114,"iso":"2026-11-23T13:04:55.114Z","guest":"Guest_B","action":"click","phase":"before"}
+{"at":1795439095141,"iso":"2026-11-23T13:04:55.141Z","guest":"Guest_B","action":"click","phase":"done","result":"I'm away"}
+{"at":1795439099329,"iso":"2026-11-23T13:04:59.329Z","guest":"Guest_B","action":"click","phase":"before"}
+{"at":1795439099364,"iso":"2026-11-23T13:04:59.364Z","guest":"Guest_B","action":"click","phase":"done","result":"stop my video"}
+{"at":1795439105310,"iso":"2026-11-23T13:05:05.310Z","guest":"Guest_B","action":"click","phase":"before"}
+{"at":1795439105341,"iso":"2026-11-23T13:05:05.341Z","guest":"Guest_B","action":"click","phase":"done","result":"start my video"}
+{"at":1795439133901,"iso":"2026-11-23T13:05:33.901Z","guest":"Serve-G2","action":"click","phase":"before"}
+{"at":1795439133909,"iso":"2026-11-23T13:05:33.909Z","guest":"Serve-G2","action":"click","phase":"done","result":"unmute my microphone"}
+{"at":1795439204006,"iso":"2026-11-23T13:06:44.006Z","guest":"Serve-G2","action":"click","phase":"before"}
+{"at":1795439204016,"iso":"2026-11-23T13:06:44.016Z","guest":"Serve-G2","action":"click","phase":"done","result":"mute my microphone"}
+{"at":1795439229068,"iso":"2026-11-23T13:07:09.068Z","guest":"Serve-G2","action":"click","phase":"before"}
+{"at":1795439229077,"iso":"2026-11-23T13:07:09.077Z","guest":"Serve-G2","action":"click","phase":"done","result":"unmute my microphone"}
+{"at":1795439299013,"iso":"2026-11-23T13:08:19.013Z","guest":"Serve-G2","action":"click","phase":"before"}
+{"at":1795439299021,"iso":"2026-11-23T13:08:19.021Z","guest":"Serve-G2","action":"click","phase":"done","result":"mute my microphone"}
+{"at":1795439320403,"iso":"2026-11-23T13:08:40.403Z","guest":"Serve-G2","action":"click","phase":"before"}
+{"at":1795439320411,"iso":"2026-11-23T13:08:40.411Z","guest":"Serve-G2","action":"click","phase":"done","result":"unmute my microphone"}
+{"at":1795439320413,"iso":"2026-11-23T13:08:40.413Z","guest":"Guest_B","action":"shot","phase":"before"}
+{"at":1795439320605,"iso":"2026-11-23T13:08:40.605Z","guest":"Guest_B","action":"shot","phase":"done","result":"..\\..\\docs\\live-tests\\2026-11-23\\shot-Guest_B-1795439320414.png"}
+{"at":1795439320606,"iso":"2026-11-23T13:08:40.606Z","guest":"Serve-G2","action":"shot","phase":"before"}
+{"at":1795439320812,"iso":"2026-11-23T13:08:40.812Z","guest":"Serve-G2","action":"shot","phase":"done","result":"..\\..\\docs\\live-tests\\2026-11-23\\shot-Serve-G2-1795439320606.png"}
+{"at":1795439323433,"iso":"2026-11-23T13:08:43.433Z","guest":"Guest_B","action":"shot","phase":"before"}
+{"at":1795439323557,"iso":"2026-11-23T13:08:43.557Z","guest":"Guest_B","action":"shot","phase":"done","result":"..\\..\\docs\\live-tests\\2026-11-23\\shot-Guest_B-1795439323434.png"}
+{"at":1795439323557,"iso":"2026-11-23T13:08:43.557Z","guest":"Serve-G2","action":"shot","phase":"before"}
+{"at":1795439323689,"iso":"2026-11-23T13:08:43.689Z","guest":"Serve-G2","action":"shot","phase":"done","result":"..\\..\\docs\\live-tests\\2026-11-23\\shot-Serve-G2-1795439323557.png"}
+{"at":1795439326536,"iso":"2026-11-23T13:08:46.536Z","guest":"Guest_B","action":"shot","phase":"before"}
+{"at":1795439326661,"iso":"2026-11-23T13:08:46.661Z","guest":"Guest_B","action":"shot","phase":"done","result":"..\\..\\docs\\live-tests\\2026-11-23\\shot-Guest_B-1795439326537.png"}
+{"at":1795439326662,"iso":"2026-11-23T13:08:46.662Z","guest":"Serve-G2","action":"shot","phase":"before"}
+{"at":1795439326763,"iso":"2026-11-23T13:08:46.763Z","guest":"Serve-G2","action":"shot","phase":"done","result":"..\\..\\docs\\live-tests\\2026-11-23\\shot-Serve-G2-1795439326662.png"}
+{"at":1795439329619,"iso":"2026-11-23T13:08:49.619Z","guest":"Guest_B","action":"shot","phase":"before"}
+{"at":1795439329770,"iso":"2026-11-23T13:08:49.770Z","guest":"Guest_B","action":"shot","phase":"done","result":"..\\..\\docs\\live-tests\\2026-11-23\\shot-Guest_B-1795439329621.png"}
+{"at":1795439329771,"iso":"2026-11-23T13:08:49.771Z","guest":"Serve-G2","action":"shot","phase":"before"}
+{"at":1795439329911,"iso":"2026-11-23T13:08:49.911Z","guest":"Serve-G2","action":"shot","phase":"done","result":"..\\..\\docs\\live-tests\\2026-11-23\\shot-Serve-G2-1795439329771.png"}
+{"at":1795439332754,"iso":"2026-11-23T13:08:52.754Z","guest":"Guest_B","action":"shot","phase":"before"}
+{"at":1795439332868,"iso":"2026-11-23T13:08:52.868Z","guest":"Guest_B","action":"shot","phase":"done","result":"..\\..\\docs\\live-tests\\2026-11-23\\shot-Guest_B-1795439332754.png"}
+{"at":1795439332868,"iso":"2026-11-23T13:08:52.868Z","guest":"Serve-G2","action":"shot","phase":"before"}
+{"at":1795439332995,"iso":"2026-11-23T13:08:52.995Z","guest":"Serve-G2","action":"shot","phase":"done","result":"..\\..\\docs\\live-tests\\2026-11-23\\shot-Serve-G2-1795439332869.png"}
+{"at":1795439335849,"iso":"2026-11-23T13:08:55.849Z","guest":"Guest_B","action":"shot","phase":"before"}
+{"at":1795439335934,"iso":"2026-11-23T13:08:55.934Z","guest":"Guest_B","action":"shot","phase":"done","result":"..\\..\\docs\\live-tests\\2026-11-23\\shot-Guest_B-1795439335849.png"}
+{"at":1795439335935,"iso":"2026-11-23T13:08:55.935Z","guest":"Serve-G2","action":"shot","phase":"before"}
+{"at":1795439336036,"iso":"2026-11-23T13:08:56.036Z","guest":"Serve-G2","action":"shot","phase":"done","result":"..\\..\\docs\\live-tests\\2026-11-23\\shot-Serve-G2-1795439335935.png"}
+{"at":1795439349038,"iso":"2026-11-23T13:09:09.038Z","guest":"Serve-G2","action":"click","phase":"before"}
+{"at":1795439349049,"iso":"2026-11-23T13:09:09.049Z","guest":"Serve-G2","action":"click","phase":"done","result":"mute my microphone"}
+{"at":1795439370336,"iso":"2026-11-23T13:09:30.336Z","guest":"Serve-G1","action":"leave","phase":"before"}
+{"at":1795439371550,"iso":"2026-11-23T13:09:31.550Z","guest":"Serve-G1","action":"leave","phase":"done","result":null}
+{"at":1795439371550,"iso":"2026-11-23T13:09:31.550Z","guest":"Serve-G2","action":"leave","phase":"before"}
+{"at":1795439372816,"iso":"2026-11-23T13:09:32.816Z","guest":"Serve-G2","action":"leave","phase":"done","result":"Leave Meeting"}
+{"at":1795439372817,"iso":"2026-11-23T13:09:32.817Z","guest":"Guest_A","action":"leave","phase":"before"}
+{"at":1795439374113,"iso":"2026-11-23T13:09:34.113Z","guest":"Guest_A","action":"leave","phase":"done","result":"Leave Meeting"}
+{"at":1795439374115,"iso":"2026-11-23T13:09:34.115Z","guest":"Guest_B","action":"leave","phase":"before"}
+{"at":1795439375386,"iso":"2026-11-23T13:09:35.386Z","guest":"Guest_B","action":"leave","phase":"done","result":"Leave Meeting"}
+{"at":1795439376646,"iso":"2026-11-23T13:09:36.646Z","action":"quit"}

@@ -1,0 +1,62 @@
+Guest_A raise
+Guest_A buttons
+Guest_A shot
+* click ^Got it$
+Guest_A click ^React$
+Guest_A buttons
+Guest_A click ^Raise Hand$
+Guest_B click ^React$
+Guest_B click ^Raise Hand$
+Serve-G1 click ^React$
+Serve-G1 click ^Raise Hand$
+Guest_A click ^open the participants list pane
+Guest_A buttons
+Guest_A click ^open the manage participants list pane
+Guest_A buttons
+Guest_A shot
+Guest_A click ^More managing participants options$
+Guest_A buttons
+Guest_A shot
+* leave
+quit
+* click ^Got it$
+Guest_A click ^React$
+Guest_A click ^Raise Hand$
+Guest_B click ^React$
+Guest_B click ^Raise Hand$
+Serve-G1 click ^React$
+Serve-G1 click ^Raise Hand$
+Guest_A click ^open the manage participants list pane
+Guest_A click ^More managing participants options$
+Guest_A text Clear All Feedback
+Serve-G1 click ^React$
+Serve-G1 click ^Raise Hand$
+Serve-G1 leave
+Guest_B click ^React$
+Guest_B click ^Yes$
+Guest_B click ^React$
+Guest_B click ^thumbs up$
+Guest_B click ^React$
+Guest_B click ^I'm away$
+Guest_B click ^stop my video$
+Guest_B click ^start my video$
+Serve-G2 click ^unmute my microphone$
+Serve-G2 click ^mute my microphone$
+Serve-G2 click ^unmute my microphone$
+Serve-G2 click ^mute my microphone$
+Serve-G2 click ^unmute my microphone$
+Guest_B shot
+Serve-G2 shot
+Guest_B shot
+Serve-G2 shot
+Guest_B shot
+Serve-G2 shot
+Guest_B shot
+Serve-G2 shot
+Guest_B shot
+Serve-G2 shot
+Guest_B shot
+Serve-G2 shot
+Serve-G2 click ^mute my microphone$
+* leave
+quit

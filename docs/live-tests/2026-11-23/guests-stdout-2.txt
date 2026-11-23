@@ -1,0 +1,100 @@
+{"at":1795438853761,"iso":"2026-11-23T13:00:53.761Z","guest":"Serve-G1","action":"join_attempt","attempt":1,"outcome":"joined"}
+{"at":1795438864397,"iso":"2026-11-23T13:01:04.397Z","guest":"Guest_A","action":"join_attempt","attempt":1,"outcome":"timeout"}
+{"at":1795438866511,"iso":"2026-11-23T13:01:06.511Z","guest":"Serve-G2","action":"join_attempt","attempt":1,"outcome":"joined"}
+{"at":1795438872922,"iso":"2026-11-23T13:01:12.922Z","guest":"Guest_B","action":"join_attempt","attempt":1,"outcome":"timeout"}
+{"at":1795438896321,"iso":"2026-11-23T13:01:36.321Z","guest":"Guest_A","action":"join_attempt","attempt":2,"outcome":"joined"}
+{"at":1795438904921,"iso":"2026-11-23T13:01:44.921Z","guest":"Guest_B","action":"join_attempt","attempt":2,"outcome":"joined"}
+{"at":1795438904922,"iso":"2026-11-23T13:01:44.922Z","action":"all_joined","guests":["Serve-G1","Serve-G2","Guest_A","Guest_B"]}
+{"at":1795439023032,"iso":"2026-11-23T13:03:43.032Z","guest":"Serve-G1","action":"click","phase":"before"}
+{"at":1795439023043,"iso":"2026-11-23T13:03:43.043Z","guest":"Serve-G1","action":"click","phase":"done","result":null}
+{"at":1795439023044,"iso":"2026-11-23T13:03:43.044Z","guest":"Serve-G2","action":"click","phase":"before"}
+{"at":1795439023056,"iso":"2026-11-23T13:03:43.056Z","guest":"Serve-G2","action":"click","phase":"done","result":null}
+{"at":1795439023058,"iso":"2026-11-23T13:03:43.058Z","guest":"Guest_A","action":"click","phase":"before"}
+{"at":1795439023070,"iso":"2026-11-23T13:03:43.070Z","guest":"Guest_A","action":"click","phase":"done","result":null}
+{"at":1795439023071,"iso":"2026-11-23T13:03:43.071Z","guest":"Guest_B","action":"click","phase":"before"}
+{"at":1795439023077,"iso":"2026-11-23T13:03:43.077Z","guest":"Guest_B","action":"click","phase":"done","result":null}
+{"at":1795439023078,"iso":"2026-11-23T13:03:43.078Z","guest":"Guest_A","action":"click","phase":"before"}
+{"at":1795439023142,"iso":"2026-11-23T13:03:43.142Z","guest":"Guest_A","action":"click","phase":"done","result":"React"}
+{"at":1795439023143,"iso":"2026-11-23T13:03:43.143Z","guest":"Guest_A","action":"click","phase":"before"}
+{"at":1795439023209,"iso":"2026-11-23T13:03:43.209Z","guest":"Guest_A","action":"click","phase":"done","result":"Raise Hand"}
+{"at":1795439023209,"iso":"2026-11-23T13:03:43.209Z","guest":"Guest_B","action":"click","phase":"before"}
+{"at":1795439023312,"iso":"2026-11-23T13:03:43.312Z","guest":"Guest_B","action":"click","phase":"done","result":"React"}
+{"at":1795439023314,"iso":"2026-11-23T13:03:43.314Z","guest":"Guest_B","action":"click","phase":"before"}
+{"at":1795439023387,"iso":"2026-11-23T13:03:43.387Z","guest":"Guest_B","action":"click","phase":"done","result":"Raise Hand"}
+{"at":1795439023387,"iso":"2026-11-23T13:03:43.387Z","guest":"Serve-G1","action":"click","phase":"before"}
+{"at":1795439023487,"iso":"2026-11-23T13:03:43.487Z","guest":"Serve-G1","action":"click","phase":"done","result":"React"}
+{"at":1795439023488,"iso":"2026-11-23T13:03:43.488Z","guest":"Serve-G1","action":"click","phase":"before"}
+{"at":1795439023980,"iso":"2026-11-23T13:03:43.980Z","guest":"Serve-G1","action":"click","phase":"done","result":"Raise Hand"}
+{"at":1795439034932,"iso":"2026-11-23T13:03:54.932Z","guest":"Guest_A","action":"click","phase":"before"}
+{"at":1795439035045,"iso":"2026-11-23T13:03:55.045Z","guest":"Guest_A","action":"click","phase":"done","result":"open the manage participants list pane,5 particpants"}
+{"at":1795439035047,"iso":"2026-11-23T13:03:55.047Z","guest":"Guest_A","action":"click","phase":"before"}
+{"at":1795439035083,"iso":"2026-11-23T13:03:55.083Z","guest":"Guest_A","action":"click","phase":"done","result":"More managing participants options"}
+{"at":1795439039224,"iso":"2026-11-23T13:03:59.224Z","guest":"Guest_A","action":"text","phase":"before"}
+{"at":1795439039315,"iso":"2026-11-23T13:03:59.315Z","guest":"Guest_A","action":"text","phase":"done","result":"Clear All Feedback"}
+{"at":1795439056708,"iso":"2026-11-23T13:04:16.708Z","guest":"Serve-G1","action":"click","phase":"before"}
+{"at":1795439056759,"iso":"2026-11-23T13:04:16.759Z","guest":"Serve-G1","action":"click","phase":"done","result":"React"}
+{"at":1795439056760,"iso":"2026-11-23T13:04:16.760Z","guest":"Serve-G1","action":"click","phase":"before"}
+{"at":1795439056811,"iso":"2026-11-23T13:04:16.811Z","guest":"Serve-G1","action":"click","phase":"done","result":"Raise Hand"}
+{"at":1795439061740,"iso":"2026-11-23T13:04:21.740Z","guest":"Serve-G1","action":"leave","phase":"before"}
+{"at":1795439063039,"iso":"2026-11-23T13:04:23.039Z","guest":"Serve-G1","action":"leave","phase":"done","result":"Leave Meeting"}
+{"at":1795439086894,"iso":"2026-11-23T13:04:46.894Z","guest":"Guest_B","action":"click","phase":"before"}
+{"at":1795439086939,"iso":"2026-11-23T13:04:46.939Z","guest":"Guest_B","action":"click","phase":"done","result":"React"}
+{"at":1795439086940,"iso":"2026-11-23T13:04:46.940Z","guest":"Guest_B","action":"click","phase":"before"}
+{"at":1795439086966,"iso":"2026-11-23T13:04:46.966Z","guest":"Guest_B","action":"click","phase":"done","result":"Yes"}
+{"at":1795439091146,"iso":"2026-11-23T13:04:51.146Z","guest":"Guest_B","action":"click","phase":"before"}
+{"at":1795439091159,"iso":"2026-11-23T13:04:51.159Z","guest":"Guest_B","action":"click","phase":"done","result":"React"}
+{"at":1795439091160,"iso":"2026-11-23T13:04:51.160Z","guest":"Guest_B","action":"click","phase":"before"}
+{"at":1795439091200,"iso":"2026-11-23T13:04:51.200Z","guest":"Guest_B","action":"click","phase":"done","result":"thumbs up"}
+{"at":1795439095090,"iso":"2026-11-23T13:04:55.090Z","guest":"Guest_B","action":"click","phase":"before"}
+{"at":1795439095113,"iso":"2026-11-23T13:04:55.113Z","guest":"Guest_B","action":"click","phase":"done","result":"React"}
+{"at":1795439095114,"iso":"2026-11-23T13:04:55.114Z","guest":"Guest_B","action":"click","phase":"before"}
+{"at":1795439095141,"iso":"2026-11-23T13:04:55.141Z","guest":"Guest_B","action":"click","phase":"done","result":"I'm away"}
+{"at":1795439099329,"iso":"2026-11-23T13:04:59.329Z","guest":"Guest_B","action":"click","phase":"before"}
+{"at":1795439099364,"iso":"2026-11-23T13:04:59.364Z","guest":"Guest_B","action":"click","phase":"done","result":"stop my video"}
+{"at":1795439105310,"iso":"2026-11-23T13:05:05.310Z","guest":"Guest_B","action":"click","phase":"before"}
+{"at":1795439105341,"iso":"2026-11-23T13:05:05.341Z","guest":"Guest_B","action":"click","phase":"done","result":"start my video"}
+{"at":1795439133901,"iso":"2026-11-23T13:05:33.901Z","guest":"Serve-G2","action":"click","phase":"before"}
+{"at":1795439133909,"iso":"2026-11-23T13:05:33.909Z","guest":"Serve-G2","action":"click","phase":"done","result":"unmute my microphone"}
+{"at":1795439204006,"iso":"2026-11-23T13:06:44.006Z","guest":"Serve-G2","action":"click","phase":"before"}
+{"at":1795439204016,"iso":"2026-11-23T13:06:44.016Z","guest":"Serve-G2","action":"click","phase":"done","result":"mute my microphone"}
+{"at":1795439229068,"iso":"2026-11-23T13:07:09.068Z","guest":"Serve-G2","action":"click","phase":"before"}
+{"at":1795439229077,"iso":"2026-11-23T13:07:09.077Z","guest":"Serve-G2","action":"click","phase":"done","result":"unmute my microphone"}
+{"at":1795439299013,"iso":"2026-11-23T13:08:19.013Z","guest":"Serve-G2","action":"click","phase":"before"}
+{"at":1795439299021,"iso":"2026-11-23T13:08:19.021Z","guest":"Serve-G2","action":"click","phase":"done","result":"mute my microphone"}
+{"at":1795439320403,"iso":"2026-11-23T13:08:40.403Z","guest":"Serve-G2","action":"click","phase":"before"}
+{"at":1795439320411,"iso":"2026-11-23T13:08:40.411Z","guest":"Serve-G2","action":"click","phase":"done","result":"unmute my microphone"}
+{"at":1795439320413,"iso":"2026-11-23T13:08:40.413Z","guest":"Guest_B","action":"shot","phase":"before"}
+{"at":1795439320605,"iso":"2026-11-23T13:08:40.605Z","guest":"Guest_B","action":"shot","phase":"done","result":"..\\..\\docs\\live-tests\\2026-11-23\\shot-Guest_B-1795439320414.png"}
+{"at":1795439320606,"iso":"2026-11-23T13:08:40.606Z","guest":"Serve-G2","action":"shot","phase":"before"}
+{"at":1795439320812,"iso":"2026-11-23T13:08:40.812Z","guest":"Serve-G2","action":"shot","phase":"done","result":"..\\..\\docs\\live-tests\\2026-11-23\\shot-Serve-G2-1795439320606.png"}
+{"at":1795439323433,"iso":"2026-11-23T13:08:43.433Z","guest":"Guest_B","action":"shot","phase":"before"}
+{"at":1795439323557,"iso":"2026-11-23T13:08:43.557Z","guest":"Guest_B","action":"shot","phase":"done","result":"..\\..\\docs\\live-tests\\2026-11-23\\shot-Guest_B-1795439323434.png"}
+{"at":1795439323557,"iso":"2026-11-23T13:08:43.557Z","guest":"Serve-G2","action":"shot","phase":"before"}
+{"at":1795439323689,"iso":"2026-11-23T13:08:43.689Z","guest":"Serve-G2","action":"shot","phase":"done","result":"..\\..\\docs\\live-tests\\2026-11-23\\shot-Serve-G2-1795439323557.png"}
+{"at":1795439326536,"iso":"2026-11-23T13:08:46.536Z","guest":"Guest_B","action":"shot","phase":"before"}
+{"at":1795439326661,"iso":"2026-11-23T13:08:46.661Z","guest":"Guest_B","action":"shot","phase":"done","result":"..\\..\\docs\\live-tests\\2026-11-23\\shot-Guest_B-1795439326537.png"}
+{"at":1795439326662,"iso":"2026-11-23T13:08:46.662Z","guest":"Serve-G2","action":"shot","phase":"before"}
+{"at":1795439326763,"iso":"2026-11-23T13:08:46.763Z","guest":"Serve-G2","action":"shot","phase":"done","result":"..\\..\\docs\\live-tests\\2026-11-23\\shot-Serve-G2-1795439326662.png"}
+{"at":1795439329619,"iso":"2026-11-23T13:08:49.619Z","guest":"Guest_B","action":"shot","phase":"before"}
+{"at":1795439329770,"iso":"2026-11-23T13:08:49.770Z","guest":"Guest_B","action":"shot","phase":"done","result":"..\\..\\docs\\live-tests\\2026-11-23\\shot-Guest_B-1795439329621.png"}
+{"at":1795439329771,"iso":"2026-11-23T13:08:49.771Z","guest":"Serve-G2","action":"shot","phase":"before"}
+{"at":1795439329911,"iso":"2026-11-23T13:08:49.911Z","guest":"Serve-G2","action":"shot","phase":"done","result":"..\\..\\docs\\live-tests\\2026-11-23\\shot-Serve-G2-1795439329771.png"}
+{"at":1795439332754,"iso":"2026-11-23T13:08:52.754Z","guest":"Guest_B","action":"shot","phase":"before"}
+{"at":1795439332868,"iso":"2026-11-23T13:08:52.868Z","guest":"Guest_B","action":"shot","phase":"done","result":"..\\..\\docs\\live-tests\\2026-11-23\\shot-Guest_B-1795439332754.png"}
+{"at":1795439332868,"iso":"2026-11-23T13:08:52.868Z","guest":"Serve-G2","action":"shot","phase":"before"}
+{"at":1795439332995,"iso":"2026-11-23T13:08:52.995Z","guest":"Serve-G2","action":"shot","phase":"done","result":"..\\..\\docs\\live-tests\\2026-11-23\\shot-Serve-G2-1795439332869.png"}
+{"at":1795439335849,"iso":"2026-11-23T13:08:55.849Z","guest":"Guest_B","action":"shot","phase":"before"}
+{"at":1795439335934,"iso":"2026-11-23T13:08:55.934Z","guest":"Guest_B","action":"shot","phase":"done","result":"..\\..\\docs\\live-tests\\2026-11-23\\shot-Guest_B-1795439335849.png"}
+{"at":1795439335935,"iso":"2026-11-23T13:08:55.935Z","guest":"Serve-G2","action":"shot","phase":"before"}
+{"at":1795439336036,"iso":"2026-11-23T13:08:56.036Z","guest":"Serve-G2","action":"shot","phase":"done","result":"..\\..\\docs\\live-tests\\2026-11-23\\shot-Serve-G2-1795439335935.png"}
+{"at":1795439349038,"iso":"2026-11-23T13:09:09.038Z","guest":"Serve-G2","action":"click","phase":"before"}
+{"at":1795439349049,"iso":"2026-11-23T13:09:09.049Z","guest":"Serve-G2","action":"click","phase":"done","result":"mute my microphone"}
+{"at":1795439370336,"iso":"2026-11-23T13:09:30.336Z","guest":"Serve-G1","action":"leave","phase":"before"}
+{"at":1795439371550,"iso":"2026-11-23T13:09:31.550Z","guest":"Serve-G1","action":"leave","phase":"done","result":null}
+{"at":1795439371550,"iso":"2026-11-23T13:09:31.550Z","guest":"Serve-G2","action":"leave","phase":"before"}
+{"at":1795439372816,"iso":"2026-11-23T13:09:32.816Z","guest":"Serve-G2","action":"leave","phase":"done","result":"Leave Meeting"}
+{"at":1795439372817,"iso":"2026-11-23T13:09:32.817Z","guest":"Guest_A","action":"leave","phase":"before"}
+{"at":1795439374113,"iso":"2026-11-23T13:09:34.113Z","guest":"Guest_A","action":"leave","phase":"done","result":"Leave Meeting"}
+{"at":1795439374115,"iso":"2026-11-23T13:09:34.115Z","guest":"Guest_B","action":"leave","phase":"before"}
+{"at":1795439375386,"iso":"2026-11-23T13:09:35.386Z","guest":"Guest_B","action":"leave","phase":"done","result":"Leave Meeting"}
+{"at":1795439376646,"iso":"2026-11-23T13:09:36.646Z","action":"quit"}
