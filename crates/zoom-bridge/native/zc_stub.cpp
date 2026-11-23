@@ -38,4 +38,7 @@ ZC_STUB(zc_expel_user, (int32_t, uint32_t))
 ZC_STUB(zc_admit_all, (int32_t))
 ZC_STUB(zc_enable_waiting_room, (int32_t, int32_t))
 ZC_STUB(zc_is_waiting_room_on, (int32_t))
+ZC_STUB(zc_get_meeting_view_type, (int32_t))
+ZC_STUB(zc_switch_meeting_view, (int32_t, int32_t))
+ZC_STUB(zc_wall_view_page, (int32_t, int32_t))
 #undef ZC_STUB

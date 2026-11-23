@@ -17,6 +17,7 @@
 #include "ToolSuiteParticipantsInterface.h"
 #include "ToolSuiteWaitingRoomInterface.h"
 #include "ToolSuiteChatInterface.h"
+#include "ToolSuiteUIActionInterface.h"
 
 using namespace ZMToolSuiteProxy;
 
@@ -490,5 +491,27 @@ extern "C" int32_t zc_is_waiting_room_on(int32_t instance) {
     if (!g_inited) return ZC_ERR_WRONG_STATE;
     auto *wt = meeting::GetWaitingRoomToolkit(Inst(instance));
     return wt && wt->IsWaitingRoomFeatureOn([](const BoolValueResult &r) { try { Async("IsWaitingRoomFeatureOn", r, r.bValue ? 1 : 0); } catch (...) {} }) ? ZC_OK : ZC_ERR_SDK_REJECTED;
+    ZC_GUARD_END
+}
+extern "C" int32_t zc_get_meeting_view_type(int32_t instance) {
+    ZC_GUARD_BEGIN
+    if (!g_inited) return ZC_ERR_WRONG_STATE;
+    auto *toolkit = meeting::GetUIActionToolkit();
+    return toolkit && toolkit->GetMeetingViewType([](const GetMeetingViewTypeResult &r) { try { Async("GetMeetingViewType", r, (int64_t)r.type); } catch (...) {} }) ? ZC_OK : ZC_ERR_SDK_REJECTED;
+    ZC_GUARD_END
+}
+extern "C" int32_t zc_switch_meeting_view(int32_t instance, int32_t view_type) {
+    ZC_GUARD_BEGIN
+    if (!g_inited) return ZC_ERR_WRONG_STATE;
+    if (view_type < IPCMeetingViewType_ActiveSpeaker || view_type > IPCMeetingViewType_Other) return ZC_ERR_INVALID_ARG;
+    auto *toolkit = meeting::GetUIActionToolkit();
+    return toolkit && toolkit->Switch2MeetingView((IPCMeetingViewType)view_type, [](const BaseResult &r) { try { Async("Switch2MeetingView", r); } catch (...) {} }) ? ZC_OK : ZC_ERR_SDK_REJECTED;
+    ZC_GUARD_END
+}
+extern "C" int32_t zc_wall_view_page(int32_t instance, int32_t next) {
+    ZC_GUARD_BEGIN
+    if (!g_inited) return ZC_ERR_WRONG_STATE;
+    auto *toolkit = meeting::GetUIActionToolkit();
+    return toolkit && toolkit->Switch2WallViewPrevOrNextPage(next != 0, [](const BaseResult &r) { try { Async("Switch2WallViewPrevOrNextPage", r); } catch (...) {} }) ? ZC_OK : ZC_ERR_SDK_REJECTED;
     ZC_GUARD_END
 }

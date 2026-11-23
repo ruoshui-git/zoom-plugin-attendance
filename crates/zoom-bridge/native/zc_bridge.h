@@ -22,7 +22,7 @@
 extern "C" {
 #endif
 
-#define ZC_ABI_VERSION 2u
+#define ZC_ABI_VERSION 3u
 
 /* Return codes of zc_* functions. */
 enum {
@@ -150,6 +150,10 @@ int32_t zc_expel_user(int32_t instance, uint32_t user_id);
 int32_t zc_admit_all(int32_t instance);
 int32_t zc_enable_waiting_room(int32_t instance, int32_t enable);
 int32_t zc_is_waiting_room_on(int32_t instance);
+/* UI actions (async results -> ZC_EVENT_ASYNC_RESULT). */
+int32_t zc_get_meeting_view_type(int32_t instance);
+int32_t zc_switch_meeting_view(int32_t instance, int32_t view_type);
+int32_t zc_wall_view_page(int32_t instance, int32_t next);
 
 /* Self-tests: exercise UTF-8 <-> UTF-16 conversion and the callback path
  * without the SDK. Used by the Rust test-suite. */
