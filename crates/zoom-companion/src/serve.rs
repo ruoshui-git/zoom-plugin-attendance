@@ -2868,7 +2868,17 @@ async fn api_meetings(State(a): State<App>, headers: HeaderMap) -> Response {
         return r;
     }
     match a.store.meeting_summaries() {
-        Ok(rows) => Json(rows).into_response(),
+        Ok(mut rows) => {
+            for row in &mut rows {
+                let id = row["instanceId"].as_str().unwrap_or_default();
+                if let Ok((_, state)) = a.store.get_state(id) {
+                    if let Some(name) = state.get("customName").and_then(Value::as_str) {
+                        row["customName"] = json!(name);
+                    }
+                }
+            }
+            Json(rows).into_response()
+        }
         Err(e) => api_error(e),
     }
 }
@@ -2881,7 +2891,14 @@ async fn api_meeting(
         return r;
     }
     match a.store.meeting(&id) {
-        Ok(Some(v)) => Json(v).into_response(),
+        Ok(Some(mut v)) => {
+            if let Ok((_, state)) = a.store.get_state(&id) {
+                if let Some(name) = state.get("customName").and_then(Value::as_str) {
+                    v["customName"] = json!(name);
+                }
+            }
+            Json(v).into_response()
+        }
         Ok(None) => StatusCode::NOT_FOUND.into_response(),
         Err(e) => api_error(e),
     }
