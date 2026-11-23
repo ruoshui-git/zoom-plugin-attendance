@@ -17,7 +17,9 @@ export async function loadWindowState(): Promise<WindowState> {
       throw new Error(`${response.status}`);
     }
     const state = (await response.json()) as WindowState;
-    windowState.set(state?.available ? state : initial);
+    const next = state?.available ? state : initial;
+    windowState.set(next);
+    return next;
   } catch {
     windowState.set(initial);
   }
