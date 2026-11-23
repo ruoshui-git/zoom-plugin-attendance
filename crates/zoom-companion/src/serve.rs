@@ -4205,7 +4205,7 @@ fn seed_fake_meeting(a: &App) {
             waiting_room: false,
             audio_muted: false,
             video_on: true,
-            audio_type: 0,
+            audio_type: 1,
             raised_hand: false,
             talking: false,
             spotlighted: false,
@@ -4218,12 +4218,29 @@ fn seed_fake_meeting(a: &App) {
             waiting_room: false,
             audio_muted: true,
             video_on: false,
-            audio_type: 0,
+            audio_type: 1,
             raised_hand: false,
             talking: false,
             spotlighted: false,
         },
     ];
+    // Dev/screenshot aid: ZC_FAKE_USERS=N seeds N more varied participants (camera, mic, hands, phone).
+    let extra = std::env::var("ZC_FAKE_USERS").ok().and_then(|v| v.parse::<u32>().ok()).unwrap_or(0).min(500);
+    for k in 0..extra {
+        tracker.users.push(User {
+            user_id: 200 + k,
+            name: format!("Guest {:03}", k + 1),
+            host: false,
+            myself: false,
+            waiting_room: false,
+            audio_muted: k % 4 != 0,
+            video_on: k % 3 != 0,
+            audio_type: if k % 11 == 5 { 2 } else if k % 13 == 7 { 0 } else { 1 },
+            raised_hand: k % 9 == 2,
+            talking: false,
+            spotlighted: false,
+        });
+    }
     let events = tracker.start_with_snapshot(
         "fake-47812".into(),
         "Fake attendance demo".into(),
