@@ -232,5 +232,7 @@ Tick items off here as they land.
   type markers (no audio / phone) per person; also rebuilt from logs recorded before this change.
 - Nonverbal feedback (Yes/No/Faster/Slower/Away) and emoji reactions per person, with a Yes
   check-in tally.
+- Experimental attendance proof screenshots: switches your own Zoom view to gallery, captures each page
+  locally (Windows Graphics Capture) with the participant list and camera states, then restores the view.
 - Planned (P3): auto-admit roster matches from the waiting room (host), unknown-arrival
   alerts, autostart, notifications.

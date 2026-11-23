@@ -829,6 +829,8 @@ pub fn run(
             .route("/api/config/example-data", post(api_example_data_commit))
             .route("/api/meetings", get(api_meetings))
             .route("/api/live/new-record", post(api_new_record))
+            .route("/api/live/proof", post(api_live_proof))
+            .route("/api/meetings/:id/proof/:file", get(api_proof_file))
             .route("/api/zoom", get(api_zoom_status))
             .route("/api/proof/windows", get(api_proof_windows))
             .route("/api/window", get(api_window_get).post(api_window_post))
@@ -3943,7 +3945,11 @@ async fn api_delete_records(
     let mut deleted = 0;
     for id in ids.iter().filter_map(Value::as_str) {
         match a.store.delete_meeting(id) {
-            Ok(true) => deleted += 1,
+            Ok(true) => {
+                deleted += 1;
+                // Proof screenshots belong to the record (R-D.5).
+                let _ = fs::remove_dir_all(proof_dir(&a, id));
+            }
             Ok(false) => {}
             Err(e) => return api_error(e),
         }
@@ -4342,6 +4348,178 @@ impl JsonStatus for Json<Value> {
         (status, self).into_response()
     }
 }
+// ---- R-D attendance proof screenshots (experimental; the owner tests live) ----
+
+/// Folder for one record's proof images: <data dir>/captures/<sanitised instance id>.
+fn proof_dir(a: &App, instance_id: &str) -> PathBuf {
+    let base = a.log_dir.parent().map(std::path::Path::to_path_buf).unwrap_or_else(|| a.log_dir.clone());
+    let clean: String = instance_id.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' }).collect();
+    base.join("captures").join(clean)
+}
+
+/// Only names written by the capture run (`page-NN-<ms>.png`) can be served.
+fn valid_proof_file(name: &str) -> bool {
+    let Some(rest) = name.strip_prefix("page-").and_then(|r| r.strip_suffix(".png")) else { return false };
+    let mut parts = rest.splitn(2, '-');
+    let (Some(index), Some(at)) = (parts.next(), parts.next()) else { return false };
+    index.len() >= 2 && index.bytes().all(|b| b.is_ascii_digit()) && !at.is_empty() && at.bytes().all(|b| b.is_ascii_digit())
+}
+
+/// Appends one capture to the record state, keeping every other field.
+fn append_proof_capture(state: &Value, capture: Value) -> Value {
+    let mut next = if state.is_object() { state.clone() } else { json!({}) };
+    let mut list = next["proofCaptures"].as_array().cloned().unwrap_or_default();
+    list.push(capture);
+    next["proofCaptures"] = Value::Array(list);
+    next
+}
+
+/// Error codes the UI maps to messages (apps/desktop-ui/src/lib/proof.ts).
+fn proof_error(message: &str) -> (&'static str, String) {
+    let (code, detail) = message.split_once(": ").unwrap_or((message, ""));
+    let code = match code {
+        "not_connected" => "not_connected",
+        "window_not_found" => "window_not_found",
+        "window_minimized" => "window_minimized",
+        "capture_unsupported" => "capture_unsupported",
+        "view_switch_failed" => "view_switch_failed",
+        _ => "capture_failed",
+    };
+    (code, if detail.is_empty() { message.to_owned() } else { detail.to_owned() })
+}
+
+struct LiveProofDeps<'a> {
+    app: &'a App,
+    dir: PathBuf,
+}
+impl LiveProofDeps<'_> {
+    /// Issues one async SDK call and waits for its result (`code 1` = success).
+    fn call(&self, op: &str, start: impl FnOnce(&Session) -> Result<(), zoom_bridge::BridgeError>) -> Result<i64, String> {
+        {
+            let guard = self.app.session.lock().unwrap();
+            let Some(session) = guard.as_ref() else { return Err("not_connected: Zoom is not connected".into()) };
+            start(session).map_err(|e| format!("view_switch_failed: {op}: {e}"))?;
+        }
+        match self.app.proof.wait_result(op, Duration::from_secs(4)) {
+            Some((1, value)) => Ok(value),
+            Some((code, _)) => Err(format!("view_switch_failed: {op} returned {code}")),
+            None => Err(format!("view_switch_failed: no answer to {op}")),
+        }
+    }
+}
+impl crate::proof_run::ProofDeps for LiveProofDeps<'_> {
+    fn view_type(&mut self) -> Result<i32, String> {
+        match self.call("GetMeetingViewType", |s| s.meeting_view_type(MeetingInstance::Default)) {
+            Ok(v) => Ok(v as i32),
+            // Fall back to the last view reported by OnMeetingViewTypeChange.
+            Err(e) => match self.app.proof.view.load(Ordering::SeqCst) { v if v >= 0 => Ok(v), _ => Err(e) },
+        }
+    }
+    fn switch_view(&mut self, v: i32) -> Result<(), String> {
+        self.call("Switch2MeetingView", |s| s.switch_meeting_view(MeetingInstance::Default, zoom_bridge::MeetingViewType::from_i32(v))).map(|_| ())
+    }
+    fn next_page(&mut self) -> Result<(), String> {
+        // At the last page Zoom may refuse; the repeated page then ends the run.
+        match self.call("Switch2WallViewPrevOrNextPage", |s| s.wall_view_page(MeetingInstance::Default, true)) {
+            Ok(_) => Ok(()),
+            Err(e) if e.starts_with("not_connected") => Err(e),
+            Err(_) => Ok(()),
+        }
+    }
+    fn capture(&mut self) -> Result<crate::proof::Frame, String> {
+        use crate::capture::CaptureError;
+        crate::capture::capture_meeting_window().map(|(frame, _)| frame).map_err(|e| match e {
+            CaptureError::NotFound => "window_not_found: no Zoom meeting window".into(),
+            CaptureError::Minimized => "window_minimized: the Zoom meeting window is minimized".into(),
+            CaptureError::Unsupported => "capture_unsupported: Windows Graphics Capture is not available".into(),
+            CaptureError::Timeout => "capture_failed: no frame within 2 s".into(),
+            CaptureError::Failed(detail) => format!("capture_failed: {detail}"),
+        })
+    }
+    fn sleep(&mut self, ms: u64) { std::thread::sleep(Duration::from_millis(ms)); }
+    fn participants(&self) -> Vec<(u32, String, bool)> {
+        self.app.tracker.lock().unwrap().users.iter().filter(|u| !u.waiting_room).map(|u| (u.user_id, u.name.clone(), u.video_on)).collect()
+    }
+    fn save_png(&mut self, file: &str, png: &[u8]) -> Result<(), String> {
+        fs::create_dir_all(&self.dir).and_then(|_| fs::write(self.dir.join(file), png)).map_err(|e| format!("capture_failed: saving {file}: {e}"))
+    }
+}
+
+/// Clears the busy flag even if the capture thread panics.
+struct ProofBusy<'a>(&'a crate::proof_run::ProofShared);
+impl Drop for ProofBusy<'_> {
+    fn drop(&mut self) { self.0.busy.store(false, Ordering::SeqCst); }
+}
+
+async fn api_live_proof(State(a): State<App>, headers: HeaderMap) -> Response {
+    if let Some(r) = api_origin(&a, &headers) {
+        return r;
+    }
+    let Some(instance_id) = a.tracker.lock().unwrap().meeting.as_ref().map(|m| m.instance_id.clone()) else {
+        return (StatusCode::CONFLICT, Json(json!({"error":"no_active_meeting"}))).into_response();
+    };
+    if a.proof.busy.swap(true, Ordering::SeqCst) {
+        return (StatusCode::CONFLICT, Json(json!({"error":"busy"}))).into_response();
+    }
+    let app = a.clone();
+    let id = instance_id.clone();
+    let run = tokio::task::spawn_blocking(move || {
+        let _busy = ProofBusy(&app.proof);
+        app.proof.clear_results();
+        let started = now();
+        let mut deps = LiveProofDeps { app: &app, dir: proof_dir(&app, &id) };
+        let result = crate::proof_run::run_capture(&mut deps, &id, now);
+        (started, result)
+    })
+    .await;
+    let (started, result) = match run {
+        Ok(v) => v,
+        Err(e) => return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error":"capture_failed","detail":e.to_string()}))).into_response(),
+    };
+    let capture_id = format!("proof-{started}");
+    let (record, response) = match result {
+        Ok(capture) => {
+            let pages: Vec<Value> = capture.pages.iter().map(|p| json!({
+                "index": p.index, "file": p.file, "at": p.at, "waitedMs": p.waited_ms, "darkTiles": p.dark_tiles,
+                "timedOut": p.timed_out, "cameraOnCount": p.camera_on_count,
+                "participants": p.participants.iter().map(|(id, name, video)| json!({"userId": id, "name": name, "videoOn": video})).collect::<Vec<_>>(),
+            })).collect();
+            let n = pages.len();
+            (json!({"id": capture_id, "startedAt": started, "finishedAt": now(), "originalView": capture.original_view, "pages": pages}),
+             Json(json!({"captureId": capture_id, "pages": n})).into_response())
+        }
+        Err(message) => {
+            let (code, detail) = proof_error(&message);
+            log::warn!("proof capture failed: {message}");
+            (json!({"id": capture_id, "startedAt": started, "finishedAt": now(), "error": code, "detail": detail, "pages": []}),
+             (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": code, "detail": detail}))).into_response())
+        }
+    };
+    // Keep a record of the attempt (pages or error) in the record state; retry once on a stale revision.
+    for _ in 0..2 {
+        let Ok((revision, state)) = a.store.get_state(&instance_id) else { break };
+        match a.store.put_state(&instance_id, revision, &append_proof_capture(&state, record.clone()), now()) {
+            Ok(Ok(_)) => { emit_record_updated(&a, &instance_id); break; }
+            Ok(Err(_)) => continue,
+            Err(e) => { log::error!("save proof capture: {e}"); break; }
+        }
+    }
+    response
+}
+
+async fn api_proof_file(State(a): State<App>, headers: HeaderMap, axum::extract::Path((id, file)): axum::extract::Path<(String, String)>) -> Response {
+    if let Some(r) = api_origin(&a, &headers) {
+        return r;
+    }
+    if !valid_proof_file(&file) || !matches!(a.store.meeting(&id), Ok(Some(_))) {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    match fs::read(proof_dir(&a, &id).join(&file)) {
+        Ok(bytes) => ([(axum::http::header::CONTENT_TYPE, "image/png"), (axum::http::header::CACHE_CONTROL, "private, max-age=31536000, immutable")], bytes).into_response(),
+        Err(_) => StatusCode::NOT_FOUND.into_response(),
+    }
+}
+
 fn emit_record_updated(a: &App, id: &str) {
     let id = id.to_owned();
     let generation = {
@@ -5236,3 +5414,113 @@ async fn zoom_endpoints_report_status_and_reject_foreign_origins() {
     assert!(!app.link.sign_out.load(Ordering::SeqCst));
 }
 
+#[cfg(test)]
+mod proof_route_tests {
+    use super::*;
+    use http_body_util::BodyExt;
+    use tower::ServiceExt;
+
+    fn test_app(tag: &str) -> (App, PathBuf) {
+        let root = std::env::temp_dir().join(format!("zc-proof-{tag}-{}", now()));
+        let log_dir = root.join("meetings");
+        fs::create_dir_all(&log_dir).unwrap();
+        let store = Arc::new(Store::open(root.join("db.sqlite")).unwrap());
+        store.upsert_meeting(&json!({"instanceId":"pz-1-100","meetingNumber":"1","topic":"T","startedAt":100,"isHost":false}), Some((200, "ended".into())), 1).unwrap();
+        let app = App {
+            proof: Arc::new(crate::proof_run::ProofShared::default()),
+            tx: broadcast::channel(8).0,
+            tracker: Arc::new(Mutex::new(Tracker::default())),
+            session: Arc::new(Mutex::new(None)),
+            shutdown: Arc::new(AtomicBool::new(false)),
+            port: 47812,
+            allowed: vec![],
+            ui: None,
+            log_dir,
+            store,
+            provider: Arc::new(StubRecordProvider),
+            record_updates: Arc::new(Mutex::new(Default::default())),
+            link: Default::default(),
+        };
+        (app, root)
+    }
+    fn router(app: App) -> Router {
+        Router::new()
+            .route("/api/live/proof", post(api_live_proof))
+            .route("/api/meetings/:id/proof/:file", get(api_proof_file))
+            .route("/api/records/delete", post(api_delete_records))
+            .with_state(app)
+    }
+    fn get_req(uri: &str) -> axum::http::Request<axum::body::Body> {
+        axum::http::Request::builder().uri(uri).body(axum::body::Body::empty()).unwrap()
+    }
+    fn post_req(uri: &str, body: Value) -> axum::http::Request<axum::body::Body> {
+        axum::http::Request::builder().method("POST").uri(uri).header("content-type", "application/json").body(axum::body::Body::from(body.to_string())).unwrap()
+    }
+
+    #[test]
+    fn proof_file_names_are_strict() {
+        assert!(valid_proof_file("page-01-1795440000000.png"));
+        assert!(valid_proof_file("page-12-5.png"));
+        for bad in ["page-1-5.png", "page-01-.png", "page-01-5.jpg", "../page-01-5.png", "page-01-5.png/..", "page-0a-5.png", "x.png", "page-01-5-6.png"] {
+            assert!(!valid_proof_file(bad), "{bad}");
+        }
+    }
+    #[test]
+    fn appending_a_capture_keeps_other_state() {
+        let state = json!({"mode":"roster","customName":"N","proofCaptures":[{"id":"a"}]});
+        let next = append_proof_capture(&state, json!({"id":"b"}));
+        assert_eq!(next["mode"], "roster");
+        assert_eq!(next["customName"], "N");
+        assert_eq!(next["proofCaptures"].as_array().unwrap().len(), 2);
+        assert_eq!(append_proof_capture(&Value::Null, json!({"id":"c"}))["proofCaptures"][0]["id"], "c");
+    }
+    #[test]
+    fn capture_errors_map_to_ui_codes() {
+        assert_eq!(proof_error("window_minimized: the Zoom meeting window is minimized").0, "window_minimized");
+        assert_eq!(proof_error("view_switch_failed: no answer").0, "view_switch_failed");
+        assert_eq!(proof_error("something odd").0, "capture_failed");
+    }
+    #[tokio::test]
+    async fn proof_file_route_serves_pngs_only() {
+        let (app, root) = test_app("file");
+        let dir = proof_dir(&app, "pz-1-100");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("page-01-123.png"), b"\x89PNG fake").unwrap();
+        fs::write(root.join("secret.txt"), b"no").unwrap();
+        let api = router(app);
+        let ok = api.clone().oneshot(get_req("/api/meetings/pz-1-100/proof/page-01-123.png")).await.unwrap();
+        assert_eq!(ok.status(), StatusCode::OK);
+        assert_eq!(ok.headers()["content-type"], "image/png");
+        assert_eq!(&ok.into_body().collect().await.unwrap().to_bytes()[..], b"\x89PNG fake");
+        for uri in ["/api/meetings/pz-1-100/proof/..%2F..%2Fsecret.txt", "/api/meetings/pz-1-100/proof/secret.txt", "/api/meetings/pz-1-100/proof/page-02-123.png", "/api/meetings/unknown/proof/page-01-123.png"] {
+            assert_eq!(api.clone().oneshot(get_req(uri)).await.unwrap().status(), StatusCode::NOT_FOUND, "{uri}");
+        }
+        let _ = fs::remove_dir_all(root);
+    }
+    #[tokio::test]
+    async fn deleting_a_record_removes_its_proof_images() {
+        let (app, root) = test_app("delete");
+        let dir = proof_dir(&app, "pz-1-100");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("page-01-1.png"), b"x").unwrap();
+        let res = router(app).oneshot(post_req("/api/records/delete", json!({"instanceIds":["pz-1-100"]}))).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK);
+        assert!(!dir.exists());
+        let _ = fs::remove_dir_all(root);
+    }
+    #[tokio::test]
+    async fn proof_capture_needs_a_meeting_and_runs_one_at_a_time() {
+        let (app, root) = test_app("busy");
+        let api = router(app.clone());
+        let res = api.clone().oneshot(post_req("/api/live/proof", json!({}))).await.unwrap();
+        assert_eq!(res.status(), StatusCode::CONFLICT);
+        let body: Value = serde_json::from_slice(&res.into_body().collect().await.unwrap().to_bytes()).unwrap();
+        assert_eq!(body["error"], "no_active_meeting");
+        app.tracker.lock().unwrap().start("1".into(), "T".into(), 1, 3, None);
+        app.proof.busy.store(true, Ordering::SeqCst);
+        let res = api.oneshot(post_req("/api/live/proof", json!({}))).await.unwrap();
+        let body: Value = serde_json::from_slice(&res.into_body().collect().await.unwrap().to_bytes()).unwrap();
+        assert_eq!(body["error"], "busy");
+        let _ = fs::remove_dir_all(root);
+    }
+}

@@ -69,6 +69,8 @@ impl ProofShared {
             if wait.timed_out() && !entries.iter().any(|(name, _, _)| name == op) { return None; }
         }
     }
+    /// Drops answers left over from an earlier run.
+    pub(crate) fn clear_results(&self) { self.results.lock().unwrap().clear(); }
     pub(crate) fn observe_view(&self, value: i32) { self.view.store(value, Ordering::SeqCst); }
 }
 #[cfg(test)] mod tests {
