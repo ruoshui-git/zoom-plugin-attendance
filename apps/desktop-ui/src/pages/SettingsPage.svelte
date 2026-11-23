@@ -67,6 +67,14 @@
   import { confirmDialog } from "../lib/ui";
   import { toast } from "../lib/toast";
   import { getScrollDelta } from "../lib/ui-scale-scroll";
+  import { busyKeys, runBusy } from "../lib/busy-config";
+  $: backupBusy = $busyKeys.has("settings-backup");
+  $: exampleBusy = $busyKeys.has("settings-example");
+  $: restoreBusy = $busyKeys.has("settings-restore");
+  $: clearBusy = $busyKeys.has("settings-clear");
+  $: zoomBusy = $busyKeys.has("settings-zoom");
+  $: settingsBusy = $busyKeys.has("settings-save");
+  async function saveSettingsBusy(){ await runBusy("settings-save", saveSettings); }
 
   let fileInput: HTMLInputElement;
   let restorePreview: any = null;
@@ -129,11 +137,15 @@
   async function commitRestore(){
     if(!restorePreview)return;
     if(!await confirmDialog({title:t('恢复完整备份','Restore Full Backup'),message:t('这将用备份完整替换当前本地数据，包括考勤记录、花名册、名称匹配、考勤配置和设置。此操作无法撤销。','This fully replaces current local data with the backup, including records, roster, name matching, profiles, and settings. This cannot be undone.'),destructive:true}))return;
-    const r=await fetch('/api/backup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(restorePreview)});const d=await r.json().catch(()=>({}));
+    await runBusy("settings-restore", async () => { const r=await fetch('/api/backup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(restorePreview)});const d=await r.json().catch(()=>({}));
     if(r.ok){restorePreview=null;$meeting=null;clearRecordView();await Promise.all([loadConfig(),refresh()]);toast.success(t(`完整备份已恢复。考勤记录 ${d.records} 条，花名册 ${d.roster} 条，名称匹配 ${d.aliases} 条，考勤配置 ${d.profiles} 条。`,`Backup restored. Records: ${d.records}, roster: ${d.roster}, matching: ${d.aliases}, profiles: ${d.profiles}.`))}
-    else toast.error(r.status===409?t('会议端当前仍在记录考勤，请结束后再恢复备份。','Meeting panel is still capturing attendance. End the attendance record before restoring a full backup.'):d.message||d.error||'Restore failed');
+    else toast.error(r.status===409?t('会议端当前仍在记录考勤，请结束后再恢复备份。','Meeting panel is still capturing attendance. End the attendance record before restoring a full backup.'):d.message||d.error||'Restore failed'); });
   }
-  async function clearLocalRecords(){if(!await confirmDialog({title:t('清空本地数据','Clear Local Data'),message:t('确定要清空当前设备上的所有本地数据吗？这会删除考勤记录、花名册、名称匹配、考勤配置和同步状态，并恢复为全新空白状态。此操作无法撤销。','Are you sure you want to clear all local data on this device? This deletes attendance records, roster, Zoom name matching, attendance profiles, and sync state, then resets the app to a blank slate. This cannot be undone.'),destructive:true}))return;const r=await fetch('/api/local-data',{method:'DELETE'});const d=await r.json().catch(()=>({}));if(r.ok){$meeting=null;clearRecordView();await Promise.all([loadConfig(),refresh()]);toast.success(t(`本地数据已清空。考勤记录 ${d.records} 条，花名册 ${d.roster} 条，名称匹配 ${d.aliases} 条，考勤配置 ${d.profiles} 条已重置。`,`Local data cleared. Reset ${d.records} attendance records, ${d.roster} roster entries, ${d.aliases} matching rows, and ${d.profiles} attendance profiles.`))}else toast.error(r.status===409?t('会议端当前仍在记录考勤，请结束后再清空本地数据。','Meeting panel is still capturing attendance. End the attendance record before clearing local data.'):d.message||d.error||'Clear failed')}
+  async function clearLocalRecords(){if(!await confirmDialog({title:t('清空本地数据','Clear Local Data'),message:t('确定要清空当前设备上的所有本地数据吗？这会删除考勤记录、花名册、名称匹配、考勤配置和同步状态，并恢复为全新空白状态。此操作无法撤销。','Are you sure you want to clear all local data on this device? This deletes attendance records, roster, Zoom name matching, attendance profiles, and sync state, then resets the app to a blank slate. This cannot be undone.'),destructive:true}))return;await runBusy("settings-clear", async()=>{const r=await fetch('/api/local-data',{method:'DELETE'});const d=await r.json().catch(()=>({}));if(r.ok){$meeting=null;clearRecordView();await Promise.all([loadConfig(),refresh()]);toast.success(t(`本地数据已清空。考勤记录 ${d.records} 条，花名册 ${d.roster} 条，名称匹配 ${d.aliases} 条，考勤配置 ${d.profiles} 条已重置。`,`Local data cleared. Reset ${d.records} attendance records, ${d.roster} roster entries, ${d.aliases} matching rows, and ${d.profiles} attendance profiles.`))}else toast.error(r.status===409?t('会议端当前仍在记录考勤，请结束后再清空本地数据。','Meeting panel is still capturing attendance. End the attendance record before clearing local data.'):d.message||d.error||'Clear failed')})}
+  async function exportBackup(){ await runBusy("settings-backup", downloadBackup); }
+  async function loadExamples(){ await runBusy("settings-example", async()=>{try{await loadExampleDataQuiet()}catch(e:any){toast.error(`${t('写入示例数据失败：','Failed to add example data: ')}${e.message}`)}}); }
+  async function signOut(){ await runBusy("settings-zoom", async()=>{if(await confirmDialog({title:t('退出 Zoom 登录','Sign out of Zoom'),message:t('退出登录并移除出勤助手桌面版的 Zoom 授权？考勤记录会保留在这台电脑上。','Sign out and remove AttendFlow Desktop from your Zoom account? Attendance records stay on this computer.'),destructive:true})){const r=await fetch('/api/zoom/sign-out',{method:'POST'});const d=await r.json().catch(()=>({}));if(r.ok)zoom.set(await get('/api/zoom').catch(()=>null));(r.ok?toast.success:toast.error)(r.ok?(d.revoked?t('已退出 Zoom 并移除授权','Signed out and access removed'):t('已退出 Zoom','Signed out of Zoom')):t('退出失败','Sign-out failed'))}}); }
+  async function signIn(){ await runBusy("settings-zoom", zoomSignIn); }
 </script>
 
 <section class="panel settings">
@@ -159,7 +171,7 @@
   </div>
   <label>
     {t("导出语言", "Export language")}
-    <select bind:value={$settings.exportLanguage} onchange={saveSettings}>
+    <select bind:value={$settings.exportLanguage} onchange={saveSettingsBusy} disabled={settingsBusy}>
       <option value="en">English</option><option value="zh">简体中文</option>
     </select>
   </label><div class="ui-scale-control">
@@ -167,35 +179,36 @@
     <div class="ui-scale-ends" aria-hidden="true"><span>A-</span><span>A+</span></div>
     <input class="ui-scale-slider" type="range" min="0" max="4" step="1" value={displayedScaleIndex} aria-label={t("设置端界面字号", "Settings panel UI size")} oninput={trackUiScale} onchange={changeUiScale} />
     <div class="ui-scale-ticks" aria-hidden="true">{#each UI_SCALE_STEPS as scale, index}<span class:active={index <= displayedScaleIndex}></span>{/each}</div>
-  </div><div class="settings-toggle"><ToggleSwitch label={t("默认折叠筛选器", "Collapse filters by default")} bind:checked={$settings.filterDefaultsClosed} onChange={saveSettings}/></div>
+  </div><div class="settings-toggle"><ToggleSwitch label={t("默认折叠筛选器", "Collapse filters by default")} bind:checked={$settings.filterDefaultsClosed} onChange={saveSettingsBusy}/></div>
   <div class="zoom-account">
     <div>
       <b>{t("Zoom 账号", "Zoom account")}</b>
       <p>{zoomSidebarLabel($zoom, $connected, t)}</p>
     </div>
-    {#if zoomSignedIn($zoom)}<button class="danger" onclick={async()=>{if(await confirmDialog({title:t('退出 Zoom 登录','Sign out of Zoom'),message:t('退出登录并移除出勤助手桌面版的 Zoom 授权？考勤记录会保留在这台电脑上。','Sign out and remove AttendFlow Desktop from your Zoom account? Attendance records stay on this computer.'),destructive:true})){const r=await fetch('/api/zoom/sign-out',{method:'POST'});const d=await r.json().catch(()=>({}));if(r.ok)zoom.set(await get('/api/zoom').catch(()=>null));(r.ok?toast.success:toast.error)(r.ok?(d.revoked?t('已退出 Zoom 并移除授权','Signed out and access removed'):t('已退出 Zoom','Signed out of Zoom')):t('退出失败','Sign-out failed'))}}}>
-        {t("退出 Zoom 登录", "Sign out of Zoom")}
+    {#if zoomSignedIn($zoom)}<button class="danger" onclick={signOut} disabled={zoomBusy}>
+        {zoomBusy ? t("处理中…", "Working…") : t("退出 Zoom 登录", "Sign out of Zoom")}
       </button>{:else if $zoom?.state !== "not_configured"}<button
         class="primary"
-        onclick={zoomSignIn}
+        onclick={signIn}
+        disabled={zoomBusy}
       >
-        {t("使用 Zoom 登录", "Sign in with Zoom")}
+        {zoomBusy ? t("登录中…", "Signing in…") : t("使用 Zoom 登录", "Sign in with Zoom")}
       </button>{/if}
   </div>
   <div class="settings-actions">
-    <button onclick={async()=>{try{await loadExampleDataQuiet()}catch(e:any){toast.error(e.message)}}}>
-      {t("导入示例数据", "Load example data")}
-    </button><button onclick={downloadBackup}>
-      {t("导出完整备份", "Export full backup")}
-    </button><button disabled={!!$meeting} title={$meeting ? t('会议端当前仍在记录考勤，请结束后再恢复备份。','Meeting panel is still capturing attendance. End the attendance record before restoring a full backup.') : ''} onclick={() => fileInput.click()}>
+    <button onclick={loadExamples} disabled={exampleBusy}>
+      {exampleBusy ? t("写入中…", "Loading…") : t("导入示例数据", "Load example data")}
+    </button><button onclick={exportBackup} disabled={backupBusy}>
+      {backupBusy ? t("导出中…", "Exporting…") : t("导出完整备份", "Export full backup")}
+    </button><button disabled={!!$meeting || restoreBusy} title={$meeting ? t('会议端当前仍在记录考勤，请结束后再恢复备份。','Meeting panel is still capturing attendance. End the attendance record before restoring a full backup.') : ''} onclick={() => fileInput.click()}>
       {t("恢复完整备份", "Restore Full Backup")}
     </button><button
       class="danger"
-      disabled={!!$meeting}
+      disabled={!!$meeting || clearBusy}
       title={$meeting ? t('会议端当前仍在记录考勤，请结束后再清空本地数据。','Meeting panel is still capturing attendance. End the attendance record before clearing local data.') : ''}
       onclick={clearLocalRecords}
     >
-      {t("清空本地数据", "Clear Local Data")}
+      {clearBusy ? t("清空中…", "Clearing…") : t("清空本地数据", "Clear Local Data")}
     </button><input
       bind:this={fileInput}
       type="file"
@@ -211,7 +224,7 @@
         {#each [['records','考勤记录','Attendance records'],['roster','花名册','Roster'],['aliases','名称匹配','Name matching'],['profiles','考勤配置','Attendance profiles']] as row}
           <tr><td>{t(row[1],row[2])}</td><td>{restorePreview.summary.current[row[0]]}</td><td>{restorePreview.summary.backup[row[0]]}</td><td>{t('将被完整替换','Replaced by backup content')}</td></tr>
         {/each}
-      </tbody></table><button class="danger" onclick={commitRestore}>{t('恢复','Restore')}</button><button onclick={()=>restorePreview=null}>{t('取消','Cancel')}</button>
+      </tbody></table><button class="danger" onclick={commitRestore} disabled={restoreBusy}>{restoreBusy ? t('恢复中…','Restoring…') : t('恢复','Restore')}</button><button onclick={()=>restorePreview=null} disabled={restoreBusy}>{t('取消','Cancel')}</button>
     </div>
   {/if}
   <div class="about">

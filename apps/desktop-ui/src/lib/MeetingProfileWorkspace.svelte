@@ -6,6 +6,13 @@
   import { tick } from "svelte";
   import ImportPreviewSummary from "./common/ImportPreviewSummary.svelte";
   import { toast } from "./toast";
+  import { busyKeys, runBusy } from "./busy-config";
+  $: saving = $busyKeys.has("profile-save");
+  $: deleting = $busyKeys.has("profile-delete");
+  $: bulkSaving = $busyKeys.has("profile-bulk-save");
+  $: bulkDeleting = $busyKeys.has("profile-bulk-delete");
+  $: resetting = $busyKeys.has("profile-reset");
+  $: exporting = $busyKeys.has("profile-export");
   export let profiles: any[] = [];
   export let revision = 0;
   export let language = "en";
@@ -102,17 +109,18 @@
       return;
     }
     try {
-      await put(
+      await runBusy("profile-save", async () => { await put(
         editing
           ? profiles.map((x) => (x.id === p.id ? p : x))
           : [...profiles, p],
-      );
-      open = false;
+      ); open = false; toast.success(editing ? t("考勤配置已更新。", "Attendance profile updated.") : t("已新增考勤配置。", "Attendance profile added.")); });
     } catch (e: any) {
       error = e.message;
+      toast.error(`${t("保存失败：", "Save failed:")}${e.message}`);
     }
   }
   async function remove() {
+    if (selected.includes("default-all")) toast.error(t("默认配置不能删除。", "The default profile cannot be deleted."));
     const ids = selected.filter((id) => id !== "default-all");
     if (!ids.length) return;
     if (
@@ -127,10 +135,11 @@
     )
       return;
     try {
-      await put(profiles.filter((p) => !ids.includes(p.id)));
+      await runBusy("profile-bulk-delete", async () => { await put(profiles.filter((p) => !ids.includes(p.id))); toast.success(t(`已删除 ${ids.length} 个考勤配置。`, `Deleted ${ids.length} attendance profile(s).`)); });
       selected = [];
     } catch (e: any) {
       error = e.message;
+      toast.error(`${t("批量删除失败：", "Bulk delete failed:")}${e.message}`);
     }
   }
   async function removeEditing() {
@@ -147,11 +156,12 @@
     )
       return;
     try {
-      await put(profiles.filter((p) => p.id !== editing.id));
+      await runBusy("profile-delete", async () => { await put(profiles.filter((p) => p.id !== editing.id)); toast.success(t("考勤配置已删除。", "Attendance profile deleted.")); });
       open = false;
       editing = null;
     } catch (e: any) {
       error = e.message;
+      toast.error(`${t("删除失败：", "Delete failed:")}${e.message}`);
     }
   }
   async function bulkEdit() {
@@ -175,12 +185,13 @@
       return n;
     });
     try {
-      await put(rows);
+      await runBusy("profile-bulk-save", async () => { await put(rows); toast.success(t(`已批量更新 ${selected.length} 个考勤配置。`, `Bulk updated ${selected.length} attendance profile(s).`)); });
       bulkActive = "";
       bulkLate = "";
       bulkReturn = "";
     } catch (e: any) {
       error = e.message;
+      toast.error(`${t("批量更新失败：", "Bulk update failed:")}${e.message}`);
     }
   }
   async function reset() {
@@ -198,7 +209,7 @@
     )
       return;
     try {
-      await put(
+      await runBusy("profile-reset", async () => { await put(
         profiles.map((x) =>
           x.id === "default-all"
             ? {
@@ -214,12 +225,14 @@
               }
             : x,
         ),
-      );
+      ); toast.success(t("默认配置已重置为出厂设置。", "Default profile reset to factory settings.")); });
     } catch (e: any) {
       error = e.message;
+      toast.error(`${t("保存失败：", "Save failed:")}${e.message}`);
     }
   }
-  function exportJson(ids: string[] = []) {
+  async function exportJson(ids: string[] = []) {
+    await runBusy("profile-export", async () => {
     const arr = profiles
       .filter((p) => !ids.length || ids.includes(p.id))
       .map(({ specialParticipants, blacklist, ...p }) => p);
@@ -237,6 +250,8 @@
     a.download = name;
     a.click();
     URL.revokeObjectURL(a.href);
+    toast.success(t("考勤配置已导出。", "Attendance profiles exported."));
+    });
   }
   async function readImport(e: Event) {
     const f = (e.target as HTMLInputElement).files?.[0];
@@ -301,8 +316,8 @@
         ＋ {t("添加配置", "Add Profile")}
       </button><button onclick={() => importFile.click()}>
         {t("导入", "Import")}
-      </button><button onclick={() => exportJson()}>
-        {t("导出", "Export")}
+      </button><button onclick={() => exportJson()} disabled={exporting}>
+        {exporting ? t("导出中…", "Exporting…") : t("导出", "Export")}
       </button><span class="count-pill">
         {profiles.length}
         {t("条记录", "records")}
@@ -335,8 +350,8 @@
     >
       {t("名称排序", "Sort name")}
       {asc ? "↑" : "↓"}
-    </button><button onclick={reset}>
-      {t("重置为出厂默认", "Reset to factory defaults")}
+    </button><button onclick={reset} disabled={resetting}>
+      {resetting ? t("重置中…", "Resetting…") : t("重置为出厂默认", "Reset to factory defaults")}
     </button>
   </div>
   {#if bulkMode}<div class="toolbar">
@@ -363,8 +378,8 @@
           bind:value={bulkReturn}
           placeholder={t("保持不变", "Keep")}
         />
-      </label><button disabled={!selected.length} onclick={bulkEdit}>
-        {t("应用批量编辑", "Apply bulk edit")}
+      </label><button disabled={!selected.length || bulkSaving} onclick={bulkEdit}>
+        {bulkSaving ? t("应用中…", "Applying…") : t("应用批量编辑", "Apply bulk edit")}
       </button><button
         onclick={() => {
           selected = [];
@@ -372,8 +387,10 @@
         }}
       >
         {t("退出批量管理", "Exit Bulk Select")}
-      </button><button disabled={!selected.length} onclick={remove}>
-        {t("删除所选", "Delete selected")}
+      </button><button disabled={!selected.length || bulkDeleting} onclick={remove}>
+        {bulkDeleting ? t("删除中…", "Deleting…") : t("删除所选", "Delete selected")}
+      </button><button disabled={!selected.length || exporting} onclick={() => exportJson(selected)}>
+        {exporting ? t("导出中…", "Exporting…") : t("导出所选", "Export selected")}
       </button>
     </div>{/if}
   <div class="table-wrap">
@@ -492,11 +509,14 @@
         cancelLabel={t("取消", "Cancel")}
         onSubmit={save}
         onCancel={() => (open = false)}
+        busy={saving}
+        busyLabel={t("保存中…", "Saving…")}
       />{#if editing && editing.id !== "default-all"}<button
           class="danger"
           onclick={removeEditing}
+          disabled={deleting}
         >
-          {t("删除", "Delete")}
+          {deleting ? t("删除中…", "Deleting…") : t("删除", "Delete")}
         </button>{/if}
     </section>
   </div>{/if}

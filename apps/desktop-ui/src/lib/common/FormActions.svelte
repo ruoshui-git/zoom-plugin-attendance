@@ -1,2 +1,2 @@
-<script lang="ts">export let submitLabel='Save'; export let cancelLabel='Cancel'; export let onSubmit:()=>void=()=>{}; export let onCancel:()=>void=()=>{}; export let disabled=false;</script>
-<div class="actions"><button class="primary" {disabled} onclick={onSubmit}>{submitLabel}</button><button {disabled} onclick={onCancel}>{cancelLabel}</button></div>
+<script lang="ts">export let submitLabel='Save'; export let cancelLabel='Cancel'; export let busyLabel='Saving…'; export let onSubmit:()=>void=()=>{}; export let onCancel:()=>void=()=>{}; export let disabled=false; export let busy=false;</script>
+<div class="actions"><button class="primary" disabled={disabled || busy} onclick={onSubmit}>{busy ? busyLabel : submitLabel}</button><button disabled={disabled || busy} onclick={onCancel}>{cancelLabel}</button></div>
